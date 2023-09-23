@@ -54,8 +54,10 @@ var filteredObiwanWav []byte
 //go:embed filtered_forsen.wav
 var filteredForsenWav []byte
 
+const aiContext = "Forsen tries very hard to answer questions very thoroughly. Forsen loves lolis, he thinks they are very cute and funny. Forsen still tries to beat xqc's minecraft record for 137 days. Forsen's fursona is lion."
+
 func onAsk(ctx context.Context, dataCh chan *wsMessage, channelOwner string, event *twitchEvent) error {
-	msg := p.Sanitize(event.message)
+	msg := event.message
 	if len(msg) == 0 {
 		return fmt.Errorf("empty input message")
 	}
@@ -86,16 +88,19 @@ func onAsk(ctx context.Context, dataCh chan *wsMessage, channelOwner string, eve
 	attempts := 0
 
 	for {
-		if event.eventType == eventTypeRandom {
-			resp, err = reqAI(ctx, "Forsen, tell me a story about what you did. It must be interesting and not short.", msg)
-		} else {
-			resp, err = reqAI(ctx, msg, "")
+		switch event.eventType {
+		case eventTypeRandom:
+			resp, err = reqAI(ctx, "Forsen is a very good story teller.", "Forsen, tell me a story about what you did. It must be interesting and not short.", msg)
+		case eventTypeFollow, eventTypeSub, eventTypeGift:
+			resp, err = reqAI(ctx, "Forsen likes to thank his followers and subscribers.", msg, "Thank you ")
+		default:
+			resp, err = reqAI(ctx, aiContext, msg, "")
 		}
 		if err != nil {
 			return err
 		}
 
-		respLimit := 10
+		respLimit := 20
 		if event.eventType == eventTypeRandom {
 			respLimit = 100
 		}
@@ -104,7 +109,7 @@ func onAsk(ctx context.Context, dataCh chan *wsMessage, channelOwner string, eve
 			break
 		}
 
-		if attempts > 10 {
+		if attempts > 20 {
 			return fmt.Errorf("too much attempts to get good answer")
 		}
 	}
@@ -152,8 +157,10 @@ func onAsk(ctx context.Context, dataCh chan *wsMessage, channelOwner string, eve
 		return err
 	}
 
+	sanitizedMsg := p.Sanitize(msg)
+
 	select {
-	case dataCh <- &wsMessage{msgType: websocket.TextMessage, message: []byte(fmt.Sprintf("@%s: %s", event.userName, msg))}:
+	case dataCh <- &wsMessage{msgType: websocket.TextMessage, message: []byte(fmt.Sprintf("@%s: %s", event.userName, sanitizedMsg))}:
 	case <-ctx.Done():
 		fmt.Println("ret1")
 		return nil
@@ -167,7 +174,7 @@ func onAsk(ctx context.Context, dataCh chan *wsMessage, channelOwner string, eve
 	}
 
 	select {
-	case dataCh <- &wsMessage{msgType: websocket.TextMessage, message: []byte(fmt.Sprintf("@%s: %s<br>FORSEN: %s", event.userName, msg, resp))}:
+	case dataCh <- &wsMessage{msgType: websocket.TextMessage, message: []byte(fmt.Sprintf("@%s: %s<br>FORSEN: %s", event.userName, sanitizedMsg, resp))}:
 	case <-ctx.Done():
 		fmt.Println("ret3")
 		return nil
@@ -332,326 +339,6 @@ func descriptionHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Add("Content-Type", "text/html")
 	w.Write(data)
-}
-
-const (
-	eventTypeChat = iota
-	eventTypeChannelpoint
-	eventTypeFollow
-	eventTypeSub
-	eventTypeGift
-	eventTypeRandom
-	eventTypeUnknown
-)
-
-type twitchEvent struct {
-	eventType int
-	userName  string
-	message   string
-}
-
-const eventSubUrl = "wss://eventsub.wss.twitch.tv/ws"
-
-func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWriter, sessionId string, settings *Settings) (chan *twitchEvent, error) {
-	userData, err := getUserDataBySessionId(sessionId)
-	if err != nil {
-		return nil, err
-	}
-
-	if !isValidUser(userData.UserLoginData.UserName, w) {
-		return nil, fmt.Errorf("forbidden user")
-	}
-
-	twitchClient, err := helix.NewClientWithContext(ctx, &helix.Options{
-		ClientID:        twitchClientID,
-		ClientSecret:    twitchSecret,
-		UserAccessToken: userData.AccessToken,
-		RefreshToken:    userData.RefreshToken,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create twitch client: %w", err)
-	}
-
-	twitchClient.OnUserAccessTokenRefreshed(func(newAccessToken, newRefreshToken string) {
-		userData.AccessToken = newAccessToken
-		userData.RefreshToken = newRefreshToken
-
-		if err := updateUserData(userData); err != nil {
-			fmt.Println(err)
-		}
-	})
-
-	c, _, err := websocket.DefaultDialer.DialContext(ctx, eventSubUrl, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial ws to twitch: %w", err)
-	}
-
-	wsClient, done := newWsClient(c)
-
-	go func() {
-		<-ctx.Done()
-		wsClient.close()
-	}()
-
-	go func() {
-		<-done
-		cancel()
-	}()
-
-	var keepaliveTimeout time.Duration
-	var wsSessionId string
-
-	if msg, err := wsClient.read(); err != nil {
-		return nil, fmt.Errorf("failed to read welcome message: %w", err)
-	} else {
-		resp := &struct {
-			Payload struct {
-				Session struct {
-					ID string `json:"id"`
-
-					KeepaliveTimeoutSeconds int `json:"keepalive_timeout_seconds"`
-				} `json:"session"`
-			} `json:"payload"`
-		}{}
-
-		if err = json.Unmarshal(msg.message, &resp); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal welcome message: %w", err)
-		}
-
-		wsSessionId = resp.Payload.Session.ID
-		keepaliveTimeout = time.Second * time.Duration(resp.Payload.Session.KeepaliveTimeoutSeconds)
-	}
-
-	if settings.Follows {
-		if _, err := twitchClient.CreateEventSubSubscription(&helix.EventSubSubscription{
-			Type:    "channel.follow",
-			Version: "2",
-			Condition: helix.EventSubCondition{
-				BroadcasterUserID: strconv.Itoa(userData.UserLoginData.UserId),
-				ModeratorUserID:   strconv.Itoa(userData.UserLoginData.UserId),
-			},
-			Transport: helix.EventSubTransport{
-				Method:    "websocket",
-				SessionID: wsSessionId,
-			},
-		}); err != nil {
-			return nil, fmt.Errorf("failed to create follow event sub: %w", err)
-		}
-	}
-
-	if settings.Subs {
-		if _, err := twitchClient.CreateEventSubSubscription(&helix.EventSubSubscription{
-			Type:    "channel.subscribe",
-			Version: "1",
-			Condition: helix.EventSubCondition{
-				BroadcasterUserID: strconv.Itoa(userData.UserLoginData.UserId),
-			},
-			Transport: helix.EventSubTransport{
-				Method:    "websocket",
-				SessionID: wsSessionId,
-			},
-		}); err != nil {
-			return nil, fmt.Errorf("failed to create subscribe event sub: %w", err)
-		}
-	}
-
-	if settings.Subs {
-		if _, err := twitchClient.CreateEventSubSubscription(&helix.EventSubSubscription{
-			Type:    "channel.subscription.message",
-			Version: "1",
-			Condition: helix.EventSubCondition{
-				BroadcasterUserID: strconv.Itoa(userData.UserLoginData.UserId),
-			},
-			Transport: helix.EventSubTransport{
-				Method:    "websocket",
-				SessionID: wsSessionId,
-			},
-		}); err != nil {
-			return nil, fmt.Errorf("failed to create subscribe message event sub: %w", err)
-		}
-	}
-
-	if settings.Subs {
-		if _, err := twitchClient.CreateEventSubSubscription(&helix.EventSubSubscription{
-			Type:    "channel.subscription.gift",
-			Version: "1",
-			Condition: helix.EventSubCondition{
-				BroadcasterUserID: strconv.Itoa(userData.UserLoginData.UserId),
-			},
-			Transport: helix.EventSubTransport{
-				Method:    "websocket",
-				SessionID: wsSessionId,
-			},
-		}); err != nil {
-			return nil, fmt.Errorf("failed to create sub gift message event sub: %w", err)
-		}
-	}
-
-	if settings.Raids {
-		if _, err := twitchClient.CreateEventSubSubscription(&helix.EventSubSubscription{
-			Type:    "channel.raid",
-			Version: "1",
-			Condition: helix.EventSubCondition{
-				ToBroadcasterUserID: strconv.Itoa(userData.UserLoginData.UserId),
-			},
-			Transport: helix.EventSubTransport{
-				Method:    "websocket",
-				SessionID: wsSessionId,
-			},
-		}); err != nil {
-			return nil, fmt.Errorf("failed to create raid event sub: %w", err)
-		}
-	}
-
-	if settings.ChannelPts {
-		if rewardID, err := getRewardID(sessionId); err != nil {
-			fmt.Println("failed to get reward id from db:", err)
-		} else if len(rewardID) == 0 {
-			fmt.Println("empty reward id")
-		} else if _, err := twitchClient.CreateEventSubSubscription(&helix.EventSubSubscription{
-			Type:    "channel.channel_points_custom_reward_redemption.add",
-			Version: "1",
-			Condition: helix.EventSubCondition{
-				BroadcasterUserID: strconv.Itoa(userData.UserLoginData.UserId),
-				RewardID:          rewardID,
-			},
-			Transport: helix.EventSubTransport{
-				Method:    "websocket",
-				SessionID: wsSessionId,
-			},
-		}); err != nil {
-			return nil, fmt.Errorf("failed to create raid event sub: %w", err)
-		}
-	}
-
-	ch := make(chan *twitchEvent)
-
-	fmt.Println("twitch ws connected")
-
-	if keepaliveTimeout == 0 {
-		fmt.Println(wsSessionId)
-	}
-
-	lastMsgTime := time.Now()
-
-	// onmessage
-	go func() {
-		defer close(ch)
-		defer cancel()
-		defer func() {
-			fmt.Println("close twitch ws")
-			wsClient.close()
-		}()
-
-	loop:
-		for {
-			msg, err := wsClient.read()
-			if err != nil {
-				fmt.Println(err)
-				break
-			}
-
-			lastMsgTime = time.Now()
-
-			meta := &struct {
-				Metadata struct {
-					MessageType string `json:"message_type"`
-				} `json:"metadata"`
-			}{}
-
-			if err := json.Unmarshal(msg.message, &meta); err != nil {
-				fmt.Println(err)
-				break
-			}
-
-			switch meta.Metadata.MessageType {
-			case "notification":
-				payload := &struct {
-					Payload struct {
-						Subscription struct {
-							Type string `json:"type"`
-						} `json:"subscription"`
-						Event struct {
-							UserName  string  `json:"user_name"`
-							UserInput *string `json:"user_input"` // channel point input
-							Message   *struct {
-								Text string `json:"text"`
-							} `json:"message"` // resub msg
-							CumulativeMonths *int `json:"cumulative_months"` // resub
-							Viewers          *int `json:"viewers"`           // raiders
-							Total            *int `json:"total"`             // gifted
-							Reward           *struct {
-								Prompt string `json:"prompt"`
-							} `json:"reward"`
-						} `json:"event"`
-					} `json:"payload"`
-				}{}
-
-				if err := json.Unmarshal(msg.message, &payload); err != nil {
-					fmt.Println(err)
-					break loop
-				}
-
-				switch payload.Payload.Subscription.Type {
-				case "channel.follow":
-					ch <- &twitchEvent{
-						eventType: eventTypeFollow,
-						userName:  payload.Payload.Event.UserName,
-						message:   payload.Payload.Event.UserName + " just followed this channel",
-					}
-				case "channel.subscribe":
-					ch <- &twitchEvent{
-						eventType: eventTypeSub,
-						userName:  payload.Payload.Event.UserName,
-						message:   payload.Payload.Event.UserName + " just subscribed to this channel",
-					}
-				case "channel.subscription.message":
-					msg := ""
-					if payload.Payload.Event.Message != nil {
-						msg = payload.Payload.Event.Message.Text
-					}
-
-					ch <- &twitchEvent{
-						eventType: eventTypeSub,
-						userName:  payload.Payload.Event.UserName,
-						message:   fmt.Sprintf("%s just resubbed with %d months and says - %s", payload.Payload.Event.UserName, *payload.Payload.Event.CumulativeMonths, msg),
-					}
-				case "channel.subscription.gift":
-					ch <- &twitchEvent{
-						eventType: eventTypeGift,
-						userName:  payload.Payload.Event.UserName,
-						message:   fmt.Sprintf("%s just gifted %d subs", payload.Payload.Event.UserName, *payload.Payload.Event.Total),
-					}
-				case "channel.raid":
-					ch <- &twitchEvent{
-						eventType: eventTypeUnknown,
-						userName:  payload.Payload.Event.UserName,
-						message:   fmt.Sprintf("%s just raided with %d people", payload.Payload.Event.UserName, *payload.Payload.Event.Viewers),
-					}
-				case "channel.channel_points_custom_reward_redemption.add":
-					ch <- &twitchEvent{
-						eventType: eventTypeChannelpoint,
-						userName:  payload.Payload.Event.UserName,
-						message:   *payload.Payload.Event.UserInput,
-					}
-				}
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			if time.Since(lastMsgTime) > keepaliveTimeout {
-				fmt.Println("keepalive timeout passed Aware")
-				wsClient.close()
-				return
-			}
-
-			time.Sleep(5 * time.Second)
-		}
-	}()
-
-	return ch, nil
 }
 
 func webSocketHandler(w http.ResponseWriter, r *http.Request) {

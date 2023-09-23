@@ -3,15 +3,21 @@
     <script src="whitelist.js"></script>
 </head>
 <body>
-    <h2>
+    <h3>
         <div>Hello, this is forsen ai thingy that can be inserted in your obs PagMan PagMan. To use it, just add a browser source in obs, put "forsen.fun/username" in url.</div>
-        <div>username is your twitch username. Warning: you must be in whitelist to use it. Write to @Shiro836_ to get acccess. But be careful, Nammers and juicers(except nesta) are not allowed.</div>
+        <div>username is your twitch username. Warning: you must be in whitelist to use it. Politely ask any mods below for access.</div>
         <div>Then users can type !ask &lt;msg&gt; in chat and forsen will reply.</div>
         <br>
         <div>If you want more advanced features like reacting to follows and subs or make it as a channel points reward add a custom dock in obs - go to Docks &rarr; Custom Browser Docks...</div>
         <div>Dock Name - put anything you want here. URL - "forsen.fun/settings". Then you will need to login with twitch.</div>
         <div>If you are scared to leak your password(you should be), add another custom dock with twitch.tv url and login in it. Then there will be no need to write password in forsen.fun custom dock.</div>
-    </h2>
+        <br>
+        <div>
+            <div>How to increase volume of forsen in obs:</div> 
+            <div>Put this settings in browser source: <br> <img src="https://gachi.gay/XwP5Y"></div>
+            <div>And then turn on monitor and output here and add gain to increase forsen's volume: <br> <img src="https://gachi.gay/cv1M7"> <img src="https://gachi.gay/uXCyI"></div>
+        </div>
+    </h3>
     <br>
     <div>forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen </div>
     <div>forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen </div>
@@ -57,14 +63,34 @@
     <h3>
         <div>Plans:</div>
         <ul>
-            <li>improve tts with RVC</li>
-            <li>imvrove ai model (concept, improve and clean dataset, add story dataset entries, improve speaker embedding shit)</li>
+            <li>
+                fix bugs in api:
+                <ul>
+                    <li>keep connections to twitch and twitch chat always active and when user connects from obs, just connect him to the data stream - that should fix lost channel point reward problem and should also fix rate limiting problem</li>
+                    <li>implementing single connection method above also requires event system</li>
+                    <li>investigate if api should mark channel point reward as redeemed or not</li>
+                    <li>thorough logging with slog</li>
+                    <li>persistent cookies - when you close obs cookies should not be deleted</li>
+                </ul>
+            </li>
+            <li>controllable context</li>
+            <li>memory</li>
+            <li>fix follow greeting</li>
             <li>forsen vtuber model</li>
+            <li>improve tts - change base model to <a href="https://github.com/Plachtaa/VALL-E-X">VALLE-X</a>(finetune?), then apply RVC</li>
+            <li>imvrove ai model (fix random context, more training epochs)</li>
         </ul>
+        <div>If you have any ideas or bug reports, write them to my twitch chat <a href="https://twitch.tv/shiro836_/chat">Shiro836_</a></div>
     </h3>
     <div>Whitelist:</div>
     <div id="whitelist">brrrr</div>
     <script>
         updateWhitelist()
     </script>
+    <h3>
+        <div>Credits:</div>
+        <div>&#128293;<a href="https://twitcharchives.com/">TwitchArchives</a>&#128293; for a way to get data for forsen ai model. That thing wouldn't be possible(or would be filled with shit minecraft data) without this project.</div>
+        <div><a href="https://github.com/enlyth/baj-tts">baj-tts</a> for a cool obiwan and forsen tts</div>
+        <div>My chat for helping to create dataset for forsen</div>
+    </h3>
 </body>

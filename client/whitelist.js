@@ -30,10 +30,13 @@ function updateWhitelist() {
 
         html.push("<tr bgcolor=" + clr + ">")
 
-        html.push(td(res[i]["login"]))
+        login = res[i]["login"]
+        is_banned = (res[i]["banned_by"] !== null)
+
+        html.push(td(is_banned ? login : "<a href='https://twitch.tv/" + login + "' target='_blank'>" + login + "</a>"))
         html.push(td(res[i]["is_mod"]))
         html.push(td(res[i]["added_by"]))
-        html.push(td(res[i]["banned_by"] === null ? "" : res[i]["banned_by"]))
+        html.push(td(is_banned ? res[i]["banned_by"] : ""))
 
         console.log(res[i])
         html.push("</tr>")

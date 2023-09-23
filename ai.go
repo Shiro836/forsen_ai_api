@@ -17,15 +17,15 @@ type AiReq struct {
 	FrequencyPenalty float32  `json:"frequency_penalty"`
 }
 
-func reqAI(ctx context.Context, msg, forsenReplyStart string) (string, error) {
-	prefix := "<s> ###OTHER: " + msg + " ###FORSEN: " + forsenReplyStart
+func reqAI(ctx context.Context, promptContext, msg, forsenReplyStart string) (string, error) {
+	prefix := "###CONTEXT: " + promptContext + " ###OTHER: " + msg + " ###FORSEN: " + forsenReplyStart
 
 	req := &AiReq{
 		Prompt:           prefix,
-		MaxTokens:        512,
+		MaxTokens:        1024,
 		Stop:             []string{"###", "</s>"},
-		Temperature:      0.55,
-		FrequencyPenalty: 0.3,
+		Temperature:      0.5,
+		FrequencyPenalty: 0.5,
 	}
 
 	data, err := json.Marshal(&req)
@@ -47,5 +47,5 @@ func reqAI(ctx context.Context, msg, forsenReplyStart string) (string, error) {
 		return "", fmt.Errorf("respData is short: %d", len(respData))
 	}
 
-	return string(respData[len(prefix)+10 : len(respData)-3]), nil
+	return forsenReplyStart + string(respData[len(prefix)+10:len(respData)-3]), nil
 }
