@@ -1,6 +1,7 @@
 package main
 
 import (
+	"app/db"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,7 +10,7 @@ import (
 )
 
 func getWhitelist(w http.ResponseWriter, r *http.Request) {
-	if whitelist, err := getDbWhitelist(); err != nil {
+	if whitelist, err := db.GetDbWhitelist(); err != nil {
 		fmt.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to get whitelist from db"))
@@ -35,12 +36,12 @@ func getWhitelist(w http.ResponseWriter, r *http.Request) {
 }
 
 func updateWhitelist(w http.ResponseWriter, r *http.Request) {
-	upd := &whitelistUpdate{}
+	upd := &db.WhitelistUpdate{}
 
 	if sessionId, err := r.Cookie("session_id"); err != nil || len(sessionId.Value) == 0 {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("Unauthorized"))
-	} else if userData, err := getUserDataBySessionId(sessionId.Value); err != nil {
+	} else if userData, err := db.GetUserDataBySessionId(sessionId.Value); err != nil {
 		fmt.Println(fmt.Println("failed to read settings:", err))
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("Unauthorized"))
@@ -52,7 +53,7 @@ func updateWhitelist(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(fmt.Println("failed to unmarshal request body:", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("internal error"))
-	} else if err = updateDbWhitelist(upd, userData.UserLoginData.UserName); err != nil {
+	} else if err = db.UpdateDbWhitelist(upd, userData.UserLoginData.UserName); err != nil {
 		fmt.Println(fmt.Println("failed to update db white list:", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("internal error or no access"))

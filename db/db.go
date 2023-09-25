@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"database/sql"
@@ -14,6 +14,10 @@ import (
 )
 
 var db *sql.DB
+
+func Close() {
+	db.Close()
+}
 
 func init() {
 	var err error
@@ -53,7 +57,54 @@ func init() {
 	}
 }
 
-func updateUserData(userData *UserData) error {
+type UserLoginData struct {
+	UserId   int
+	UserName string
+}
+
+type UserData struct {
+	RefreshToken  string
+	AccessToken   string
+	UserLoginData *UserLoginData
+
+	Session string
+}
+
+func UpsertUserData(userData *UserData) error {
+	_, err := db.Exec(`
+		insert into user_data(
+			login,
+			user_id,
+			refresh_token,
+			access_token,
+			session
+		) values (
+			$1,
+			$2,
+			$3,
+			$4,
+			$5
+		) on conflict(user_id) do update set
+			login = excluded.login,
+			refresh_token = excluded.refresh_token,
+			access_token = excluded.access_token,
+			session = excluded.session
+		where excluded.user_id = user_data.user_id;
+	`,
+		userData.UserLoginData.UserName,
+		userData.UserLoginData.UserId,
+		userData.RefreshToken,
+		userData.AccessToken,
+		userData.Session,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert user data: %w", err)
+	}
+
+	return nil
+}
+
+func UpdateUserData(userData *UserData) error {
 	_, err := db.Exec(`
 		update user_data set 
 			login = $1,
@@ -75,7 +126,7 @@ func updateUserData(userData *UserData) error {
 	return nil
 }
 
-func getUserDataBySessionId(sessionId string) (*UserData, error) {
+func GetUserDataBySessionId(sessionId string) (*UserData, error) {
 	row := db.QueryRow(`
 		select
 			login,
@@ -102,7 +153,7 @@ func getUserDataBySessionId(sessionId string) (*UserData, error) {
 	return userData, nil
 }
 
-func getRewardID(sessionId string) (string, error) {
+func GetRewardID(sessionId string) (string, error) {
 	row := db.QueryRow(`
 		select reward_id from user_data where session = $1
 	`, sessionId)
@@ -115,7 +166,7 @@ func getRewardID(sessionId string) (string, error) {
 	return rewardID, nil
 }
 
-func saveRewardID(rewardID, sessionId string) error {
+func SaveRewardID(rewardID, sessionId string) error {
 	_, err := db.Exec(`
 		update user_data set
 			reward_id = $1
@@ -138,7 +189,7 @@ type Settings struct {
 	EventsInterval int  `json:"events_interval"`
 }
 
-func getDbSettings(sessionId string) (*Settings, error) {
+func GetDbSettingsBySessionID(sessionId string) (*Settings, error) {
 	row := db.QueryRow(`
 		select
 			chat,
@@ -169,7 +220,38 @@ func getDbSettings(sessionId string) (*Settings, error) {
 	return settings, nil
 }
 
-func updateDbSettings(settings *Settings, sessionId string) error {
+func GetDbSettings(login string) (*Settings, error) {
+	row := db.QueryRow(`
+		select
+			chat,
+			chan_pts,
+			follows,
+			subs,
+			raids,
+			random_events,
+			events_interval
+		from user_data
+		where login = $1
+	`, login)
+
+	settings := &Settings{}
+
+	if err := row.Scan(
+		&settings.Chat,
+		&settings.ChannelPts,
+		&settings.Follows,
+		&settings.Subs,
+		&settings.Raids,
+		&settings.Events,
+		&settings.EventsInterval,
+	); err != nil {
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	return settings, nil
+}
+
+func UpdateDbSettings(settings *Settings, sessionId string) error {
 	if _, err := db.Exec(`
 		update user_data set
 			chat     		= $1,
@@ -196,18 +278,26 @@ func updateDbSettings(settings *Settings, sessionId string) error {
 	return nil
 }
 
-type human struct {
+type Human struct {
 	Login    string  `json:"login"`
 	IsMod    bool    `json:"is_mod"`
 	AddedBy  string  `json:"added_by"`
 	BannedBy *string `json:"banned_by"`
 }
 
-type whitelist struct {
-	List []*human `json:"list"`
+func (h *Human) String() string {
+	if h == nil {
+		return "nil"
+	}
+
+	return fmt.Sprintf("Login=%s IsMod=%t AddedBy=%s BannedBy=%v", h.Login, h.IsMod, h.AddedBy, h.BannedBy)
 }
 
-func getDbWhitelist() (*whitelist, error) {
+type Whitelist struct {
+	List []*Human `json:"list"`
+}
+
+func GetDbWhitelist() (*Whitelist, error) {
 	rows, err := db.Query(`
 		select 
 			login,
@@ -220,10 +310,10 @@ func getDbWhitelist() (*whitelist, error) {
 		return nil, fmt.Errorf("failed to get whitelist: %w", err)
 	}
 
-	res := make([]*human, 0, 50)
+	res := make([]*Human, 0, 50)
 
 	for rows.Next() {
-		nextHuman := &human{}
+		nextHuman := &Human{}
 
 		if err = rows.Scan(
 			&nextHuman.Login,
@@ -241,25 +331,25 @@ func getDbWhitelist() (*whitelist, error) {
 		return nil, rows.Err()
 	}
 
-	return &whitelist{List: res}, nil
+	return &Whitelist{List: res}, nil
 }
 
-type whitelistUpdate struct {
+type WhitelistUpdate struct {
 	Login string `json:"login"`
 	IsAdd bool   `json:"is_add"`
 }
 
-func updateDbWhitelist(upd *whitelistUpdate, adder string) error {
-	whitelist, err := getDbWhitelist()
+func UpdateDbWhitelist(upd *WhitelistUpdate, adder string) error {
+	whitelist, err := GetDbWhitelist()
 	if err != nil {
 		return fmt.Errorf("failed to get whitelist: %w", err)
 	}
-	if !slices.ContainsFunc(whitelist.List, func(h *human) bool {
+	if !slices.ContainsFunc(whitelist.List, func(h *Human) bool {
 		return strings.EqualFold(adder, h.Login) && h.IsMod
 	}) {
 		return fmt.Errorf("unauthorized")
 	}
-	if slices.ContainsFunc(whitelist.List, func(h *human) bool {
+	if slices.ContainsFunc(whitelist.List, func(h *Human) bool {
 		return strings.EqualFold(upd.Login, h.Login) && h.IsMod
 	}) {
 		return fmt.Errorf("can't update mod")

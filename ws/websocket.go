@@ -1,33 +1,28 @@
-package main
+package ws
 
 import (
 	"fmt"
-	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
+type Message struct {
+	MsgType int
+	Message []byte
 }
 
-type wsMessage struct {
-	msgType int
-	message []byte
-}
-
-type wsClient struct {
+type Client struct {
 	conn *websocket.Conn
 
-	writeChan chan *wsMessage
-	readChan  chan *wsMessage
+	writeChan chan *Message
+	readChan  chan *Message
 
 	closed bool
 	lock   sync.Mutex
 }
 
-func (ws *wsClient) close() error {
+func (ws *Client) Close() error {
 	ws.lock.Lock()
 	defer ws.lock.Unlock()
 
@@ -41,27 +36,26 @@ func (ws *wsClient) close() error {
 	return ws.conn.Close()
 }
 
-func newWsClient(conn *websocket.Conn) (*wsClient, chan struct{}) {
-	client := &wsClient{
+func NewWsClient(conn *websocket.Conn) (client *Client, done chan struct{}) {
+	client = &Client{
 		conn: conn,
 
-		writeChan: make(chan *wsMessage),
-		readChan:  make(chan *wsMessage),
+		writeChan: make(chan *Message),
+		readChan:  make(chan *Message),
 	}
 
-	done := make(chan struct{})
+	done = make(chan struct{})
 
 	go func() {
 		defer close(client.readChan)
-		defer client.close()
+		defer client.Close()
 
 		for {
-			msg := &wsMessage{}
+			msg := &Message{}
 			var err error
 
-			msg.msgType, msg.message, err = conn.ReadMessage()
+			msg.MsgType, msg.Message, err = conn.ReadMessage()
 			if err != nil {
-				fmt.Println("read err:", err)
 				break
 			}
 
@@ -77,7 +71,7 @@ func newWsClient(conn *websocket.Conn) (*wsClient, chan struct{}) {
 		}()
 
 		for msg := range client.writeChan {
-			if err := conn.WriteMessage(msg.msgType, msg.message); err != nil {
+			if err := conn.WriteMessage(msg.MsgType, msg.Message); err != nil {
 				fmt.Println("write err:", err)
 				break
 			}
@@ -87,7 +81,7 @@ func newWsClient(conn *websocket.Conn) (*wsClient, chan struct{}) {
 	return client, done
 }
 
-func (ws *wsClient) send(msg *wsMessage) error {
+func (ws *Client) Send(msg *Message) error {
 	ws.lock.Lock()
 	defer ws.lock.Unlock()
 
@@ -100,7 +94,7 @@ func (ws *wsClient) send(msg *wsMessage) error {
 	return nil
 }
 
-func (ws *wsClient) read() (*wsMessage, error) {
+func (ws *Client) Read() (*Message, error) {
 	msg, ok := <-ws.readChan
 	if !ok {
 		return nil, fmt.Errorf("ws is closed")

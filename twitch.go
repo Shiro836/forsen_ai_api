@@ -11,17 +11,15 @@ import (
 	"strings"
 	"time"
 
+	"app/db"
+	"app/ws"
+
 	"github.com/dchest/uniuri"
 	"github.com/gorilla/websocket"
 	"github.com/nicklaw5/helix/v2"
 )
 
 const twitchClientID = "zi6vy3y3iq38svpmlub5fd26uwsee8"
-
-type UserLoginData struct {
-	UserId   int
-	UserName string
-}
 
 const getUsersUrl = "https://api.twitch.tv/helix/users"
 
@@ -34,7 +32,7 @@ type getUsersResp struct {
 	Data []getUsersDataEntry `json:"data"`
 }
 
-func getUsers(accessToken string) (*UserLoginData, error) {
+func getUsers(accessToken string) (*db.UserLoginData, error) {
 	req, err := http.NewRequest(http.MethodGet, getUsersUrl, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create getUsers request: %w", err)
@@ -68,18 +66,10 @@ func getUsers(accessToken string) (*UserLoginData, error) {
 		return nil, fmt.Errorf("failed to convert userId to int; %w", err)
 	}
 
-	return &UserLoginData{
+	return &db.UserLoginData{
 		UserId:   intId,
 		UserName: respJson.Data[0].Login,
 	}, nil
-}
-
-type UserData struct {
-	RefreshToken  string
-	AccessToken   string
-	UserLoginData *UserLoginData
-
-	Session string
 }
 
 type userTokenData struct {
@@ -88,7 +78,7 @@ type userTokenData struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func codeHandler(code string) (*UserData, error) {
+func codeHandler(code string) (*db.UserData, error) {
 	data := url.Values{}
 	data.Set("client_id", twitchClientID)
 	data.Set("client_secret", twitchSecret)
@@ -126,52 +116,23 @@ func codeHandler(code string) (*UserData, error) {
 		fmt.Println(userData)
 	}
 
-	return &UserData{
+	return &db.UserData{
 		RefreshToken:  respJson.RefreshToken,
 		AccessToken:   respJson.AccessToken,
 		UserLoginData: userData,
 	}, nil
 }
 
-func addSession(userData *UserData) *UserData {
-	userData.Session = uniuri.New()
-	return userData
-}
-
-func onUserData(userData *UserData) (string, error) {
+func onUserData(userData *db.UserData) error {
 	session := uniuri.New()
 
-	_, err := db.Exec(`
-		insert into user_data(
-			login,
-			user_id,
-			refresh_token,
-			access_token,
-			session
-		) values (
-			$1,
-			$2,
-			$3,
-			$4,
-			$5
-		) on conflict(user_id) do update set
-			login = excluded.login,
-			refresh_token = excluded.refresh_token,
-			access_token = excluded.access_token,
-			session = excluded.session
-		where excluded.user_id = user_data.user_id;
-	`,
-		userData.UserLoginData.UserName,
-		userData.UserLoginData.UserId,
-		userData.RefreshToken,
-		userData.AccessToken,
-		session,
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to insert user data: %w", err)
+	if err := db.UpsertUserData(userData); err != nil {
+		return fmt.Errorf("failed to upsert user data: %w", err)
 	}
 
-	return session, nil
+	userData.Session = session
+
+	return nil
 }
 
 func twitchTokenHandler(w http.ResponseWriter, r *http.Request) {
@@ -181,11 +142,11 @@ func twitchTokenHandler(w http.ResponseWriter, r *http.Request) {
 	} else if userData, err := codeHandler(code); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
-	} else if session, err := onUserData(addSession(userData)); err != nil {
+	} else if err := onUserData(userData); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 	} else {
-		http.SetCookie(w, &http.Cookie{Name: "session_id", Value: session})
+		http.SetCookie(w, &http.Cookie{Name: "session_id", Value: userData.Session})
 
 		http.Redirect(w, r, "https://forsen.fun/settings", http.StatusSeeOther)
 	}
@@ -198,6 +159,8 @@ const (
 	eventTypeSub
 	eventTypeGift
 	eventTypeRandom
+	eventTypeInfo
+	eventTypeRaid
 	eventTypeUnknown
 )
 
@@ -209,8 +172,42 @@ type twitchEvent struct {
 
 const eventSubUrl = "wss://eventsub.wss.twitch.tv/ws"
 
-func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWriter, sessionId string, settings *Settings) (chan *twitchEvent, error) {
-	userData, err := getUserDataBySessionId(sessionId)
+func twitchEventsSplitter(inputCh chan *twitchEvent) (subs chan *twitchEvent, follows chan *twitchEvent, raids chan *twitchEvent, channelPtsRedeems, unknown chan *twitchEvent) {
+	subs, follows, raids, channelPtsRedeems, unknown = make(chan *twitchEvent),
+		make(chan *twitchEvent), make(chan *twitchEvent), make(chan *twitchEvent), make(chan *twitchEvent)
+
+	go func() {
+		defer close(subs)
+		defer close(follows)
+		defer close(raids)
+		defer close(channelPtsRedeems)
+		defer close(unknown)
+
+		for event := range inputCh {
+			switch event.eventType {
+			case eventTypeFollow:
+				follows <- event
+			case eventTypeGift, eventTypeSub:
+				subs <- event
+			case eventTypeChannelpoint:
+				channelPtsRedeems <- event
+			case eventTypeRaid:
+				raids <- event
+			default:
+				unknown <- event
+			}
+		}
+	}()
+
+	return
+}
+
+func eventSubDataStreamBeta(ctx context.Context, settings *db.Settings) (chan *twitchEvent, error) {
+	panic("")
+}
+
+func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.ResponseWriter, sessionId string, settings *db.Settings) (chan *twitchEvent, error) {
+	userData, err := db.GetUserDataBySessionId(sessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +230,7 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 		userData.AccessToken = newAccessToken
 		userData.RefreshToken = newRefreshToken
 
-		if err := updateUserData(userData); err != nil {
+		if err := db.UpdateUserData(userData); err != nil {
 			fmt.Println(err)
 		}
 	})
@@ -243,11 +240,11 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 		return nil, fmt.Errorf("failed to dial ws to twitch: %w", err)
 	}
 
-	wsClient, done := newWsClient(c)
+	wsClient, done := ws.NewWsClient(c)
 
 	go func() {
 		<-ctx.Done()
-		wsClient.close()
+		wsClient.Close()
 	}()
 
 	go func() {
@@ -258,7 +255,7 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 	var keepaliveTimeout time.Duration
 	var wsSessionId string
 
-	if msg, err := wsClient.read(); err != nil {
+	if msg, err := wsClient.Read(); err != nil {
 		return nil, fmt.Errorf("failed to read welcome message: %w", err)
 	} else {
 		resp := &struct {
@@ -271,7 +268,7 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 			} `json:"payload"`
 		}{}
 
-		if err = json.Unmarshal(msg.message, &resp); err != nil {
+		if err = json.Unmarshal(msg.Message, &resp); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal welcome message: %w", err)
 		}
 
@@ -361,7 +358,7 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 	}
 
 	if settings.ChannelPts {
-		if rewardID, err := getRewardID(sessionId); err != nil {
+		if rewardID, err := db.GetRewardID(sessionId); err != nil {
 			fmt.Println("failed to get reward id from db:", err)
 		} else if len(rewardID) == 0 {
 			fmt.Println("empty reward id")
@@ -397,12 +394,12 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 		defer cancel()
 		defer func() {
 			fmt.Println("close twitch ws")
-			wsClient.close()
+			wsClient.Close()
 		}()
 
 	loop:
 		for {
-			msg, err := wsClient.read()
+			msg, err := wsClient.Read()
 			if err != nil {
 				fmt.Println(err)
 				break
@@ -416,7 +413,7 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 				} `json:"metadata"`
 			}{}
 
-			if err := json.Unmarshal(msg.message, &meta); err != nil {
+			if err := json.Unmarshal(msg.Message, &meta); err != nil {
 				fmt.Println(err)
 				break
 			}
@@ -444,7 +441,7 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 					} `json:"payload"`
 				}{}
 
-				if err := json.Unmarshal(msg.message, &payload); err != nil {
+				if err := json.Unmarshal(msg.Message, &payload); err != nil {
 					fmt.Println(err)
 					break loop
 				}
@@ -481,7 +478,7 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 					}
 				case "channel.raid":
 					ch <- &twitchEvent{
-						eventType: eventTypeUnknown,
+						eventType: eventTypeRaid,
 						userName:  payload.Payload.Event.UserName,
 						message:   fmt.Sprintf("%s just raided with %d people", payload.Payload.Event.UserName, *payload.Payload.Event.Viewers),
 					}
@@ -500,7 +497,7 @@ func eventSubDataStream(ctx context.Context, cancel context.CancelFunc, w http.R
 		for {
 			if time.Since(lastMsgTime) > keepaliveTimeout {
 				fmt.Println("keepalive timeout passed Aware")
-				wsClient.close()
+				wsClient.Close()
 				return
 			}
 

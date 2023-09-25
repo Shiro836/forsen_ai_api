@@ -17,7 +17,7 @@ type AiReq struct {
 	FrequencyPenalty float32  `json:"frequency_penalty"`
 }
 
-func reqAI(ctx context.Context, promptContext, msg, forsenReplyStart string) (string, error) {
+func ReqAI(ctx context.Context, promptContext, msg, forsenReplyStart string) (string, error) {
 	prefix := "###CONTEXT: " + promptContext + " ###OTHER: " + msg + " ###FORSEN: " + forsenReplyStart
 
 	req := &AiReq{
