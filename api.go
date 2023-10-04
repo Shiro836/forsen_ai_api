@@ -191,7 +191,7 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("unauthorized"))
-	} else if settings, err := db.GetDbSettings(cookie.Value); err != nil {
+	} else if settings, err := db.GetDbSettingsBySessionID(cookie.Value); err != nil {
 		fmt.Println(err)
 
 		w.WriteHeader(http.StatusInternalServerError)

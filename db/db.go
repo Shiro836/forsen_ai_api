@@ -126,6 +126,31 @@ func UpdateUserData(userData *UserData) error {
 	return nil
 }
 
+func GetUserData(user string) (*UserData, error) {
+	row := db.QueryRow(`
+		select
+			user_id,
+			refresh_token,
+			access_token
+		from user_data
+		where
+			login = $1
+	`,
+		user,
+	)
+
+	userData := &UserData{UserLoginData: &UserLoginData{UserName: user}}
+	if err := row.Scan(
+		&userData.UserLoginData.UserId,
+		&userData.RefreshToken,
+		&userData.AccessToken,
+	); err != nil {
+		return nil, fmt.Errorf("failed to scan user data: %w", err)
+	}
+
+	return userData, nil
+}
+
 func GetUserDataBySessionId(sessionId string) (*UserData, error) {
 	row := db.QueryRow(`
 		select
@@ -153,7 +178,20 @@ func GetUserDataBySessionId(sessionId string) (*UserData, error) {
 	return userData, nil
 }
 
-func GetRewardID(sessionId string) (string, error) {
+func GetRewardID(user string) (string, error) {
+	row := db.QueryRow(`
+		select reward_id from user_data where login = $1
+	`, user)
+
+	var rewardID string
+	if err := row.Scan(&rewardID); err != nil {
+		return "", fmt.Errorf("failed to scan reward id: %w", err)
+	}
+
+	return rewardID, nil
+}
+
+func GetRewardIDBySessionID(sessionId string) (string, error) {
 	row := db.QueryRow(`
 		select reward_id from user_data where session = $1
 	`, sessionId)
@@ -180,13 +218,14 @@ func SaveRewardID(rewardID, sessionId string) error {
 }
 
 type Settings struct {
-	Chat           bool `json:"chat"`
-	ChannelPts     bool `json:"chan_pts"`
-	Follows        bool `json:"follows"`
-	Subs           bool `json:"subs"`
-	Raids          bool `json:"raids"`
-	Events         bool `json:"events"`
-	EventsInterval int  `json:"events_interval"`
+	Chat           bool   `json:"chat"`
+	ChannelPts     bool   `json:"chan_pts"`
+	Follows        bool   `json:"follows"`
+	Subs           bool   `json:"subs"`
+	Raids          bool   `json:"raids"`
+	Events         bool   `json:"events"`
+	EventsInterval int    `json:"events_interval"`
+	CustomContext  string `json:"custom_context"`
 }
 
 func GetDbSettingsBySessionID(sessionId string) (*Settings, error) {
@@ -198,7 +237,8 @@ func GetDbSettingsBySessionID(sessionId string) (*Settings, error) {
 			subs,
 			raids,
 			random_events,
-			events_interval
+			events_interval,
+			custom_context
 		from user_data
 		where session = $1
 	`, sessionId)
@@ -213,6 +253,7 @@ func GetDbSettingsBySessionID(sessionId string) (*Settings, error) {
 		&settings.Raids,
 		&settings.Events,
 		&settings.EventsInterval,
+		&settings.CustomContext,
 	); err != nil {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
 	}
@@ -229,7 +270,8 @@ func GetDbSettings(login string) (*Settings, error) {
 			subs,
 			raids,
 			random_events,
-			events_interval
+			events_interval,
+			custom_context
 		from user_data
 		where login = $1
 	`, login)
@@ -244,6 +286,7 @@ func GetDbSettings(login string) (*Settings, error) {
 		&settings.Raids,
 		&settings.Events,
 		&settings.EventsInterval,
+		&settings.CustomContext,
 	); err != nil {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
 	}
@@ -260,8 +303,9 @@ func UpdateDbSettings(settings *Settings, sessionId string) error {
 			subs     		= $4,
 			raids	 		= $5,
 			random_events	= $6,
-			events_interval	= $7
-		where session = $8
+			events_interval	= $7,
+			custom_context = $8
+		where session = $9
 	`,
 		settings.Chat,
 		settings.ChannelPts,
@@ -270,6 +314,7 @@ func UpdateDbSettings(settings *Settings, sessionId string) error {
 		settings.Raids,
 		settings.Events,
 		settings.EventsInterval,
+		settings.CustomContext,
 		sessionId,
 	); err != nil {
 		return fmt.Errorf("failed to update db settings: %w", err)

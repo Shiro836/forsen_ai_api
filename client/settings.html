@@ -35,10 +35,13 @@
                 if (child.type === "checkbox") {
                     console.log("checked")
                     jsonSettings[child.id] = child.checked
-                } else {
+                } else if (child.id === "events_interval") {
                     console.log("not checked")
 
                     jsonSettings[child.id] = Number(child.value)
+                } else if (child.id === "custom_context") {
+                    console.log("ctx", child.value)
+                    jsonSettings[child.id] = child.value
                 }
             }
 
@@ -54,7 +57,12 @@
             const res = JSON.parse(xmlHttp.responseText);
             for (const key in res){
                 if(res.hasOwnProperty(key)){
-                    if (typeof res[key] === "number") {
+                    if (typeof res[key] === "string") {
+                        document.getElementById(key).value = String(res[key])
+                        if (key === "custom_context") {
+                            document.getElementById("custom_context").value = String(res[key])
+                        }
+                    } else if (typeof res[key] === "number") {
                         document.getElementById(key).value = String(res[key])
                         if (key === "events_interval") {
                             document.getElementById("range_value").innerText = String(res[key])
@@ -99,9 +107,9 @@
         <div><input type="checkbox" id="subs"        name="subs"/>          <label for="subs">Subs</label>                      </div>
         <div><input type="checkbox" id="raids"       name="raids"/>         <label for="raids">Raids</label>                    </div>
         <div><input type="checkbox" id="events"      name="events"/>        <label for="events">Random Speech</label>           </div>
-
         <div><input type="range" id="events_interval" name="events_interval" value="80" min="60" max="1000" oninput="document.getElementById('range_value').innerText=this.value"/> <label for="events_interval">Random Speech Interval in seconds</label></div>
         <div><output id="range_value">80</output></div>
+        <div><textarea id="custom_context" style="width:250px;height:150px;" name="custom_context"></textarea>><label for="custom_context">Custom Context</label></div>
     </div>
     <br>
     <button onclick="updateSettings()">Apply</button>

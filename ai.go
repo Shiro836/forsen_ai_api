@@ -18,11 +18,11 @@ type AiReq struct {
 }
 
 func ReqAI(ctx context.Context, promptContext, msg, forsenReplyStart string) (string, error) {
-	prefix := "###CONTEXT: " + promptContext + " ###OTHER: " + msg + " ###FORSEN: " + forsenReplyStart
+	prefix := "###CONTEXT: " + promptContext + " ###PROMPT: " + msg + " ###FORSEN: " + forsenReplyStart
 
 	req := &AiReq{
 		Prompt:           prefix,
-		MaxTokens:        1024,
+		MaxTokens:        1500,
 		Stop:             []string{"###", "</s>"},
 		Temperature:      0.5,
 		FrequencyPenalty: 0.5,

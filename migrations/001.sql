@@ -18,6 +18,7 @@ create table if not exists user_data (
     raids           boolean not null default true,
     random_events   boolean not null default true,
     events_interval text    not null default 60, -- in seconds
+    custom_context  text    not null default 'Forsen tries to answer every question thoroughly. ###PROMPT: How did you get into streaming? ###FORSEN: My goal was always to get rich. I always tried to get sponsors and shit. And I saw that opportunity in streaming.',
 
     unique(user_id)
 );

@@ -10,6 +10,17 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+func (cm *ConnectionManager) eventsParser(user string) error {
+	return nil
+}
+
+func (cm *ConnectionManager) hasConsumers(user string) bool {
+	cm.rwMutex.RLock()
+	defer cm.rwMutex.RUnlock()
+
+	return cm.subCount[user] > 0
+}
+
 func (cm *ConnectionManager) processor(user string) error {
 	defer func() {
 		if r := recover(); r != nil {
@@ -31,6 +42,7 @@ func (cm *ConnectionManager) processor(user string) error {
 
 	go func() {
 		<-signalCh
+		slog.Info("processor signal recieved")
 		cancel()
 	}()
 
@@ -43,31 +55,42 @@ func (cm *ConnectionManager) processor(user string) error {
 	}
 
 	var twitchChatCh, randEventsCh chan *twitchEvent
-	var subs, follows, raids, channelPts, twitchUnknown chan *twitchEvent
-
-	chansAreEmpty := true
+	var subsCh, followsCh, raidsCh, channelPtsCh, twitchUnknownCh chan *twitchEvent
 
 	if settings.Chat {
-		chansAreEmpty = false
 		twitchChatCh = messagesFetcher(ctx, user)
 	}
 	if settings.ChannelPts || settings.Follows || settings.Raids || settings.Subs {
-		chansAreEmpty = false
-		twitchApiCh, err := eventSubDataStreamBeta(ctx, settings)
+		twitchApiCh, err := eventSubDataStreamBeta(ctx, settings, user)
 		if err != nil {
 			return fmt.Errorf("failed to setup twitch api data stream: %w", err)
 		}
 
-		subs, follows, raids, channelPts, twitchUnknown = twitchEventsSplitter(twitchApiCh)
+		subsCh, followsCh, raidsCh, channelPtsCh, twitchUnknownCh = twitchEventsSplitter(twitchApiCh)
 	}
 	if settings.Events {
-		chansAreEmpty = false
 		randEventsCh = randEvents(ctx, time.Second*time.Duration(settings.EventsInterval))
 	}
 
+	inChans := make([]chan *twitchEvent, 0, 7)
+	add := func(ch chan *twitchEvent) {
+		if ch != nil {
+			inChans = append(inChans, ch)
+		}
+	}
+	add(randEventsCh)
+	add(twitchChatCh)
+	add(twitchUnknownCh)
+	add(channelPtsCh)
+	add(followsCh)
+	add(raidsCh)
+	add(subsCh)
+
+	closingChans := closingProxy(inChans...)
+
 	var dataCh chan *twitchEvent
 
-	if chansAreEmpty {
+	if len(closingChans) == 0 {
 		dataCh = make(chan *twitchEvent)
 		go func() {
 			defer close(dataCh)
@@ -77,7 +100,7 @@ func (cm *ConnectionManager) processor(user string) error {
 				case dataCh <- &twitchEvent{
 					eventType: eventTypeInfo,
 					userName:  user,
-					message:   "No settings enabled you silly goose",
+					message:   "No settings enabled you sillE goose",
 				}:
 				case <-ctx.Done():
 					break
@@ -85,8 +108,10 @@ func (cm *ConnectionManager) processor(user string) error {
 			}
 		}()
 	} else {
-		dataCh = priorityFanIn(randEventsCh, twitchChatCh, twitchUnknown, channelPts, follows, raids, subs)
+		dataCh = priorityFanIn(nil, closingChans...)
 	}
+
+	slog.Info("processor is closing")
 
 	return nil
 }

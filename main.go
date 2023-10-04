@@ -56,7 +56,7 @@ var filteredForsenWav []byte
 
 const aiContext = "Forsen tries very hard to answer questions very thoroughly. Forsen loves lolis, he thinks they are very cute and funny. Forsen still tries to beat xqc's minecraft record for 137 days. Forsen's fursona is lion."
 
-func onAsk(ctx context.Context, dataCh chan *ws.Message, channelOwner string, event *twitchEvent) error {
+func onAsk(ctx context.Context, dataCh chan *ws.Message, settings *db.Settings, event *twitchEvent) error {
 	msg := event.message
 	if len(msg) == 0 {
 		return fmt.Errorf("empty input message")
@@ -94,7 +94,7 @@ func onAsk(ctx context.Context, dataCh chan *ws.Message, channelOwner string, ev
 		case eventTypeFollow, eventTypeSub, eventTypeGift:
 			resp, err = ReqAI(ctx, "Forsen likes to thank his followers and subscribers.", msg, "Thank you ")
 		default:
-			resp, err = ReqAI(ctx, aiContext, msg, "")
+			resp, err = ReqAI(ctx, settings.CustomContext, msg, "")
 		}
 		if err != nil {
 			return err
@@ -242,7 +242,7 @@ func messagesFetcher(ctx context.Context, user string) chan *twitchEvent {
 	return ch
 }
 
-func processMessages(ctx context.Context, user string, inputCh chan *twitchEvent) chan *ws.Message {
+func processMessages(ctx context.Context, settings *db.Settings, inputCh chan *twitchEvent) chan *ws.Message {
 	ch := make(chan *ws.Message)
 
 	go func() {
@@ -260,7 +260,7 @@ func processMessages(ctx context.Context, user string, inputCh chan *twitchEvent
 				}
 
 				fmt.Println("querying AI: ", event.message)
-				if err := onAsk(ctx, ch, user, event); err != nil {
+				if err := onAsk(ctx, ch, settings, event); err != nil {
 					fmt.Println(err)
 				}
 			case <-ctx.Done():
@@ -331,6 +331,14 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("failed to upgrade ws"))
 
 		return
+	}
+
+	settings, err := db.GetDbSettings(user)
+	if err != nil {
+		fmt.Println("failed to get settings:", err)
+		settings = &db.Settings{
+			Chat: true,
+		}
 	}
 
 	wsClient, done := ws.NewWsClient(c)
@@ -428,26 +436,19 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var eventsStream chan *twitchEvent = nil
-	if sessionId, err := r.Cookie("session_id"); err == nil && len(sessionId.Value) != 0 {
-		settings, err := db.GetDbSettingsBySessionID(sessionId.Value)
+
+	chatEnabled = settings.Chat
+
+	if settings.ChannelPts || settings.Follows || settings.Subs || settings.Raids {
+		eventsStream, err = eventSubDataStream(ctx, cancel, w, user, settings)
 		if err != nil {
-			fmt.Println(fmt.Println("failed to read settings:", err))
+			fmt.Println(err)
 			return
 		}
+	}
 
-		chatEnabled = settings.Chat
-
-		if settings.ChannelPts || settings.Follows || settings.Subs || settings.Raids {
-			eventsStream, err = eventSubDataStream(ctx, cancel, w, sessionId.Value, settings)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-		}
-
-		if settings.Events && settings.EventsInterval >= 10 {
-			randomEvents = randEventsFunc(ctx, time.Second*time.Duration(settings.EventsInterval))
-		}
+	if settings.Events && settings.EventsInterval >= 10 {
+		randomEvents = randEventsFunc(ctx, time.Second*time.Duration(settings.EventsInterval))
 	}
 
 	var chatMsgs chan *twitchEvent = nil
@@ -463,7 +464,7 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	eventsStream = priorityFanIn(chatMsgs, eventsStream, randomEvents)
 
-	dataStream := processMessages(ctx, user, eventsStream)
+	dataStream := processMessages(ctx, settings, eventsStream)
 	defer func() {
 		for range dataStream {
 		}
@@ -551,7 +552,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt)
 
 	srv := &http.Server{
-		Addr:    ":8081",
+		Addr:    ":8080",
 		Handler: router,
 	}
 
@@ -572,15 +573,15 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		defer cancel()
+		// defer cancel()
 
-		slog.Info("Starting connections loop")
+		// slog.Info("Starting connections loop")
 
-		if err := connManager.ProcessingLoop(); err != nil {
-			slog.Error("Processing loop error", "err", err)
-		}
+		// if err := connManager.ProcessingLoop(); err != nil {
+		// 	slog.Error("Processing loop error", "err", err)
+		// }
 
-		slog.Info("Connections loop finished")
+		// slog.Info("Connections loop finished")
 	}()
 
 	select {

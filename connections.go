@@ -143,6 +143,8 @@ func (cm *ConnectionManager) NotifyUpdateSettings(login string) {
 
 func (cm *ConnectionManager) HandleUser(user *db.Human) {
 	if user.BannedBy != nil {
+		cm.slog.Info("stopping processor", "user", user.Login)
+
 		if ch, ok := cm.updateEventsCh[user.Login]; ok {
 			close(ch)
 			delete(cm.updateEventsCh, user.Login)
@@ -150,12 +152,23 @@ func (cm *ConnectionManager) HandleUser(user *db.Human) {
 	} else if _, ok := cm.updateEventsCh[user.Login]; !ok {
 		cm.updateEventsCh[user.Login] = make(chan struct{})
 
+		cm.slog.Info("starting processor", "user", user.Login)
+
 		cm.wg.Add(1)
 		go func() {
 			defer cm.wg.Done()
 
-			if err := cm.processor(user.Login); err != nil {
-				cm.slog.Error("failed to create processor", "err", err, "user", user.Login)
+		loop:
+			for {
+				select {
+				case <-cm.ctx.Done():
+					break loop
+				default:
+				}
+
+				if err := cm.processor(user.Login); err != nil {
+					cm.slog.Error("failed to create processor", "err", err, "user", user.Login)
+				}
 			}
 		}()
 	}
