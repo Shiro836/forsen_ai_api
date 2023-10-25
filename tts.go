@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+
+	"app/tools"
 )
 
 type TTSReq struct {
@@ -29,12 +32,17 @@ func reqTTS(ctx context.Context, msg string, voice string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// fmt.Println(string(data))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, ttsUrl, bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	request.Header.Add("Content-Type", "application/json")
 
-	resp, err := httpClient.Post(ttsUrl, "application/json", bytes.NewReader(data))
+	resp, err := httpClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to post to tts server: %w", err)
 	}
+	defer tools.DrainAndClose(resp.Body)
 
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {

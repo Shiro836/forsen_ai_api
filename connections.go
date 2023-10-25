@@ -12,18 +12,17 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-type SpeechTiming struct {
-	Start  time.Duration `json:"start"`
-	Length time.Duration `json:"len"`
+type Audio struct {
+	Audio []byte `json:"audio"`
 }
 
-type Speech struct {
-	Timings []SpeechTiming `json:"speech_timings"`
-	Audio   []byte         `json:"audio"`
+type Text struct {
+	Text string `json:"text"`
 }
 
 const (
-	EventTypeSpeech = iota + 1
+	EventTypeAudio = iota + 1
+	EventTypeText
 	EventTypeInfo
 	EventTypeError
 )
@@ -43,17 +42,17 @@ type ConnectionManager struct {
 	subCount       map[string]int
 	dataStreams    map[string]chan *DataEvent
 	updateEventsCh map[string]chan struct{}
-
-	slog *slog.Logger
 }
 
 func NewConnectionManager(ctx context.Context) *ConnectionManager {
+	ctx = WithSlog(ctx, slog.With("source", "connection_manager"))
+
 	return &ConnectionManager{
 		ctx: ctx,
 
+		subCount:       make(map[string]int, 100),
+		dataStreams:    make(map[string]chan *DataEvent, 100),
 		updateEventsCh: make(map[string]chan struct{}, 100),
-
-		slog: slog.With("source", "connection_manager"),
 	}
 }
 
@@ -97,8 +96,6 @@ func (cm *ConnectionManager) RecieveChan(user string) (chan *DataEvent, error) {
 
 func (cm *ConnectionManager) Write(user string, event *DataEvent) error {
 	for {
-		time.Sleep(300 * time.Millisecond)
-
 		br := false
 		var err error
 
@@ -122,6 +119,8 @@ func (cm *ConnectionManager) Write(user string, event *DataEvent) error {
 		if br {
 			return err
 		}
+
+		time.Sleep(300 * time.Millisecond)
 	}
 }
 
@@ -142,8 +141,10 @@ func (cm *ConnectionManager) NotifyUpdateSettings(login string) {
 }
 
 func (cm *ConnectionManager) HandleUser(user *db.Human) {
+	ctx := WithSlog(cm.ctx, slog.With("user", user.Login))
+
 	if user.BannedBy != nil {
-		cm.slog.Info("stopping processor", "user", user.Login)
+		GetSlog(ctx).Info("stopping processor")
 
 		if ch, ok := cm.updateEventsCh[user.Login]; ok {
 			close(ch)
@@ -152,7 +153,7 @@ func (cm *ConnectionManager) HandleUser(user *db.Human) {
 	} else if _, ok := cm.updateEventsCh[user.Login]; !ok {
 		cm.updateEventsCh[user.Login] = make(chan struct{})
 
-		cm.slog.Info("starting processor", "user", user.Login)
+		GetSlog(ctx).Info("starting processor")
 
 		cm.wg.Add(1)
 		go func() {
@@ -166,8 +167,8 @@ func (cm *ConnectionManager) HandleUser(user *db.Human) {
 				default:
 				}
 
-				if err := cm.processor(user.Login); err != nil {
-					cm.slog.Error("failed to create processor", "err", err, "user", user.Login)
+				if err := cm.processor(ctx, user.Login); err != nil {
+					GetSlog(ctx).Error("failed to create processor", "err", err)
 				}
 			}
 		}()
@@ -180,7 +181,7 @@ func (cm *ConnectionManager) ProcessingLoop() error {
 		return fmt.Errorf("failed to get whitelist: %w", err)
 	}
 
-	cm.slog.Info("got users from db", "users", users.List)
+	GetSlog(cm.ctx).Info("got users from db", "users", users.List)
 
 	func() {
 		cm.rwMutex.Lock()

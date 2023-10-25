@@ -16,6 +16,6 @@ func GetSlog(ctx context.Context) *slog.Logger {
 	return ctx.Value(slogKey).(*slog.Logger)
 }
 
-func WithSlog(ctx context.Context, slog *slog.Logger) context.Context {
-	return context.WithValue(ctx, slogKey, slog)
+func WithSlog(ctx context.Context, log *slog.Logger) context.Context {
+	return context.WithValue(ctx, slogKey, log)
 }

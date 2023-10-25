@@ -31,6 +31,7 @@ func NewRouter(api *API) *chi.Mux {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+	router.Use(middleware.RealIP)
 	router.Use(middleware.StripSlashes)
 	router.Use(middleware.Recoverer)
 
@@ -52,9 +53,9 @@ func NewRouter(api *API) *chi.Mux {
 	router.Get("/get_whitelist", getWhitelist)
 	router.Post("/update_whitelist", updateWhitelist)
 
-	router.Get("/beta.js", api.betaJsHandler)
-	router.Get("/beta/{user}", api.betaHtmlHandler)
-	router.Get("/ws/beta/{user}", api.consumerHandler)
+	router.Get("/v2.js", api.betaJsHandler)
+	router.Get("/v2/{user}", api.betaHtmlHandler)
+	router.Get("/ws/v2/{user}", api.consumerHandler)
 
 	return router
 }

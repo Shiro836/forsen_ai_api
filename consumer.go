@@ -17,10 +17,10 @@ func (api *API) betaHtmlHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := os.ReadFile("client/beta.html")
+	data, err := os.ReadFile("client/v2.html")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("failed to read beta.html"))
+		w.Write([]byte("failed to read v2.html"))
 
 		return
 	}
@@ -30,10 +30,10 @@ func (api *API) betaHtmlHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) betaJsHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile("client/beta.js")
+	data, err := os.ReadFile("client/v2.js")
 	if err != nil {
 		w.WriteHeader(500)
-		w.Write([]byte("failed to read beta.js"))
+		w.Write([]byte("failed to read v2.js"))
 	}
 
 	w.Header().Add("Content-Type", "application/javascript")
@@ -41,10 +41,22 @@ func (api *API) betaJsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) sendData(wsClient *ws.Client, data *DataEvent) error {
-	return wsClient.Send(&ws.Message{
-		MsgType: websocket.TextMessage,
-		Message: []byte("not implemented"),
-	})
+	msg := &ws.Message{}
+
+	switch data.EventType {
+	case EventTypeAudio:
+		msg.MsgType = websocket.BinaryMessage
+		msg.Message = data.EventData
+	case EventTypeText:
+		msg.MsgType = websocket.BinaryMessage
+		msg.Message = data.EventData
+	case EventTypeInfo:
+	case EventTypeError:
+	default:
+		panic("event type not handled")
+	}
+
+	return wsClient.Send(msg)
 }
 
 func (api *API) consumerHandler(w http.ResponseWriter, r *http.Request) {
@@ -53,11 +65,13 @@ func (api *API) consumerHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	slog := slog.With("user", user)
+	r = r.WithContext(WithSlog(r.Context(), slog.With("user", user)))
+
+	GetSlog(r.Context()).Info("consumer connected", "ip", r.RemoteAddr)
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		slog.Error("failed to upgrade ws", "err", err)
+		GetSlog(r.Context()).Error("failed to upgrade ws", "err", err)
 
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to upgrade ws"))
@@ -68,11 +82,11 @@ func (api *API) consumerHandler(w http.ResponseWriter, r *http.Request) {
 	wsClient, done := ws.NewWsClient(c)
 
 	defer func() {
-		slog.Info("close ws")
+		GetSlog(r.Context()).Info("close ws")
 		wsClient.Close()
 	}()
 
-	slog.Info("ws connected")
+	GetSlog(r.Context()).Info("ws connected")
 
 	api.connectionManager.Subscribe(user)
 	defer api.connectionManager.Unsubscribe(user)
@@ -82,7 +96,7 @@ func (api *API) consumerHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to get data stream"))
 
-		slog.Error("failed to get data stream", "err", err)
+		GetSlog(r.Context()).Error("failed to get data stream", "err", err)
 	}
 
 loop:
@@ -96,12 +110,12 @@ loop:
 		select {
 		case data, ok := <-dataCh:
 			if !ok {
-				slog.Info("data stream ended")
+				GetSlog(r.Context()).Info("data stream ended")
 				break loop
 			}
 
 			if err := api.sendData(wsClient, data); err != nil {
-				slog.Error("failed to send data to ws", "err", err)
+				GetSlog(r.Context()).Error("failed to send data to ws", "err", err)
 				break loop
 			}
 		case <-done:

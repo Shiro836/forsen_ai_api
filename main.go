@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"app/db"
+	"app/tools"
 	"app/ws"
 
 	"github.com/gempir/go-twitch-irc/v4"
@@ -462,7 +463,7 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eventsStream = priorityFanIn(chatMsgs, eventsStream, randomEvents)
+	eventsStream = tools.PriorityFanIn(chatMsgs, eventsStream, randomEvents)
 
 	dataStream := processMessages(ctx, settings, eventsStream)
 	defer func() {
@@ -573,15 +574,15 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// defer cancel()
+		defer cancel()
 
-		// slog.Info("Starting connections loop")
+		slog.Info("Starting connections loop")
 
-		// if err := connManager.ProcessingLoop(); err != nil {
-		// 	slog.Error("Processing loop error", "err", err)
-		// }
+		if err := connManager.ProcessingLoop(); err != nil {
+			slog.Error("Processing loop error", "err", err)
+		}
 
-		// slog.Info("Connections loop finished")
+		slog.Info("Connections loop finished")
 	}()
 
 	select {

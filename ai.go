@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+
+	"app/tools"
 )
 
 type AiReq struct {
@@ -24,8 +27,8 @@ func ReqAI(ctx context.Context, promptContext, msg, forsenReplyStart string) (st
 		Prompt:           prefix,
 		MaxTokens:        1500,
 		Stop:             []string{"###", "</s>"},
-		Temperature:      0.5,
-		FrequencyPenalty: 0.5,
+		Temperature:      0.7,
+		FrequencyPenalty: 0.7,
 	}
 
 	data, err := json.Marshal(&req)
@@ -33,10 +36,17 @@ func ReqAI(ctx context.Context, promptContext, msg, forsenReplyStart string) (st
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := httpClient.Post(aiUrl, "application/json", bytes.NewReader(data))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, aiUrl, bytes.NewReader(data))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	request.Header.Add("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(request)
 	if err != nil {
 		return "", fmt.Errorf("failed to post to ai server: %w", err)
 	}
+	defer tools.DrainAndClose(resp.Body)
 
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {

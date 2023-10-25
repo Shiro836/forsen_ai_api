@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	"app/db"
-
-	"golang.org/x/exp/slog"
+	"app/tools"
 )
 
 func (cm *ConnectionManager) eventsParser(user string) error {
@@ -21,16 +21,14 @@ func (cm *ConnectionManager) hasConsumers(user string) bool {
 	return cm.subCount[user] > 0
 }
 
-func (cm *ConnectionManager) processor(user string) error {
+func (cm *ConnectionManager) processor(ctx context.Context, user string) error {
+	ctx, cancel := context.WithCancel(ctx)
+
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("connection panic", "user", user, "r", r)
+			GetSlog(ctx).Error("connection panic", "user", user, "r", r, "stack", string(debug.Stack()))
 		}
 	}()
-
-	ctx, cancel := context.WithCancel(cm.ctx)
-
-	slog := slog.With("user", user)
 
 	var signalCh chan struct{}
 	func() {
@@ -42,17 +40,19 @@ func (cm *ConnectionManager) processor(user string) error {
 
 	go func() {
 		<-signalCh
-		slog.Info("processor signal recieved")
+		GetSlog(ctx).Info("processor signal recieved")
 		cancel()
 	}()
 
 	settings, err := db.GetDbSettings(user)
 	if err != nil {
-		slog.Info("settings not found, defaulting to Chat=true")
+		GetSlog(ctx).Info("settings not found, defaulting to Chat=true")
 		settings = &db.Settings{
 			Chat: true,
 		}
 	}
+
+	GetSlog(ctx).Info("Settings fetched", "settings", settings)
 
 	var twitchChatCh, randEventsCh chan *twitchEvent
 	var subsCh, followsCh, raidsCh, channelPtsCh, twitchUnknownCh chan *twitchEvent
@@ -86,18 +86,18 @@ func (cm *ConnectionManager) processor(user string) error {
 	add(raidsCh)
 	add(subsCh)
 
-	closingChans := closingProxy(inChans...)
+	closingChans := tools.CloseAndDrainOnAnyClose(inChans...)
 
-	var dataCh chan *twitchEvent
+	var twitchEventsCh chan *twitchEvent
 
 	if len(closingChans) == 0 {
-		dataCh = make(chan *twitchEvent)
+		twitchEventsCh = make(chan *twitchEvent)
 		go func() {
-			defer close(dataCh)
+			defer close(twitchEventsCh)
 
 			for {
 				select {
-				case dataCh <- &twitchEvent{
+				case twitchEventsCh <- &twitchEvent{
 					eventType: eventTypeInfo,
 					userName:  user,
 					message:   "No settings enabled you sillE goose",
@@ -108,10 +108,39 @@ func (cm *ConnectionManager) processor(user string) error {
 			}
 		}()
 	} else {
-		dataCh = priorityFanIn(nil, closingChans...)
+		twitchEventsCh = tools.PriorityFanIn(nil, closingChans...)
 	}
 
-	slog.Info("processor is closing")
+	dataCh := processTwitchEvents(ctx, twitchEventsCh)
+	defer func() {
+		for range dataCh {
+		}
+	}()
+
+	GetSlog(ctx).Info("starting processing")
+
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			break loop
+		default:
+		}
+
+		for dataEvent := range dataCh {
+			select {
+			case <-ctx.Done():
+				break loop
+			default:
+			}
+
+			if err := cm.Write(user, dataEvent); err != nil {
+				GetSlog(ctx).Error("failed to send event", "err", err, "dataEvent", dataEvent)
+			}
+		}
+	}
+
+	GetSlog(ctx).Info("processor is closing")
 
 	return nil
 }
