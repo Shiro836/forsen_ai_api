@@ -21,15 +21,36 @@ type Text struct {
 }
 
 const (
-	EventTypeAudio = iota + 1
+	EventTypeAudio EventType = iota + 1
 	EventTypeText
 	EventTypeInfo
 	EventTypeError
 )
 
+type EventType int
+
+func (et EventType) String() string {
+	switch et {
+	case EventTypeAudio:
+		return "event_type_audio"
+	case EventTypeText:
+		return "event_type_text"
+	case EventTypeInfo:
+		return "event_type_info"
+	case EventTypeError:
+		return "event_type_error"
+	default:
+		return "event_type_unknown"
+	}
+}
+
 type DataEvent struct {
-	EventType int
+	EventType EventType
 	EventData []byte
+}
+
+func (d *DataEvent) String() string {
+	return fmt.Sprintf("%s:%s", d.EventType, string(d.EventData))
 }
 
 type ConnectionManager struct {
@@ -157,6 +178,7 @@ func (cm *ConnectionManager) HandleUser(user *db.Human) {
 
 		cm.wg.Add(1)
 		go func() {
+			defer GetSlog(ctx).Info("stopped processor")
 			defer cm.wg.Done()
 
 		loop:

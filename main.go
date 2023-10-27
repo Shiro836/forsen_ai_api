@@ -86,12 +86,15 @@ func onAsk(ctx context.Context, dataCh chan *ws.Message, settings *db.Settings, 
 	var resp string
 	var err error
 
-	attempts := 0
+	respLimit := 20
+	if event.eventType == eventTypeRandom {
+		respLimit = 100
+	}
 
-	for {
+	for attempts := 0; attempts < 20; attempts++ {
 		switch event.eventType {
 		case eventTypeRandom:
-			resp, err = ReqAI(ctx, "Forsen is a very good story teller.", "Forsen, tell me a random story.", msg)
+			resp, err = ReqAI(ctx, "Forsen only tells the truth but tries not to get banned", "Forsen, what is your opinion on this.", msg)
 		case eventTypeFollow, eventTypeSub, eventTypeGift:
 			resp, err = ReqAI(ctx, "Forsen likes to thank his followers and subscribers.", msg, "Thank you ")
 		default:
@@ -101,17 +104,8 @@ func onAsk(ctx context.Context, dataCh chan *ws.Message, settings *db.Settings, 
 			return err
 		}
 
-		respLimit := 20
-		if event.eventType == eventTypeRandom {
-			respLimit = 100
-		}
-
 		if len(resp) > respLimit {
 			break
-		}
-
-		if attempts > 20 {
-			return fmt.Errorf("too much attempts to get good answer")
 		}
 	}
 
@@ -406,8 +400,6 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	chatEnabled := true
-
 	var randomEvents chan *twitchEvent = nil
 
 	randEventsFunc := func(ctx context.Context, interval time.Duration) chan *twitchEvent {
@@ -438,8 +430,6 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	var eventsStream chan *twitchEvent = nil
 
-	chatEnabled = settings.Chat
-
 	if settings.ChannelPts || settings.Follows || settings.Subs || settings.Raids {
 		eventsStream, err = eventSubDataStream(ctx, cancel, w, user, settings)
 		if err != nil {
@@ -453,7 +443,7 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var chatMsgs chan *twitchEvent = nil
-	if chatEnabled {
+	if settings.Chat {
 		chatMsgs = messagesFetcher(ctx, user)
 	}
 

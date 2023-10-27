@@ -93,9 +93,9 @@
     </script>
 </head>
 <body>
-    <h3>Refresh obs browser source after logging in.<br>Logout to stop using twitch api to fetch events.</h3>
+    <h3>Refresh obs browser source after logging in.</h3>
     <button onclick="logout()">Logout</button>
-    <h3>Channel point reward must be created using this button, NOT BY YOURSELF. After adding the reward, you can edit its parameters.</h3>
+    <h3>Channel point reward must be created using this button, NOT BY YOURSELF. After adding the reward, you can edit its parameters on twitch website.</h3>
     <button onclick="addChannelPointReward()">Add Channel Point Reward on your channel</button>
     <div id="add_reward_result"></div>
     <br>
@@ -109,7 +109,7 @@
         <div><input type="checkbox" id="events"      name="events"/>        <label for="events">Random Speech</label>           </div>
         <div><input type="range" id="events_interval" name="events_interval" value="80" min="60" max="1000" oninput="document.getElementById('range_value').innerText=this.value"/> <label for="events_interval">Random Speech Interval in seconds</label></div>
         <div><output id="range_value">80</output></div>
-        <div><textarea id="custom_context" style="width:250px;height:150px;" name="custom_context"></textarea>><label for="custom_context">Custom Context</label></div>
+        <div><textarea id="custom_context" style="width:250px;height:150px;" name="custom_context"></textarea><label for="custom_context">Custom Context</label></div>
     </div>
     <br>
     <button onclick="updateSettings()">Apply</button>

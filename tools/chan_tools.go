@@ -70,11 +70,11 @@ func CloseAndDrainOnAnyClose[T any](in ...chan T) []chan T {
 		out[i] = make(chan T)
 
 		go func() {
-			defer close(out[i])
 			defer func() {
 				for range inCh {
 				}
 			}()
+			defer close(out[i])
 
 		loop:
 			for {
