@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"app/db"
+	"app/slg"
 	"app/ws"
 
 	"github.com/dchest/uniuri"
@@ -222,7 +223,7 @@ func eventSubDataStreamBeta(ctx context.Context, settings *db.Settings, user str
 		userData.RefreshToken = newRefreshToken
 
 		if err := db.UpdateUserData(userData); err != nil {
-			GetSlog(ctx).Error("failed to update user data")
+			slg.GetSlog(ctx).Error("failed to update user data")
 		}
 	})
 
@@ -373,7 +374,7 @@ func eventSubDataStreamBeta(ctx context.Context, settings *db.Settings, user str
 
 	ch := make(chan *twitchEvent)
 
-	GetSlog(ctx).Info("twitch ws connected")
+	slg.GetSlog(ctx).Info("twitch ws connected")
 
 	lastMsgTime := time.Now()
 
@@ -382,7 +383,7 @@ func eventSubDataStreamBeta(ctx context.Context, settings *db.Settings, user str
 		defer close(ch)
 		defer cancel()
 		defer func() {
-			GetSlog(ctx).Info("close twitch ws")
+			slg.GetSlog(ctx).Info("close twitch ws")
 			wsClient.Close()
 		}()
 
@@ -390,7 +391,7 @@ func eventSubDataStreamBeta(ctx context.Context, settings *db.Settings, user str
 		for {
 			msg, err := wsClient.Read()
 			if err != nil {
-				GetSlog(ctx).Error("ws read error", "err", err)
+				slg.GetSlog(ctx).Error("ws read error", "err", err)
 				break
 			}
 
@@ -403,7 +404,7 @@ func eventSubDataStreamBeta(ctx context.Context, settings *db.Settings, user str
 			}{}
 
 			if err := json.Unmarshal(msg.Message, &meta); err != nil {
-				GetSlog(ctx).Error("meta unmarshal error", "err", err)
+				slg.GetSlog(ctx).Error("meta unmarshal error", "err", err)
 				break
 			}
 
@@ -431,7 +432,7 @@ func eventSubDataStreamBeta(ctx context.Context, settings *db.Settings, user str
 				}{}
 
 				if err := json.Unmarshal(msg.Message, &payload); err != nil {
-					GetSlog(ctx).Error("payload unmarshal error", "err", err)
+					slg.GetSlog(ctx).Error("payload unmarshal error", "err", err)
 					break loop
 				}
 
@@ -485,7 +486,7 @@ func eventSubDataStreamBeta(ctx context.Context, settings *db.Settings, user str
 	go func() {
 		for {
 			if time.Since(lastMsgTime) > keepaliveTimeout {
-				GetSlog(ctx).Info("keepalive timeout passed Aware")
+				slg.GetSlog(ctx).Info("keepalive timeout passed Aware")
 				wsClient.Close()
 				return
 			}

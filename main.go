@@ -1,10 +1,18 @@
 package main
 
 import (
+	"app/conns"
+	"app/db"
+	"app/memory"
+	"app/slg"
+	"app/tools"
+	"app/ws"
+
 	"context"
 	_ "embed"
 	"fmt"
 	"log"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"os"
@@ -13,17 +21,11 @@ import (
 	"sync"
 	"time"
 
-	"app/db"
-	"app/memory"
-	"app/tools"
-	"app/ws"
-
 	"github.com/gempir/go-twitch-irc/v4"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 )
 
 var p = bluemonday.StrictPolicy()
@@ -537,27 +539,27 @@ var httpClient = &http.Client{
 }
 
 func main() {
+	db.InitDB()
+
 	defer db.Close()
-
-	// if err := GenFiltered("obiwan"); err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// os.Exit(0)
 
 	logFile, err := os.OpenFile("logs/log.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	slog.SetDefault(slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{
+	slogLogger := slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
-	})))
+	}))
+
+	slog.SetDefault(slogLogger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	connManager := NewConnectionManager(ctx)
+	ctx = slg.WithSlog(ctx, slogLogger)
+
+	connManager := conns.NewConnectionManager(ctx, &DefaultProcessor{})
 
 	api := &API{
 		connectionManager: connManager,
@@ -594,7 +596,7 @@ func main() {
 
 		slog.Info("Starting connections loop")
 
-		if err := connManager.ProcessingLoop(); err != nil {
+		if err := ProcessingLoop(ctx, connManager); err != nil {
 			slog.Error("Processing loop error", "err", err)
 		}
 

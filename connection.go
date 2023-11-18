@@ -6,53 +6,46 @@ import (
 	"runtime/debug"
 	"time"
 
+	"app/conns"
 	"app/db"
+	"app/slg"
 	"app/tools"
 )
 
-func (cm *ConnectionManager) eventsParser(user string) error {
+type DefaultProcessor struct {
+	cm *conns.Manager
+}
+
+func (cm *DefaultProcessor) eventsParser(user string) error {
 	return nil
 }
 
-func (cm *ConnectionManager) hasConsumers(user string) bool {
-	cm.rwMutex.RLock()
-	defer cm.rwMutex.RUnlock()
-
-	return cm.subCount[user] > 0
-}
-
-func (cm *ConnectionManager) processor(ctx context.Context, user string) error {
+func (conn *DefaultProcessor) Process(ctx context.Context, user string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer func() {
 		if r := recover(); r != nil {
-			GetSlog(ctx).Error("connection panic", "user", user, "r", r, "stack", string(debug.Stack()))
+			slg.GetSlog(ctx).Error("connection panic", "user", user, "r", r, "stack", string(debug.Stack()))
 		}
 	}()
 
-	var signalCh chan struct{}
-	func() {
-		cm.rwMutex.RLock()
-		defer cm.rwMutex.RUnlock()
-
-		signalCh = cm.updateEventsCh[user]
-	}()
+	signalCh := conn.cm.Signal(user)
 
 	go func() {
 		<-signalCh
-		GetSlog(ctx).Info("processor signal recieved")
+		slg.GetSlog(ctx).Info("processor signal recieved")
 		cancel()
 	}()
 
 	settings, err := db.GetDbSettings(user)
 	if err != nil {
-		GetSlog(ctx).Info("settings not found, defaulting to Chat=true")
+		slg.GetSlog(ctx).Info("settings not found, defaulting to Chat=true")
 		settings = &db.Settings{
 			Chat: true,
 		}
 	}
 
-	GetSlog(ctx).Info("Settings fetched", "settings", settings)
+	slg.GetSlog(ctx).Info("Settings fetched", "settings", settings)
 
 	var twitchChatCh, randEventsCh chan *twitchEvent
 	var subsCh, followsCh, raidsCh, channelPtsCh, twitchUnknownCh chan *twitchEvent
@@ -117,7 +110,7 @@ func (cm *ConnectionManager) processor(ctx context.Context, user string) error {
 		}
 	}()
 
-	GetSlog(ctx).Info("starting processing")
+	slg.GetSlog(ctx).Info("starting processing")
 
 loop:
 	for {
@@ -134,13 +127,11 @@ loop:
 			default:
 			}
 
-			if err := cm.Write(user, dataEvent); err != nil {
-				GetSlog(ctx).Error("failed to send event", "err", err, "dataEvent", dataEvent)
-			}
+			conn.cm.Write(user, dataEvent)
 		}
 	}
 
-	GetSlog(ctx).Info("processor is closing")
+	slg.GetSlog(ctx).Info("processor is closing")
 
 	return nil
 }

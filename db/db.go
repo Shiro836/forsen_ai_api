@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -19,17 +20,22 @@ func Close() {
 	db.Close()
 }
 
-func init() {
-	var err error
+func InitDB() {
+	db = CreateDb("sqlite.db")
+}
 
-	db, err = sql.Open("sqlite", "sqlite.db")
+func CreateDb(filePath string) *sql.DB {
+	db, err := sql.Open("sqlite", filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	migrations, err := os.ReadDir("db/migrations")
 	if err != nil {
-		log.Fatal(err)
+		migrations, err = os.ReadDir("migrations")
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	files := []string{}
@@ -50,11 +56,15 @@ func init() {
 			log.Fatal(err)
 		}
 
+		fmt.Println("applying", file)
+
 		_, err = db.Exec(string(data))
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
+
+	return db
 }
 
 type UserLoginData struct {
@@ -218,103 +228,48 @@ func SaveRewardID(rewardID, sessionId string) error {
 }
 
 type Settings struct {
-	Chat           bool   `json:"chat"`
-	ChannelPts     bool   `json:"chan_pts"`
-	Follows        bool   `json:"follows"`
-	Subs           bool   `json:"subs"`
-	Raids          bool   `json:"raids"`
-	Events         bool   `json:"events"`
-	EventsInterval int    `json:"events_interval"`
-	CustomContext  string `json:"custom_context"`
-}
-
-func GetDbSettingsBySessionID(sessionId string) (*Settings, error) {
-	row := db.QueryRow(`
-		select
-			chat,
-			chan_pts,
-			follows,
-			subs,
-			raids,
-			random_events,
-			events_interval,
-			custom_context
-		from user_data
-		where session = $1
-	`, sessionId)
-
-	settings := &Settings{}
-
-	if err := row.Scan(
-		&settings.Chat,
-		&settings.ChannelPts,
-		&settings.Follows,
-		&settings.Subs,
-		&settings.Raids,
-		&settings.Events,
-		&settings.EventsInterval,
-		&settings.CustomContext,
-	); err != nil {
-		return nil, fmt.Errorf("failed to get settings: %w", err)
-	}
-
-	return settings, nil
+	Chat           bool `json:"chat"`
+	ChannelPts     bool `json:"chan_pts"`
+	Follows        bool `json:"follows"`
+	Subs           bool `json:"subs"`
+	Raids          bool `json:"raids"`
+	Events         bool `json:"events"`
+	EventsInterval int  `json:"events_interval"`
 }
 
 func GetDbSettings(login string) (*Settings, error) {
 	row := db.QueryRow(`
 		select
-			chat,
-			chan_pts,
-			follows,
-			subs,
-			raids,
-			random_events,
-			events_interval,
-			custom_context
+			settings
 		from user_data
 		where login = $1
 	`, login)
 
-	settings := &Settings{}
-
-	if err := row.Scan(
-		&settings.Chat,
-		&settings.ChannelPts,
-		&settings.Follows,
-		&settings.Subs,
-		&settings.Raids,
-		&settings.Events,
-		&settings.EventsInterval,
-		&settings.CustomContext,
-	); err != nil {
+	var settingsData []byte
+	if err := row.Scan(&settingsData); err != nil {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+
+	var settings *Settings
+	if err := json.Unmarshal(settingsData, &settings); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal settings: %w", err)
 	}
 
 	return settings, nil
 }
 
 func UpdateDbSettings(settings *Settings, sessionId string) error {
+	settingsData, err := json.Marshal(settings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings: %w", err)
+	}
+
 	if _, err := db.Exec(`
 		update user_data set
-			chat     		= $1,
-			chan_pts 		= $2,
-			follows  		= $3,
-			subs     		= $4,
-			raids	 		= $5,
-			random_events	= $6,
-			events_interval	= $7,
-			custom_context = $8
-		where session = $9
+			settings = $1
+		where session = $2
 	`,
-		settings.Chat,
-		settings.ChannelPts,
-		settings.Follows,
-		settings.Subs,
-		settings.Raids,
-		settings.Events,
-		settings.EventsInterval,
-		settings.CustomContext,
+		settingsData,
 		sessionId,
 	); err != nil {
 		return fmt.Errorf("failed to update db settings: %w", err)

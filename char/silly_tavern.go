@@ -23,9 +23,7 @@ func FromPngSillyTavernCard(pngCard []byte) (*Card, error) {
 }
 
 func decodePngTextChunk(data []byte) (string, string, error) {
-	// data = data[8:]
-
-	naming := true
+	naming := true // zero byte is a separator between key and value
 
 	key, value := strings.Builder{}, strings.Builder{}
 

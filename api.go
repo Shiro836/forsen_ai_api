@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 
+	"app/conns"
 	"app/db"
 
 	"github.com/go-chi/chi/v5"
@@ -17,7 +18,7 @@ import (
 )
 
 type API struct {
-	connectionManager *ConnectionManager
+	connectionManager *conns.Manager
 }
 
 func NewRouter(api *API) *chi.Mux {
@@ -192,7 +193,12 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("unauthorized"))
-	} else if settings, err := db.GetDbSettingsBySessionID(cookie.Value); err != nil {
+	} else if userData, err := db.GetUserDataBySessionId(cookie.Value); err != nil {
+		fmt.Println(err)
+
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("failed to get settings"))
+	} else if settings, err := db.GetDbSettings(userData.UserLoginData.UserName); err != nil {
 		fmt.Println(err)
 
 		w.WriteHeader(http.StatusInternalServerError)

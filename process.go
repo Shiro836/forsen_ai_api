@@ -1,13 +1,15 @@
 package main
 
 import (
+	"app/conns"
+	"app/slg"
 	"context"
 	"encoding/json"
 	"fmt"
 )
 
-func processTwitchEvent(ctx context.Context, twitchEvent *twitchEvent) (*DataEvent, error) {
-	text := &Text{
+func processTwitchEvent(ctx context.Context, twitchEvent *twitchEvent) (*conns.DataEvent, error) {
+	text := &conns.Text{
 		Text: "test text",
 	}
 
@@ -16,15 +18,15 @@ func processTwitchEvent(ctx context.Context, twitchEvent *twitchEvent) (*DataEve
 		return nil, fmt.Errorf("failed to marshal text: %w", err)
 	}
 
-	return &DataEvent{
-		EventType: EventTypeText,
+	return &conns.DataEvent{
+		EventType: conns.EventTypeText,
 		EventData: data,
 	}, nil
 }
 
 // input channel must be drained in order not to leak goroutines
-func processTwitchEvents(ctx context.Context, events chan *twitchEvent) chan *DataEvent {
-	ch := make(chan *DataEvent)
+func processTwitchEvents(ctx context.Context, events chan *twitchEvent) chan *conns.DataEvent {
+	ch := make(chan *conns.DataEvent)
 
 	go func() {
 		defer close(ch)
@@ -38,7 +40,7 @@ func processTwitchEvents(ctx context.Context, events chan *twitchEvent) chan *Da
 
 			dataEvent, err := processTwitchEvent(ctx, twitchEvent)
 			if err != nil {
-				GetSlog(ctx).Error("failed to process twitch event", "err", err, "twitch_event", twitchEvent)
+				slg.GetSlog(ctx).Error("failed to process twitch event", "err", err, "twitch_event", twitchEvent)
 			}
 
 			select {

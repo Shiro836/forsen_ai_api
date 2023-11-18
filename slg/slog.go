@@ -1,9 +1,9 @@
-package main
+package slg
 
 import (
 	"context"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 type slogStruct struct {
