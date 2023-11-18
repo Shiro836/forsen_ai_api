@@ -27,7 +27,7 @@ func init() {
 		log.Fatal(err)
 	}
 
-	migrations, err := os.ReadDir("migrations")
+	migrations, err := os.ReadDir("db/migrations")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"app/db"
+	"app/memory"
 	"app/tools"
 	"app/ws"
 
@@ -55,9 +56,9 @@ var filteredObiwanWav []byte
 //go:embed filtered_forsen.wav
 var filteredForsenWav []byte
 
-const aiContext = "Forsen tries very hard to answer questions very thoroughly. Forsen loves lolis, he thinks they are very cute and funny. Forsen still tries to beat xqc's minecraft record for 137 days. Forsen's fursona is lion."
+var memLimitChars = 600
 
-func onAsk(ctx context.Context, dataCh chan *ws.Message, settings *db.Settings, event *twitchEvent) error {
+func onAsk(ctx context.Context, dataCh chan *ws.Message, settings *db.Settings, event *twitchEvent, userMemory *memory.Memory) error {
 	msg := event.message
 	if len(msg) == 0 {
 		return fmt.Errorf("empty input message")
@@ -94,11 +95,30 @@ func onAsk(ctx context.Context, dataCh chan *ws.Message, settings *db.Settings, 
 	for attempts := 0; attempts < 20; attempts++ {
 		switch event.eventType {
 		case eventTypeRandom:
-			resp, err = ReqAI(ctx, "Forsen only tells the truth but tries not to get banned", "Forsen, what is your opinion on this.", msg)
+			resp, err = ReqAI(ctx, "Forsen only tells the truth but tries not to get banned", "", "Forsen, what is your opinion on this?", msg)
 		case eventTypeFollow, eventTypeSub, eventTypeGift:
-			resp, err = ReqAI(ctx, "Forsen likes to thank his followers and subscribers.", msg, "Thank you ")
+			resp, err = ReqAI(ctx, "Forsen likes to thank his followers and subscribers.", "", msg, "Thank you ")
 		default:
-			resp, err = ReqAI(ctx, settings.CustomContext, msg, "")
+			memoryEntries := userMemory.GetCombinedMem(event.userName)
+			resultMem := ""
+			startInd := len(memoryEntries)
+
+			fullLen := 0
+
+			for i := len(memoryEntries) - 1; i >= 0; i-- {
+				if fullLen+len(memoryEntries[i].Msg) < memLimitChars {
+					startInd = i
+					fullLen += len(memoryEntries[i].Msg)
+				} else {
+					break
+				}
+			}
+
+			for i := startInd; i < len(memoryEntries); i++ {
+				resultMem += " " + memoryEntries[i].Msg + " "
+			}
+
+			resp, err = ReqAI(ctx, settings.CustomContext, resultMem, msg, "")
 		}
 		if err != nil {
 			return err
@@ -141,6 +161,10 @@ func onAsk(ctx context.Context, dataCh chan *ws.Message, settings *db.Settings, 
 		}
 
 		return nil
+	}
+
+	if event.eventType == eventTypeChat {
+		userMemory.Push(event.userName, "###PROMPT: "+msg+" ###FORSEN: "+resp)
 	}
 
 	wavFile, err := reqTTS(ctx, msg, "obiwan")
@@ -237,7 +261,7 @@ func messagesFetcher(ctx context.Context, user string) chan *twitchEvent {
 	return ch
 }
 
-func processMessages(ctx context.Context, settings *db.Settings, inputCh chan *twitchEvent) chan *ws.Message {
+func processMessages(ctx context.Context, settings *db.Settings, inputCh chan *twitchEvent, userMemory *memory.Memory) chan *ws.Message {
 	ch := make(chan *ws.Message)
 
 	go func() {
@@ -255,7 +279,7 @@ func processMessages(ctx context.Context, settings *db.Settings, inputCh chan *t
 				}
 
 				fmt.Println("querying AI: ", event.message)
-				if err := onAsk(ctx, ch, settings, event); err != nil {
+				if err := onAsk(ctx, ch, settings, event, userMemory); err != nil {
 					fmt.Println(err)
 				}
 			case <-ctx.Done():
@@ -455,7 +479,9 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 
 	eventsStream = tools.PriorityFanIn(chatMsgs, eventsStream, randomEvents)
 
-	dataStream := processMessages(ctx, settings, eventsStream)
+	userMemory := memory.New(10, 5)
+
+	dataStream := processMessages(ctx, settings, eventsStream, userMemory)
 	defer func() {
 		for range dataStream {
 		}
