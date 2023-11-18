@@ -162,6 +162,8 @@ func (m *Manager) HandleUser(user *db.Human) {
 	} else if _, ok := m.updateEventsCh[user.Login]; !ok {
 		m.updateEventsCh[user.Login] = make(chan struct{})
 
+		updates := m.updateEventsCh[user.Login]
+
 		slg.GetSlog(ctx).Info("starting processor")
 
 		m.wg.Add(1)
@@ -177,7 +179,7 @@ func (m *Manager) HandleUser(user *db.Human) {
 				default:
 				}
 
-				if err := m.processor.Process(ctx, func(event *DataEvent) {
+				if err := m.processor.Process(ctx, updates, func(event *DataEvent) {
 					m.Write(user.Login, event)
 				}, user.Login); err != nil {
 					if errors.Is(err, ErrProcessingEnd) {

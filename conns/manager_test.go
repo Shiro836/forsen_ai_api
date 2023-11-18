@@ -19,8 +19,8 @@ type mockProc struct {
 	mock.Mock
 }
 
-func (p *mockProc) Process(ctx context.Context, eventWriter conns.EventWriter, user string) error {
-	args := p.Called(ctx, eventWriter, user)
+func (p *mockProc) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) error {
+	args := p.Called(ctx, updates, eventWriter, user)
 	return args.Error(0)
 }
 
@@ -28,7 +28,7 @@ func TestHandleUser(t *testing.T) {
 	assert := assert.New(t)
 
 	processor := &mockProc{}
-	processor.On("Process", mock.Anything, mock.Anything, mock.Anything).Return(conns.ErrProcessingEnd)
+	processor.On("Process", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(conns.ErrProcessingEnd)
 
 	connManager := conns.NewConnectionManager(context.Background(), processor)
 	connManager.HandleUser(&db.Human{
@@ -39,14 +39,14 @@ func TestHandleUser(t *testing.T) {
 	// runtime.Gosched() // doesn't work sometimes
 
 	assert.Len(processor.Calls, 1)
-	assert.Equal("test", processor.Calls[0].Arguments.String(2))
+	assert.Equal("test", processor.Calls[0].Arguments.String(3))
 }
 
 func TestWait(t *testing.T) {
 	assert := assert.New(t)
 
 	processor := &mockProc{}
-	processor.On("Process", mock.Anything, mock.Anything, mock.Anything).After(100 * time.Millisecond).Return(conns.ErrProcessingEnd)
+	processor.On("Process", mock.Anything, mock.Anything, mock.Anything, mock.Anything).After(100 * time.Millisecond).Return(conns.ErrProcessingEnd)
 
 	connManager := conns.NewConnectionManager(context.Background(), processor)
 	for i := 0; i < 50; i++ {
@@ -83,8 +83,8 @@ func TestDataStream(t *testing.T) {
 	}
 
 	processor := &mockProc{}
-	processor.On("Process", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		args.Get(1).(conns.EventWriter)(event)
+	processor.On("Process", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		args.Get(2).(conns.EventWriter)(event)
 	}).Return(conns.ErrProcessingEnd)
 
 	connManager := conns.NewConnectionManager(context.Background(), processor)
@@ -114,7 +114,7 @@ func TestDataStream(t *testing.T) {
 func TestUnderLoad(t *testing.T) {
 	assert := assert.New(t)
 
-	cnt := 1000
+	cnt := 10000
 	users, events := []string{}, []*conns.DataEvent{}
 	userToEvent := map[string]*conns.DataEvent{}
 	eventsRepeated := 2
@@ -129,10 +129,10 @@ func TestUnderLoad(t *testing.T) {
 	}
 
 	processor := &mockProc{}
-	processor.On("Process", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		user := args.String(2)
+	processor.On("Process", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		user := args.String(3)
 
-		writerFn := args.Get(1).(conns.EventWriter)
+		writerFn := args.Get(2).(conns.EventWriter)
 		for i := 0; i < eventsRepeated; i++ {
 			writerFn(userToEvent[user])
 		}

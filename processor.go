@@ -12,15 +12,9 @@ import (
 	"app/tools"
 )
 
-type DefaultProcessor struct {
-	cm *conns.Manager
-}
+type DefaultProcessor struct{}
 
-func (cm *DefaultProcessor) eventsParser(user string) error {
-	return nil
-}
-
-func (conn *DefaultProcessor) Process(ctx context.Context, user string) error {
+func (conn *DefaultProcessor) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer func() {
@@ -29,10 +23,8 @@ func (conn *DefaultProcessor) Process(ctx context.Context, user string) error {
 		}
 	}()
 
-	signalCh := conn.cm.Signal(user)
-
 	go func() {
-		<-signalCh
+		<-updates
 		slg.GetSlog(ctx).Info("processor signal recieved")
 		cancel()
 	}()
@@ -127,7 +119,7 @@ loop:
 			default:
 			}
 
-			conn.cm.Write(user, dataEvent)
+			eventWriter(dataEvent)
 		}
 	}
 
