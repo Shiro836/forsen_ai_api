@@ -134,9 +134,6 @@ func (m *Manager) Write(user string, event *DataEvent) {
 }
 
 func (m *Manager) NotifyUpdateWhitelist(user *db.Human) {
-	m.rwMutex.Lock()
-	defer m.rwMutex.Unlock()
-
 	m.HandleUser(user)
 }
 
@@ -180,7 +177,9 @@ func (m *Manager) HandleUser(user *db.Human) {
 				default:
 				}
 
-				if err := m.processor.Process(ctx, user.Login); err != nil {
+				if err := m.processor.Process(ctx, func(event *DataEvent) {
+					m.Write(user.Login, event)
+				}, user.Login); err != nil {
 					if errors.Is(err, ErrProcessingEnd) {
 						break loop
 					}
