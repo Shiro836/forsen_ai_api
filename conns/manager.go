@@ -129,7 +129,7 @@ func (m *Manager) Write(user string, event *DataEvent) {
 			return
 		}
 
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

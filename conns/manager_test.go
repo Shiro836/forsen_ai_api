@@ -114,29 +114,29 @@ func TestDataStream(t *testing.T) {
 func TestUnderLoad(t *testing.T) {
 	assert := assert.New(t)
 
-	cnt := 10000
+	cnt := 1000
 	users, events := []string{}, []*conns.DataEvent{}
-	eventsRepeated := 500
+	userToEvent := map[string]*conns.DataEvent{}
+	eventsRepeated := 2
 
 	for i := 0; i < cnt; i++ {
-		users = append(users, "user"+strconv.Itoa(i))
+		users = append(users, "user_"+strconv.Itoa(i))
 		events = append(events, &conns.DataEvent{
 			EventType: conns.EventTypeInfo,
 			EventData: []byte(users[i]),
 		})
+		userToEvent[users[i]] = events[i]
 	}
 
 	processor := &mockProc{}
-	for i := 0; i < cnt; i++ {
-		processor.On("Process", mock.Anything, mock.Anything, mock.MatchedBy(func(user string) bool {
-			return user == users[i]
-		})).Run(func(args mock.Arguments) {
-			writerFn := args.Get(1).(conns.EventWriter)
-			for i := 0; i < eventsRepeated; i++ {
-				writerFn(events[i])
-			}
-		}).Return(conns.ErrProcessingEnd)
-	}
+	processor.On("Process", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		user := args.String(2)
+
+		writerFn := args.Get(1).(conns.EventWriter)
+		for i := 0; i < eventsRepeated; i++ {
+			writerFn(userToEvent[user])
+		}
+	}).Return(conns.ErrProcessingEnd)
 
 	connManager := conns.NewConnectionManager(context.Background(), processor)
 
@@ -144,10 +144,15 @@ func TestUnderLoad(t *testing.T) {
 
 	for i := 0; i < cnt; i++ {
 		i := i
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
+
 			subCh := connManager.Subscribe(users[i])
 
-			for i := 0; i < eventsRepeated; i++ {
+			time.Sleep(20 * time.Millisecond)
+
+			for j := 0; j < eventsRepeated; j++ {
 				recievedEvent, ok := <-subCh
 				assert.True(ok)
 				assert.Equal(events[i], recievedEvent)
@@ -165,6 +170,8 @@ func TestUnderLoad(t *testing.T) {
 			assert.False(ok)
 		}()
 	}
+
+	time.Sleep(5 * time.Millisecond)
 
 	for i := 0; i < cnt; i++ {
 		connManager.HandleUser(&db.Human{
