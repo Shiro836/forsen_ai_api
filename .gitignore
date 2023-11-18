@@ -26,4 +26,3 @@ ssl.crt
 ssl.key
 sqlite.db
 
-logs/log.txt
