@@ -185,18 +185,11 @@ func (m *Manager) HandleUser(user *db.Human) {
 					if errors.Is(err, ErrProcessingEnd) {
 						break loop
 					}
-					slg.GetSlog(ctx).Error("failed to create processor", "err", err)
+					slg.GetSlog(ctx).Error("processor Process error", "err", err)
 				}
 			}
 		}()
 	}
-}
-
-func (m *Manager) Signal(user string) chan struct{} {
-	m.rwMutex.Lock()
-	defer m.rwMutex.Unlock()
-
-	return m.updateEventsCh[user]
 }
 
 func (m *Manager) Wait() {

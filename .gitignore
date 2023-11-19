@@ -25,4 +25,4 @@ app
 ssl.crt
 ssl.key
 sqlite.db
-
+cfg.yaml
