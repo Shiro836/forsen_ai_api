@@ -2,10 +2,15 @@ package ws
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
+
+var Upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
 
 type Message struct {
 	MsgType int

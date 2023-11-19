@@ -1,12 +1,16 @@
 package main
 
 import (
+	"app/api"
 	"app/conns"
 	"app/db"
 	"app/memory"
 	"app/slg"
+	"app/swearfilter"
 	"app/tools"
+	"app/twitch"
 	"app/ws"
+	"strconv"
 
 	"context"
 	_ "embed"
@@ -17,23 +21,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/gempir/go-twitch-irc/v4"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 	"github.com/microcosm-cc/bluemonday"
-	"golang.org/x/exp/slices"
+	"gopkg.in/yaml.v3"
 )
 
 var p = bluemonday.StrictPolicy()
-
-const (
-	ttsUrl = "http://localhost:4111/tts"
-	aiUrl  = "http://localhost:8000/generate"
-)
 
 func writeFile(fileName string, data []byte) error {
 	file, err := os.Create(fileName)
@@ -50,7 +47,7 @@ func writeFile(fileName string, data []byte) error {
 	return nil
 }
 
-var swearFilter *SwearFilter = NewSwearFilter(false, swears...)
+var swearFilter *swearfilter.SwearFilter = swearfilter.NewSwearFilter(false, swearfilter.Swears...)
 
 //go:embed filtered_obiwan.wav
 var filteredObiwanWav []byte
@@ -293,25 +290,6 @@ func processMessages(ctx context.Context, settings *db.Settings, inputCh chan *t
 	return ch
 }
 
-func isValidUser(user string, w http.ResponseWriter) bool {
-	if whitelist, err := db.GetDbWhitelist(); err != nil {
-		slog.Error("failed to get whitelist", "err", err, "user", user)
-		return false
-	} else if !slices.ContainsFunc(whitelist.List, func(h *db.Human) bool {
-		return strings.EqualFold(h.Login, user) && h.BannedBy == nil
-	}) {
-		w.WriteHeader(http.StatusForbidden)
-		data, _ := os.ReadFile("client/whitelist.html")
-		w.Write(data)
-
-		slog.Info("whitelist rejected", "user", user)
-
-		return false
-	} else {
-		return true
-	}
-}
-
 func randEvents(ctx context.Context, interval time.Duration) chan *twitchEvent {
 	randomEvents := make(chan *twitchEvent)
 
@@ -344,7 +322,7 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := upgrader.Upgrade(w, r, nil)
+	c, err := ws.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		fmt.Println("failed to upgrade ws:", err)
 
@@ -517,31 +495,20 @@ func webSocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func GenFiltered(voice string) error {
-	data, err := reqTTS(context.Background(), "filtered", voice)
-	if err != nil {
-		return err
-	}
-	err = writeFile("filtered_"+voice+".wav", data)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
-var httpClient = &http.Client{
-	Timeout: 5 * time.Second,
-}
-
 func main() {
 	db.InitDB()
-
 	defer db.Close()
+
+	var cfg *Config
+	if cfgFile, err := os.ReadFile("cfg.yaml"); err != nil {
+		log.Fatal("can't open cfg.yaml file", err)
+	} else if err = yaml.Unmarshal(cfgFile, &cfg); err != nil {
+		log.Fatal("can't unmarshal cfg.yaml file", err)
+	}
+
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+	}
 
 	logFile, err := os.OpenFile("logs/log.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
@@ -561,17 +528,17 @@ func main() {
 
 	connManager := conns.NewConnectionManager(ctx, &DefaultProcessor{})
 
-	api := &API{
-		connectionManager: connManager,
-	}
+	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	router := NewRouter(api)
+	apiClient := api.NewAPI(connManager, twitchClient)
+
+	router := api.NewRouter(apiClient)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt)
 
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + strconv.Itoa(cfg.Api.Port),
 		Handler: router,
 	}
 

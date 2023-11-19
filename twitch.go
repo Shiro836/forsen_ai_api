@@ -4,153 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"app/db"
 	"app/slg"
 	"app/ws"
 
-	"github.com/dchest/uniuri"
 	"github.com/gorilla/websocket"
 	"github.com/nicklaw5/helix/v2"
 )
-
-const twitchClientID = "zi6vy3y3iq38svpmlub5fd26uwsee8"
-
-const getUsersUrl = "https://api.twitch.tv/helix/users"
-
-type getUsersDataEntry struct {
-	Id    string `json:"id"`
-	Login string `json:"login"`
-}
-
-type getUsersResp struct {
-	Data []getUsersDataEntry `json:"data"`
-}
-
-func getUsers(accessToken string) (*db.UserLoginData, error) {
-	req, err := http.NewRequest(http.MethodGet, getUsersUrl, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create getUsers request: %w", err)
-	}
-
-	req.Header.Add("Authorization", "Bearer "+accessToken)
-	req.Header.Add("Client-Id", twitchClientID)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to do getUsers request: %w", err)
-	}
-
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read getUsers response body: %w", err)
-	}
-
-	respJson := &getUsersResp{}
-
-	if err = json.Unmarshal(respData, &respJson); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal getUsers response body: %w", err)
-	}
-
-	if len(respJson.Data) == 0 {
-		return nil, fmt.Errorf("no users found")
-	}
-
-	intId, err := strconv.Atoi(respJson.Data[0].Id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert userId to int; %w", err)
-	}
-
-	return &db.UserLoginData{
-		UserId:   intId,
-		UserName: respJson.Data[0].Login,
-	}, nil
-}
-
-type userTokenData struct {
-	AccessToken  string `json:"access_token"`
-	ExpiresIn    int64  `json:"expires_in"`
-	RefreshToken string `json:"refresh_token"`
-}
-
-func codeHandler(code string) (*db.UserData, error) {
-	data := url.Values{}
-	data.Set("client_id", twitchClientID)
-	data.Set("client_secret", twitchSecret)
-	data.Set("code", code)
-	data.Set("grant_type", "authorization_code")
-	data.Set("redirect_uri", "https://forsen.fun/twitch_token_handler")
-
-	encodedData := data.Encode()
-
-	resp, err := http.Post("https://id.twitch.tv/oauth2/token", "application/x-www-form-urlencoded", strings.NewReader(encodedData))
-	if err != nil {
-		respData, _ := io.ReadAll(resp.Body)
-
-		return nil, fmt.Errorf("failed to send post request to token url: %w| body: %s", err, respData)
-	}
-
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read the token response body: %w", err)
-	}
-
-	if resp.StatusCode > 299 {
-		return nil, fmt.Errorf("status code (%d) of post request to token url is invalid: %s", resp.StatusCode, string(respData))
-	}
-
-	respJson := &userTokenData{}
-	if err = json.Unmarshal(respData, &respJson); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal json: %w", err)
-	}
-
-	userData, err := getUsers(respJson.AccessToken)
-	if err != nil {
-		fmt.Println(err)
-	} else {
-		fmt.Println(userData)
-	}
-
-	return &db.UserData{
-		RefreshToken:  respJson.RefreshToken,
-		AccessToken:   respJson.AccessToken,
-		UserLoginData: userData,
-	}, nil
-}
-
-func onUserData(userData *db.UserData) error {
-	session := uniuri.New()
-
-	userData.Session = session
-	if err := db.UpsertUserData(userData); err != nil {
-		return fmt.Errorf("failed to upsert user data: %w", err)
-	}
-
-	return nil
-}
-
-func twitchTokenHandler(w http.ResponseWriter, r *http.Request) {
-	code := r.URL.Query().Get("code")
-	if len(code) == 0 {
-		fmt.Println(r.URL.Query().Get("error"), r.URL.Query().Get("error_description"))
-	} else if userData, err := codeHandler(code); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-	} else if err := onUserData(userData); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-	} else {
-		http.SetCookie(w, &http.Cookie{Name: "session_id", Value: userData.Session})
-
-		http.Redirect(w, r, "https://forsen.fun/settings", http.StatusSeeOther)
-	}
-}
 
 const (
 	eventTypeChat = iota
