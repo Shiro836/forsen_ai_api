@@ -15,7 +15,7 @@ package ai_test
 
 // 	aiUrl := "http://localhost:8000/generate"
 
-// 	client := ai.NewClient(http.DefaultClient, &ai.Config{
+// 	client := ai.New(http.DefaultClient, &ai.Config{
 // 		URL: aiUrl,
 // 	})
 

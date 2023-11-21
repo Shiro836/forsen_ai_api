@@ -12,6 +12,7 @@ type Config struct {
 	TTS    tts.Config    `yaml:"tts"`
 	Twitch twitch.Config `yaml:"twitch"`
 	Api    api.Config    `yaml:"api"`
+	Lua    LuaConfig     `yaml:"lua"`
 }
 
 type AiConfig struct {

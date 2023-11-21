@@ -45,13 +45,14 @@ func NewRouter(api *API) *chi.Mux {
 	router.Use(middleware.RealIP)
 	router.Use(middleware.StripSlashes)
 	router.Use(middleware.Recoverer)
+	// TODO: add user authentication
 
-	router.Get("/webrtc.js", jsFileHandler)
+	router.Get("/v2.js", api.betaJsHandler)
 	router.Get("/whitelist.js", jsWhitelistHandler)
 
 	router.Get("/", descriptionHandler)
-	router.Get("/{user}", homeHandler)
-	router.Get("/ws/{user}", webSocketHandler)
+	router.Get("/{user}", api.betaHtmlHandler)
+	router.Get("/ws/{user}", api.consumerHandler)
 
 	router.Get("/settings", settingsHandler)
 	router.Get("/add_channel_point_reward", api.channelPointsRewardCreateHandler)
@@ -63,10 +64,6 @@ func NewRouter(api *API) *chi.Mux {
 
 	router.Get("/get_whitelist", getWhitelist)
 	router.Post("/update_whitelist", updateWhitelist)
-
-	router.Get("/v2.js", api.betaJsHandler)
-	router.Get("/v2/{user}", api.betaHtmlHandler)
-	router.Get("/ws/v2/{user}", api.consumerHandler)
 
 	return router
 }

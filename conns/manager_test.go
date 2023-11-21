@@ -90,6 +90,7 @@ func TestDataStream(t *testing.T) {
 	connManager := conns.NewConnectionManager(context.Background(), processor)
 
 	subCh := connManager.Subscribe(user)
+	subCh2 := connManager.Subscribe(user)
 
 	connManager.HandleUser(&db.Human{
 		Login: user,
@@ -99,12 +100,19 @@ func TestDataStream(t *testing.T) {
 	assert.True(ok)
 	assert.Equal(event, recievedEvent)
 
+	recievedEvent, ok = <-subCh2
+	assert.True(ok)
+	assert.Equal(event, recievedEvent)
+
 	select {
 	case <-subCh:
+		assert.Fail("channel must be empty but not closed")
+	case <-subCh2:
 		assert.Fail("channel must be empty but not closed")
 	default:
 	}
 
+	connManager.Unsubscribe(user)
 	connManager.Unsubscribe(user)
 
 	_, ok = <-subCh

@@ -30,9 +30,12 @@ func CreateDb(filePath string) *sql.DB {
 		log.Fatal(err)
 	}
 
-	migrations, err := os.ReadDir("db/migrations")
+	folder := "db/migrations"
+
+	migrations, err := os.ReadDir(folder)
 	if err != nil {
-		migrations, err = os.ReadDir("migrations")
+		folder = "migrations"
+		migrations, err = os.ReadDir(folder)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -46,7 +49,7 @@ func CreateDb(filePath string) *sql.DB {
 	sort.Strings(files)
 
 	for _, file := range files {
-		f, err := os.Open("migrations/" + file)
+		f, err := os.Open(folder + "/" + file)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -228,13 +231,7 @@ func SaveRewardID(rewardID, sessionId string) error {
 }
 
 type Settings struct {
-	Chat           bool `json:"chat"`
-	ChannelPts     bool `json:"chan_pts"`
-	Follows        bool `json:"follows"`
-	Subs           bool `json:"subs"`
-	Raids          bool `json:"raids"`
-	Events         bool `json:"events"`
-	EventsInterval int  `json:"events_interval"`
+	LuaScript string `json:"lua_script"`
 }
 
 func GetDbSettings(login string) (*Settings, error) {

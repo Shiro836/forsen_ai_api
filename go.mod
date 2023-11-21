@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/dchest/uniuri v1.2.0
 	github.com/dsoprea/go-png-image-structure v0.0.0-20210512210324-29b889a6093d
+	github.com/gempir/go-twitch-irc/v4 v4.0.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
 	github.com/google/uuid v1.4.0
@@ -13,6 +14,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/nicklaw5/helix/v2 v2.25.2
 	github.com/stretchr/testify v1.8.4
+	github.com/yuin/gopher-lua v1.1.0
 	golang.org/x/exp v0.0.0-20231110203233-9a3e6036ecaa
 	golang.org/x/text v0.14.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -43,7 +45,7 @@ require (
 	lukechampine.com/uint128 v1.3.0 // indirect
 	modernc.org/cc/v3 v3.41.0 // indirect
 	modernc.org/ccgo/v3 v3.16.15 // indirect
-	modernc.org/libc v1.34.5 // indirect
+	modernc.org/libc v1.34.9 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.7.2 // indirect
 	modernc.org/opt v0.1.3 // indirect

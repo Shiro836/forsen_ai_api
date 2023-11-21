@@ -12,171 +12,32 @@ document.documentElement.addEventListener('click', () => {
   }
 });
 
-function PCMPlayer(option) {
-  this.init(option);
+function base64ToArrayBuffer(base64) {
+  var binaryString =  window.atob(base64);
+  var len = binaryString.length;
+  var bytes = new Uint8Array(len);
+  for (var i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
 }
-
-PCMPlayer.prototype.init = function(option) {
-  var defaults = {
-      encoding: '16bitInt',
-      channels: 1,
-      sampleRate: 8000,
-      flushingTime: 1000
-  };
-  this.option = Object.assign({}, defaults, option);
-  this.samples = new Float32Array();
-  this.flush = this.flush.bind(this);
-  this.interval = setInterval(this.flush, this.option.flushingTime);
-  this.maxValue = this.getMaxValue();
-  this.typedArray = this.getTypedArray();
-  this.createContext();
-};
-
-PCMPlayer.prototype.getMaxValue = function () {
-  var encodings = {
-      '8bitInt': 128,
-      '16bitInt': 32768,
-      '32bitInt': 2147483648,
-      '32bitFloat': 1
-  }
-
-  return encodings[this.option.encoding] ? encodings[this.option.encoding] : encodings['16bitInt'];
-};
-
-PCMPlayer.prototype.getTypedArray = function () {
-  var typedArrays = {
-      '8bitInt': Int8Array,
-      '16bitInt': Int16Array,
-      '32bitInt': Int32Array,
-      '32bitFloat': Float32Array
-  }
-
-  return typedArrays[this.option.encoding] ? typedArrays[this.option.encoding] : typedArrays['16bitInt'];
-};
-
-PCMPlayer.prototype.createContext = function() {
-  this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-  // context needs to be resumed on iOS and Safari (or it will stay in "suspended" state)
-  this.audioCtx.resume();
-  this.audioCtx.onstatechange = () => console.log(this.audioCtx.state);   // if you want to see "Running" state in console and be happy about it
-  
-  this.gainNode = this.audioCtx.createGain();
-  this.gainNode.gain.value = 1;
-  this.gainNode.connect(this.audioCtx.destination);
-  this.startTime = this.audioCtx.currentTime;
-};
-
-PCMPlayer.prototype.isTypedArray = function(data) {
-  return (data.byteLength && data.buffer && data.buffer.constructor == ArrayBuffer);
-};
-
-PCMPlayer.prototype.feed = function(data) {
-  if (!this.isTypedArray(data)) return;
-  data = this.getFormatedValue(data);
-  var tmp = new Float32Array(this.samples.length + data.length);
-  tmp.set(this.samples, 0);
-  tmp.set(data, this.samples.length);
-  this.samples = tmp;
-};
-
-PCMPlayer.prototype.isAudioPlaying = function() {
-  if (!this.audioCtx) {
-    return false;
-  }
-  var analyser = this.audioCtx.createAnalyser();
-  var bufferLength = analyser.fftSize;
-  var dataArray = new Float32Array(bufferLength);
-
-  analyser.getFloatTimeDomainData(dataArray);
-  for (var i = 0; i < bufferLength; i++) {
-    if (dataArray[i] != 0) return true;
-  }
-  return false;
-}
-
-PCMPlayer.prototype.getFormatedValue = function(data) {
-  var data = new this.typedArray(data.buffer),
-      float32 = new Float32Array(data.length),
-      i;
-
-  for (i = 0; i < data.length; i++) {
-      float32[i] = data[i] / this.maxValue;
-  }
-  return float32;
-};
-
-PCMPlayer.prototype.volume = function(volume) {
-  this.gainNode.gain.value = volume;
-};
-
-PCMPlayer.prototype.destroy = function() {
-  if (this.interval) {
-      clearInterval(this.interval);
-  }
-  this.samples = null;
-  this.audioCtx.close();
-  this.audioCtx = null;
-};
-
-var onEnd;
-
-PCMPlayer.prototype.flush = function() {
-  if (!this.samples.length) return;
-  var bufferSource = this.audioCtx.createBufferSource(),
-      length = this.samples.length / this.option.channels,
-      audioBuffer = this.audioCtx.createBuffer(this.option.channels, length, this.option.sampleRate),
-      audioData,
-      channel,
-      offset,
-      i,
-      decrement;
-
-  for (channel = 0; channel < this.option.channels; channel++) {
-      audioData = audioBuffer.getChannelData(channel);
-      offset = channel;
-      decrement = 50;
-      for (i = 0; i < length; i++) {
-          audioData[i] = this.samples[offset];
-          /* fadein */
-          if (i < 50) {
-              audioData[i] =  (audioData[i] * i) / 50;
-          }
-          /* fadeout*/
-          if (i >= (length - 51)) {
-              audioData[i] =  (audioData[i] * decrement--) / 50;
-          }
-          offset += this.option.channels;
-      }
-  }
-  
-  if (this.startTime < this.audioCtx.currentTime) {
-      this.startTime = this.audioCtx.currentTime;
-  }
-  console.log('start vs current '+this.startTime+' vs '+this.audioCtx.currentTime+' duration: '+audioBuffer.duration);
-  bufferSource.buffer = audioBuffer;
-  bufferSource.onended = onEnd;
-  bufferSource.connect(this.gainNode);
-  bufferSource.start(this.startTime);
-  this.startTime += audioBuffer.duration;
-  this.samples = new Float32Array();
-};
-
 
 async function pageReady() {
   video = document.getElementById('video');
 
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-  var player = new PCMPlayer({
-    encoding: '16bitFloat',
-    channels: 1,
-    sampleRate: 22050,
-    flushingTime: 300
-  });
+  function playWavFile(arrayBuffer) {
+    audioContext.decodeAudioData(arrayBuffer, function(buffer) {
+      let source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioContext.destination);
+      source.start();
+    });
+  }
 
   function connect() {
-    ws = new WebSocket(`ws://${window.location.host + "/ws" + window.location.pathname}`);
+    ws = new WebSocket(`wss://${window.location.host + "/ws" + window.location.pathname}`);
     ws.binaryType = 'arraybuffer'
   
     ws.onerror = function(err) {
@@ -192,20 +53,31 @@ async function pageReady() {
     };
 
     ws.onmessage = function (event) {
-        log(JSON.parse(event.data))
+      log(event.data)
 
-        // player.feed(new Int16Array(event.data));
+      let uint8Array = new Uint8Array(event.data);
+
+      let decoder = new TextDecoder('utf-8');
+      let utf8String = decoder.decode(uint8Array);
+
+      data = JSON.parse(utf8String)
+
+      log(data)
+      switch (data.type) {
+        case 'text':
+          document.getElementById("text").innerHTML=data.text;
+          break
+        case 'audio':
+          playWavFile(base64ToArrayBuffer(data.data))
+          break
+        default:
+          log('unknown type')
+          break;
+      }
     };
   }
 
   connect();
-}
-
-function playSound(buffer) {
-  var source = audioContext.createBufferSource();
-  source.buffer = buffer;
-  source.connect(audioContext.destination);
-  source.start();
 }
 
 function log(error) {

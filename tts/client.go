@@ -10,6 +10,8 @@ import (
 	"net/http"
 
 	"app/tools"
+
+	_ "embed"
 )
 
 type Config struct {
@@ -35,18 +37,25 @@ func New(httpClient HTTPClient, cfg *Config) *Client {
 }
 
 type ttsReq struct {
-	Text  string `json:"text"`
-	Voice string `json:"voice"`
+	Text     string `json:"text"`
+	RefAudio string `json:"ref_audio"`
 }
 
 type ttsResp struct {
 	Audio string `json:"audio"`
 }
 
-func (c *Client) TTS(ctx context.Context, msg string, voice string) ([]byte, error) {
+//go:embed forsen_4.wav
+var forsenRef []byte
+
+func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
+	if refAudio == nil {
+		refAudio = forsenRef
+	}
+
 	req := &ttsReq{
-		Text:  msg,
-		Voice: voice,
+		Text:     msg,
+		RefAudio: base64.StdEncoding.EncodeToString(refAudio),
 	}
 
 	data, err := json.Marshal(&req)
@@ -69,6 +78,10 @@ func (c *Client) TTS(ctx context.Context, msg string, voice string) ([]byte, err
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read body: %w", err)
+	}
+
+	if resp.StatusCode > 299 {
+		return nil, fmt.Errorf("status code %d, err - %s", resp.StatusCode, string(respData))
 	}
 
 	// fmt.Println(string(respData))

@@ -6,18 +6,42 @@ import (
 	"runtime/debug"
 	"time"
 
+	"app/ai"
 	"app/conns"
 	"app/db"
 	"app/slg"
-	"app/tools"
+	"app/tts"
+	"app/twitch"
+
+	lua "github.com/yuin/gopher-lua"
 )
 
-type DefaultProcessor struct{}
+type LuaConfig struct {
+	MaxScriptExecTime time.Duration  `yaml:"max_script_exec_time"`
+	MaxFuncCalls      map[string]int `yaml:"max_func_calls"`
+}
 
-func (conn *DefaultProcessor) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) error {
+type Processor struct {
+	luaCfg *LuaConfig
+
+	ai  *ai.Client
+	tts *tts.Client
+}
+
+func NewProcessor(luacfg *LuaConfig, ai *ai.Client, tts *tts.Client) *Processor {
+	return &Processor{
+		luaCfg: luacfg,
+
+		ai:  ai,
+		tts: tts,
+	}
+}
+
+func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	defer func() {
+		cancel()
 		if r := recover(); r != nil {
 			slg.GetSlog(ctx).Error("connection panic", "user", user, "r", r, "stack", string(debug.Stack()))
 		}
@@ -31,96 +55,84 @@ func (conn *DefaultProcessor) Process(ctx context.Context, updates chan struct{}
 
 	settings, err := db.GetDbSettings(user)
 	if err != nil {
-		slg.GetSlog(ctx).Info("settings not found, defaulting to Chat=true")
+		slg.GetSlog(ctx).Info("settings not found, defaulting")
 		settings = &db.Settings{
-			Chat: true,
+			LuaScript: `
+while true do
+	user, msg, reward_id = get_next_event()
+	tts(msg)
+end
+			`,
 		}
 	}
 
 	slg.GetSlog(ctx).Info("Settings fetched", "settings", settings)
 
-	var twitchChatCh, randEventsCh chan *twitchEvent
-	var subsCh, followsCh, raidsCh, channelPtsCh, twitchUnknownCh chan *twitchEvent
+	luaState := lua.NewState(lua.Options{
+		SkipOpenLibs:        true,
+		IncludeGoStackTrace: true,
+	})
 
-	if settings.Chat {
-		twitchChatCh = messagesFetcher(ctx, user)
-	}
-	if settings.ChannelPts || settings.Follows || settings.Raids || settings.Subs {
-		twitchApiCh, err := eventSubDataStreamBeta(ctx, settings, user)
+	twitchChatCh := twitch.MessagesFetcher(ctx, user)
+
+	luaState.SetGlobal("ai", luaState.NewFunction(func(l *lua.LState) int {
+		request := l.Get(1).String()
+
+		aiResponse, err := p.ai.Ask(ctx, 0, request)
 		if err != nil {
-			return fmt.Errorf("failed to setup twitch api data stream: %w", err)
+			l.Push(lua.LString("ai request error: " + err.Error()))
+			return 1
 		}
 
-		subsCh, followsCh, raidsCh, channelPtsCh, twitchUnknownCh = twitchEventsSplitter(twitchApiCh)
-	}
-	if settings.Events {
-		randEventsCh = randEvents(ctx, time.Second*time.Duration(settings.EventsInterval))
-	}
+		l.Push(lua.LString(aiResponse))
+		return 1
+	}))
 
-	inChans := make([]chan *twitchEvent, 0, 7)
-	add := func(ch chan *twitchEvent) {
-		if ch != nil {
-			inChans = append(inChans, ch)
+	luaState.SetGlobal("text", luaState.NewFunction(func(l *lua.LState) int {
+		request := l.Get(1).String()
+
+		eventWriter(&conns.DataEvent{
+			EventType: conns.EventTypeText,
+			EventData: []byte(request),
+		})
+
+		return 0
+	}))
+
+	luaState.SetGlobal("tts", luaState.NewFunction(func(l *lua.LState) int {
+		request := l.Get(1).String()
+
+		ttsResponse, err := p.tts.TTS(ctx, request, nil)
+		if err != nil {
+			l.Push(lua.LString("tts request error: " + err.Error()))
+			return 1
 		}
-	}
-	add(randEventsCh)
-	add(twitchChatCh)
-	add(twitchUnknownCh)
-	add(channelPtsCh)
-	add(followsCh)
-	add(raidsCh)
-	add(subsCh)
 
-	closingChans := tools.CloseAndDrainOnAnyClose(inChans...)
+		eventWriter(&conns.DataEvent{
+			EventType: conns.EventTypeAudio,
+			EventData: ttsResponse,
+		})
 
-	var twitchEventsCh chan *twitchEvent
+		return 0
+	}))
 
-	if len(closingChans) == 0 {
-		twitchEventsCh = make(chan *twitchEvent)
-		go func() {
-			defer close(twitchEventsCh)
-
-			for {
-				select {
-				case twitchEventsCh <- &twitchEvent{
-					eventType: eventTypeInfo,
-					userName:  user,
-					message:   "No settings enabled you sillE goose",
-				}:
-				case <-ctx.Done():
-					break
-				}
-			}
-		}()
-	} else {
-		twitchEventsCh = tools.PriorityFanIn(nil, closingChans...)
-	}
-
-	dataCh := processTwitchEvents(ctx, twitchEventsCh)
-	defer func() {
-		for range dataCh {
-		}
-	}()
-
-	slg.GetSlog(ctx).Info("starting processing")
-
-loop:
-	for {
+	luaState.SetGlobal("get_next_event", luaState.NewFunction(func(l *lua.LState) int {
 		select {
+		case msg := <-twitchChatCh:
+			slg.GetSlog(ctx).Info("pushing", "msg", msg)
+			l.Push(lua.LString(msg.UserName))
+			l.Push(lua.LString(msg.Message))
+			l.Push(lua.LString(msg.CustomRewardID))
 		case <-ctx.Done():
-			break loop
-		default:
+			luaState.Close()
+			return 0
 		}
 
-		for dataEvent := range dataCh {
-			select {
-			case <-ctx.Done():
-				break loop
-			default:
-			}
+		return 3
+	}))
 
-			eventWriter(dataEvent)
-		}
+	if err := luaState.DoString(settings.LuaScript); err != nil {
+		return fmt.Errorf("lua execution err: %w", err)
 	}
 
 	slg.GetSlog(ctx).Info("processor is closing")

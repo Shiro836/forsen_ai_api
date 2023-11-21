@@ -1,6 +1,9 @@
 package api
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"app/conns"
@@ -13,16 +16,33 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type frontMessage struct {
+	Type string `json:"type"`
+	Data string `json:"data"`
+}
+
 func (api *API) sendData(wsClient *ws.Client, data *conns.DataEvent) error {
-	msg := &ws.Message{}
+	msg := &ws.Message{
+		MsgType: websocket.BinaryMessage,
+	}
+
+	var err error
 
 	switch data.EventType {
 	case conns.EventTypeAudio:
-		msg.MsgType = websocket.BinaryMessage
-		msg.Message = data.EventData
+		if msg.Message, err = json.Marshal(&frontMessage{
+			Type: "audio",
+			Data: base64.StdEncoding.EncodeToString(data.EventData),
+		}); err != nil {
+			return fmt.Errorf("failed to marshal frontMessage: %w", err)
+		}
 	case conns.EventTypeText:
-		msg.MsgType = websocket.BinaryMessage
-		msg.Message = data.EventData
+		if msg.Message, err = json.Marshal(&frontMessage{
+			Type: "text",
+			Data: string(data.EventData),
+		}); err != nil {
+			return fmt.Errorf("failed to marshal frontMessage: %w", err)
+		}
 	case conns.EventTypeInfo:
 	case conns.EventTypeError:
 	default:
