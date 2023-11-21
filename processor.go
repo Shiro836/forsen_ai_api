@@ -28,6 +28,11 @@ while true do
 	user, msg, reward_id = get_next_event()
 	if startswith(msg, "!tts ") then
 		tts(string.sub(msg, 6, #msg))
+	elseif startswith(msg, "!ask ") then
+		local request = string.sub(msg, 6, #msg)
+		local ai_resp = ai("PROMPT: " .. request .. " FORSEN: ")
+		tts(user .. " asked me: " .. request)
+		tts(ai_resp)
 	end
 end
 `
@@ -99,6 +104,8 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		SkipOpenLibs:        true,
 		IncludeGoStackTrace: true,
 	})
+
+	luaState.SetGlobal("channel", lua.LString(user))
 
 	for _, pair := range []struct {
 		n string
