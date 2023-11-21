@@ -19,6 +19,19 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+var DefaultLuaScript = `
+function startswith(text, prefix)
+	return text:find(prefix, 1, true) == 1
+end
+
+while true do
+	user, msg, reward_id = get_next_event()
+	if startswith(msg, "!tts ") then
+		tts(string.sub(msg, 6, #msg))
+	end
+end
+`
+
 type LuaConfig struct {
 	MaxScriptExecTime time.Duration  `yaml:"max_script_exec_time"`
 	MaxFuncCalls      map[string]int `yaml:"max_func_calls"`
@@ -76,12 +89,7 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	if err != nil {
 		slg.GetSlog(ctx).Info("settings not found, defaulting")
 		settings = &db.Settings{
-			LuaScript: `
-while true do
-	user, msg, reward_id = get_next_event()
-	tts(msg)
-end
-			`,
+			LuaScript: DefaultLuaScript,
 		}
 	}
 
@@ -91,6 +99,24 @@ end
 		SkipOpenLibs:        true,
 		IncludeGoStackTrace: true,
 	})
+
+	for _, pair := range []struct {
+		n string
+		f lua.LGFunction
+	}{
+		{lua.LoadLibName, lua.OpenPackage}, // Must be first
+		{lua.BaseLibName, lua.OpenBase},
+		{lua.TabLibName, lua.OpenTable},
+		{lua.StringLibName, lua.OpenString},
+	} {
+		if err := luaState.CallByParam(lua.P{
+			Fn:      luaState.NewFunction(pair.f),
+			NRet:    0,
+			Protect: true,
+		}, lua.LString(pair.n)); err != nil {
+			panic(err)
+		}
+	}
 
 	twitchChatCh := twitch.MessagesFetcher(ctx, user)
 

@@ -25,12 +25,13 @@ function base64ToArrayBuffer(base64) {
 async function pageReady() {
   video = document.getElementById('video');
 
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate:24000});
 
   function playWavFile(arrayBuffer) {
     audioContext.decodeAudioData(arrayBuffer, function(buffer) {
       let source = audioContext.createBufferSource();
       source.buffer = buffer;
+      source.channelCount = 1;
       source.connect(audioContext.destination);
       source.start();
     });
