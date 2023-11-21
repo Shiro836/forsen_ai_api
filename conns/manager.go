@@ -21,7 +21,7 @@ type Manager struct {
 	rwMutex sync.RWMutex
 
 	subCount       map[string]int
-	dataStreams    map[string]chan *DataEvent
+	dataStreams    map[string][]chan *DataEvent
 	updateEventsCh map[string]chan struct{}
 }
 
@@ -34,7 +34,7 @@ func NewConnectionManager(ctx context.Context, processor Processor) *Manager {
 		processor: processor,
 
 		subCount:       make(map[string]int, 100),
-		dataStreams:    make(map[string]chan *DataEvent, 100),
+		dataStreams:    make(map[string][]chan *DataEvent, 100),
 		updateEventsCh: make(map[string]chan struct{}, 100),
 	}
 }
@@ -80,57 +80,64 @@ func (d *DataEvent) String() string {
 	return fmt.Sprintf("%s:%s", d.EventType.String(), string(d.EventData))
 }
 
-func (m *Manager) Unsubscribe(user string) {
-	m.rwMutex.Lock()
-	defer m.rwMutex.Unlock()
-
-	m.subCount[user]--
-
-	if m.subCount[user] == 0 {
-		close(m.dataStreams[user])
-		delete(m.dataStreams, user)
-	}
-}
-
-func (m *Manager) Subscribe(user string) <-chan *DataEvent {
+func (m *Manager) Subscribe(user string) (<-chan *DataEvent, func()) {
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
 
 	m.subCount[user]++
 
-	if m.subCount[user] == 1 {
-		m.dataStreams[user] = make(chan *DataEvent)
-	}
+	m.dataStreams[user] = append(m.dataStreams[user], make(chan *DataEvent))
 
-	return m.dataStreams[user]
+	ind := len(m.dataStreams[user]) - 1
+
+	return m.dataStreams[user][ind], func() {
+		m.rwMutex.Lock()
+		defer m.rwMutex.Unlock()
+
+		m.subCount[user]--
+
+		close(m.dataStreams[user][ind])
+		if m.subCount[user] == 0 {
+			delete(m.dataStreams, user)
+		}
+	}
 }
 
-func (m *Manager) Write(user string, event *DataEvent) {
-	for {
-		br := false
+func (m *Manager) TryWrite(ctx context.Context, user string, event *DataEvent) bool {
+	wrote := false
 
-		func() {
-			m.rwMutex.RLock()
-			defer m.rwMutex.RUnlock()
-
-			if m.subCount[user] == 0 {
-				br = true
-				return
-			}
-
-			select {
-			case m.dataStreams[user] <- event:
-				br = true
-			default:
-			}
-		}()
-
-		if br {
-			return
+loop:
+	for i := 0; i < len(m.dataStreams[user]); i++ {
+		select {
+		case <-ctx.Done():
+			return wrote
+		default:
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		for j := 0; j < 5; j++ {
+			cont_loop := false
+			func() {
+				m.rwMutex.RLock()
+				defer m.rwMutex.RUnlock()
+
+				select {
+				case m.dataStreams[user][i] <- event:
+					wrote = true
+					cont_loop = true
+				case <-ctx.Done():
+					return
+				default:
+				}
+			}()
+			if cont_loop {
+				continue loop
+			}
+
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
+
+	return wrote
 }
 
 func (m *Manager) NotifyUpdateWhitelist(user *db.Human) {
@@ -179,8 +186,8 @@ func (m *Manager) HandleUser(user *db.Human) {
 				default:
 				}
 
-				if err := m.processor.Process(ctx, updates, func(event *DataEvent) {
-					m.Write(user.Login, event)
+				if err := m.processor.Process(ctx, updates, func(event *DataEvent) bool {
+					return m.TryWrite(ctx, user.Login, event)
 				}, user.Login); err != nil {
 					if errors.Is(err, ErrProcessingEnd) {
 						break loop

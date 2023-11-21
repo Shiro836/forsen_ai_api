@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"runtime/debug"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"app/tts"
 	"app/twitch"
 
+	"github.com/go-audio/wav"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -35,6 +38,22 @@ func NewProcessor(luacfg *LuaConfig, ai *ai.Client, tts *tts.Client) *Processor 
 		ai:  ai,
 		tts: tts,
 	}
+}
+
+func sleepForAudioLen(wavData []byte) {
+	reader := bytes.NewReader(wavData)
+
+	d := wav.NewDecoder(reader)
+	if d == nil {
+		panic("error opening wav data")
+	}
+
+	duration, err := d.Duration()
+	if err != nil {
+		slog.Error("getting duration err", "err", err)
+	}
+	slog.Info(fmt.Sprintf("sleeping for %s", duration.String()))
+	time.Sleep(duration)
 }
 
 func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) error {
@@ -99,7 +118,7 @@ end
 		return 0
 	}))
 
-	luaState.SetGlobal("tts", luaState.NewFunction(func(l *lua.LState) int {
+	luaState.SetGlobal("tts_no_sleep", luaState.NewFunction(func(l *lua.LState) int {
 		request := l.Get(1).String()
 
 		ttsResponse, err := p.tts.TTS(ctx, request, nil)
@@ -112,6 +131,25 @@ end
 			EventType: conns.EventTypeAudio,
 			EventData: ttsResponse,
 		})
+
+		return 0
+	}))
+
+	luaState.SetGlobal("tts", luaState.NewFunction(func(l *lua.LState) int {
+		request := l.Get(1).String()
+
+		ttsResponse, err := p.tts.TTS(ctx, request, nil)
+		if err != nil {
+			l.Push(lua.LString("tts request error: " + err.Error()))
+			return 1
+		}
+
+		if eventWriter(&conns.DataEvent{
+			EventType: conns.EventTypeAudio,
+			EventData: ttsResponse,
+		}) {
+			sleepForAudioLen(ttsResponse)
+		}
 
 		return 0
 	}))

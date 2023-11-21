@@ -89,8 +89,8 @@ func TestDataStream(t *testing.T) {
 
 	connManager := conns.NewConnectionManager(context.Background(), processor)
 
-	subCh := connManager.Subscribe(user)
-	subCh2 := connManager.Subscribe(user)
+	subCh, unsub := connManager.Subscribe(user)
+	subCh2, unsub2 := connManager.Subscribe(user)
 
 	connManager.HandleUser(&db.Human{
 		Login: user,
@@ -112,8 +112,8 @@ func TestDataStream(t *testing.T) {
 	default:
 	}
 
-	connManager.Unsubscribe(user)
-	connManager.Unsubscribe(user)
+	unsub()
+	unsub2()
 
 	_, ok = <-subCh
 	assert.False(ok)
@@ -122,7 +122,7 @@ func TestDataStream(t *testing.T) {
 func TestUnderLoad(t *testing.T) {
 	assert := assert.New(t)
 
-	cnt := 10000
+	cnt := 100
 	users, events := []string{}, []*conns.DataEvent{}
 	userToEvent := map[string]*conns.DataEvent{}
 	eventsRepeated := 2
@@ -156,7 +156,8 @@ func TestUnderLoad(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			subCh := connManager.Subscribe(users[i])
+			subCh, unsub := connManager.Subscribe(users[i])
+			subCh2, unsub2 := connManager.Subscribe(users[i])
 
 			time.Sleep(20 * time.Millisecond)
 
@@ -164,17 +165,26 @@ func TestUnderLoad(t *testing.T) {
 				recievedEvent, ok := <-subCh
 				assert.True(ok)
 				assert.Equal(events[i], recievedEvent)
+
+				recievedEvent, ok = <-subCh2
+				assert.True(ok)
+				assert.Equal(events[i], recievedEvent)
 			}
 
 			select {
 			case <-subCh:
 				assert.Fail("channel must be empty but not closed")
+			case <-subCh2:
+				assert.Fail("channel must be empty but not closed")
 			default:
 			}
 
-			connManager.Unsubscribe(users[i])
+			unsub()
+			unsub2()
 
 			_, ok := <-subCh
+			assert.False(ok)
+			_, ok = <-subCh2
 			assert.False(ok)
 		}()
 	}

@@ -81,8 +81,8 @@ func (api *API) consumerHandler(w http.ResponseWriter, r *http.Request) {
 
 	slg.GetSlog(r.Context()).Info("ws connected")
 
-	dataCh := api.connManager.Subscribe(user)
-	defer api.connManager.Unsubscribe(user)
+	dataCh, unsubscribe := api.connManager.Subscribe(user)
+	defer unsubscribe()
 
 loop:
 	for {
