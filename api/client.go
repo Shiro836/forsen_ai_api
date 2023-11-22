@@ -55,12 +55,12 @@ func NewRouter(api *API) *chi.Mux {
 	router.Get("/ws/{user}", api.consumerHandler)
 
 	router.Get("/settings", settingsHandler)
-	router.Get("/add_channel_point_reward", api.channelPointsRewardCreateHandler)
+	router.Get("/add_channel_point_reward/{reward_id}", api.channelPointsRewardCreateHandler)
 
 	router.Get("/twitch_token_handler", api.twitchTokenHandler)
 
 	router.Get("/get_settings", getSettings)
-	router.Post("/update_settings", updateSettings)
+	router.Post("/update_settings", api.updateSettings)
 
 	router.Get("/get_whitelist", getWhitelist)
 	router.Post("/update_whitelist", updateWhitelist)

@@ -76,6 +76,8 @@ type UserLoginData struct {
 }
 
 type UserData struct {
+	ID int
+
 	RefreshToken  string
 	AccessToken   string
 	UserLoginData *UserLoginData
@@ -142,6 +144,7 @@ func UpdateUserData(userData *UserData) error {
 func GetUserData(user string) (*UserData, error) {
 	row := db.QueryRow(`
 		select
+			id,
 			user_id,
 			refresh_token,
 			access_token
@@ -154,6 +157,7 @@ func GetUserData(user string) (*UserData, error) {
 
 	userData := &UserData{UserLoginData: &UserLoginData{UserName: user}}
 	if err := row.Scan(
+		&userData.ID,
 		&userData.UserLoginData.UserId,
 		&userData.RefreshToken,
 		&userData.AccessToken,
@@ -167,6 +171,7 @@ func GetUserData(user string) (*UserData, error) {
 func GetUserDataBySessionId(sessionId string) (*UserData, error) {
 	row := db.QueryRow(`
 		select
+			id,
 			login,
 			user_id,
 			refresh_token,
@@ -180,6 +185,7 @@ func GetUserDataBySessionId(sessionId string) (*UserData, error) {
 
 	userData := &UserData{UserLoginData: &UserLoginData{}, Session: sessionId}
 	if err := row.Scan(
+		&userData.ID,
 		&userData.UserLoginData.UserName,
 		&userData.UserLoginData.UserId,
 		&userData.RefreshToken,
@@ -204,27 +210,43 @@ func GetRewardID(user string) (string, error) {
 	return rewardID, nil
 }
 
-func GetRewardIDBySessionID(sessionId string) (string, error) {
-	row := db.QueryRow(`
-		select reward_id from user_data where session = $1
-	`, sessionId)
-
-	var rewardID string
-	if err := row.Scan(&rewardID); err != nil {
-		return "", fmt.Errorf("failed to scan reward id: %w", err)
-	}
-
-	return rewardID, nil
+type Reward struct {
+	RewardID       string
+	TwitchRewardID string
 }
 
-func SaveRewardID(rewardID, sessionId string) error {
+func GetRewards(userID int) ([]Reward, error) {
+	row, err := db.Query(`
+		select reward_id, twitch_reward_id from reward_ids where user_id = $1
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get rewards query err: %w", err)
+	}
+
+	rewards := make([]Reward, 0, 5)
+
+	var nextReward Reward
+	for row.Next() {
+		if err := row.Scan(&nextReward.RewardID, &nextReward.TwitchRewardID); err != nil {
+			return nil, fmt.Errorf("get rewards scan err: %w", err)
+		}
+		rewards = append(rewards, nextReward)
+	}
+
+	return rewards, nil
+}
+
+func SaveRewardID(rewardID, twitchRewardID string, userID int) error {
 	_, err := db.Exec(`
-		update user_data set
-			reward_id = $1
-		where session = $2
+	insert into reward_ids(user_id, reward_id, twitch_reward_id)
+	values($1, $2, $3)
+	on conflict(user_id, reward_id) do update set
+		twitch_reward_id = $3
+	where reward_ids.user_id = excluded.user_id and reward_ids.reward_id = excluded.reward_id
 	`,
+		userID,
 		rewardID,
-		sessionId,
+		twitchRewardID,
 	)
 
 	return err
@@ -247,6 +269,10 @@ func GetDbSettings(login string) (*Settings, error) {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
 	}
 
+	if len(settingsData) == 0 {
+		return &Settings{}, nil
+	}
+
 	var settings *Settings
 	if err := json.Unmarshal(settingsData, &settings); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal settings: %w", err)
@@ -255,7 +281,7 @@ func GetDbSettings(login string) (*Settings, error) {
 	return settings, nil
 }
 
-func UpdateDbSettings(settings *Settings, sessionId string) error {
+func UpdateDbSettings(settings *Settings, login string) error {
 	settingsData, err := json.Marshal(settings)
 	if err != nil {
 		return fmt.Errorf("failed to marshal settings: %w", err)
@@ -264,10 +290,10 @@ func UpdateDbSettings(settings *Settings, sessionId string) error {
 	if _, err := db.Exec(`
 		update user_data set
 			settings = $1
-		where session = $2
+		where login = $2
 	`,
 		settingsData,
-		sessionId,
+		login,
 	); err != nil {
 		return fmt.Errorf("failed to update db settings: %w", err)
 	}

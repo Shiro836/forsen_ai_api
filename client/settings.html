@@ -1,5 +1,13 @@
 <!DOCTYPE html>
+<html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.3/codemirror.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.3/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.3/mode/lua/lua.min.js"></script>
+
     <script>
         function logout() {
             document.cookie = "session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
@@ -10,39 +18,20 @@
             document.getElementById("add_reward_result").innerText = "Loading..."
 
             var xmlHttp = new XMLHttpRequest();
-            xmlHttp.open("GET", "/add_channel_point_reward", false); // false for synchronous request
+            xmlHttp.open("GET", "/add_channel_point_reward/" + document.getElementById("reward_id").value, false); // false for synchronous request
             xmlHttp.send(null);
 
             document.getElementById("add_reward_result").innerText = xmlHttp.responseText
         }
+var editor;
         function updateSettings() {
             document.getElementById("state").innerText = "Updating Settings..."
 
             var xhr = new XMLHttpRequest();
             xhr.open("POST", "/update_settings", false);
 
-            var settings = document.getElementById('settings');
-            var children = settings.children;
-
-            jsonSettings = {}
-
-            for(var i=0; i<children.length; i++){
-                var child = children[i].children[0]
-                if (child.id === "range_value") {
-                    continue
-                }
-
-                if (child.type === "checkbox") {
-                    console.log("checked")
-                    jsonSettings[child.id] = child.checked
-                } else if (child.id === "events_interval") {
-                    console.log("not checked")
-
-                    jsonSettings[child.id] = Number(child.value)
-                } else if (child.id === "custom_context") {
-                    console.log("ctx", child.value)
-                    jsonSettings[child.id] = child.value
-                }
+            jsonSettings = {
+                "lua_script" : editor.getValue()
             }
 
             xhr.send(JSON.stringify(jsonSettings));
@@ -55,25 +44,10 @@
             xmlHttp.send(null);
 
             const res = JSON.parse(xmlHttp.responseText);
-            for (const key in res){
-                if(res.hasOwnProperty(key)){
-                    if (typeof res[key] === "string") {
-                        document.getElementById(key).value = String(res[key])
-                        if (key === "custom_context") {
-                            document.getElementById("custom_context").value = String(res[key])
-                        }
-                    } else if (typeof res[key] === "number") {
-                        document.getElementById(key).value = String(res[key])
-                        if (key === "events_interval") {
-                            document.getElementById("range_value").innerText = String(res[key])
-                        }
-                    } else {
-                        document.getElementById(key).checked = res[key]
-                    }
-                }
-            }
 
-            document.getElementById("state").innerText = ""
+            editor.setValue(res["lua_script"])
+
+            document.getElementById("state").textContent = ""
         }
         function addWhitelistEntry(is_add) {
             document.getElementById("update_whitelist_result").innerText = "Updating Whitelist..."
@@ -93,35 +67,35 @@
     </script>
 </head>
 <body>
-    <h3>Refresh obs browser source after logging in.</h3>
     <button onclick="logout()">Logout</button>
-    <h3>Channel point reward must be created using this button, NOT BY YOURSELF. After adding the reward, you can edit its parameters on twitch website.</h3>
+    <h3>Channel point reward must be created using this button, NOT BY YOURSELF. After adding the reward, you can edit its parameters on twitch website including rewards name, description and prompt.</h3>
+    <div><input type="text" id="reward_id"name="reward_id"/><label for="reward_id">Reward ID</label></div>
     <button onclick="addChannelPointReward()">Add Channel Point Reward on your channel</button>
     <div id="add_reward_result"></div>
+    <h3>After adding reward, events will come to lua in get_next_event() in reward_id variable. </h3>
     <br>
-    <h3>Forsen AI will react to:</h3>
-    <div id="settings">
-        <div><input type="checkbox" id="chat"        name="chat"/>          <label for="chat">Chat</label>                      </div>
-        <div><input type="checkbox" id="chan_pts"    name="chan_pts"/>      <label for="chan_pts">Channel Points Redeems</label></div>
-        <div><input type="checkbox" id="follows"     name="follows"/>       <label for="follows">Follows</label>                </div>
-        <div><input type="checkbox" id="subs"        name="subs"/>          <label for="subs">Subs</label>                      </div>
-        <div><input type="checkbox" id="raids"       name="raids"/>         <label for="raids">Raids</label>                    </div>
-        <div><input type="checkbox" id="events"      name="events"/>        <label for="events">Random Speech</label>           </div>
-        <div><input type="range" id="events_interval" name="events_interval" value="80" min="60" max="1000" oninput="document.getElementById('range_value').innerText=this.value"/> <label for="events_interval">Random Speech Interval in seconds</label></div>
-        <div><output id="range_value">80</output></div>
-        <div><textarea id="custom_context" style="width:250px;height:150px;" name="custom_context"></textarea><label for="custom_context">Custom Context</label></div>
-    </div>
+    <h3>Lua code that will be executed on the server:</h3>
+    <textarea id="code-editor"></textarea>
+    <script>
+        editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
+                lineNumbers: true,
+                mode: 'text/x-lua',
+                theme: 'default'
+            });
+    </script>
     <br>
-    <button onclick="updateSettings()">Apply</button>
+    <br>
+    <button onclick="updateSettings()">Update</button>
     <div id="state">Loading Settings...</div>
     <script>
         loadSettings()
     </script>
-    <br>
     <br>
     <div>Update whitelist:</div>
     <input type="text" id="whitelist_login"/>
     <button onclick="addWhitelistEntry(true)">Add To Whitelist</button>
     <button onclick="addWhitelistEntry(false)">Ban</button>
     <output id="update_whitelist_result"></output>
+    <h3>Want to reset lua code back to default? Make editor empty and press update and then reload the page.</h3>
 </body>
+</html>

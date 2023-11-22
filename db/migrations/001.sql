@@ -31,4 +31,5 @@ create table if not exists whitelist (
     unique(login)
 );
 
+create index if not exists whitelist_login on whitelist(login);
 create index if not exists whitelist_banned_by on whitelist(banned_by);

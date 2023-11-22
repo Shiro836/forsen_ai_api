@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"app/ai"
+	"app/api"
 	"app/conns"
 	"app/db"
 	"app/slg"
@@ -18,24 +19,6 @@ import (
 	"github.com/go-audio/wav"
 	lua "github.com/yuin/gopher-lua"
 )
-
-var DefaultLuaScript = `
-function startswith(text, prefix)
-	return text:find(prefix, 1, true) == 1
-end
-
-while true do
-	user, msg, reward_id = get_next_event()
-	if startswith(msg, "!tts ") then
-		tts(string.sub(msg, 6, #msg))
-	elseif startswith(msg, "!ask ") then
-		local request = string.sub(msg, 6, #msg)
-		local ai_resp = ai("PROMPT: " .. request .. " FORSEN: ")
-		tts(user .. " asked me: " .. request)
-		tts(ai_resp)
-	end
-end
-`
 
 type LuaConfig struct {
 	MaxScriptExecTime time.Duration  `yaml:"max_script_exec_time"`
@@ -49,9 +32,9 @@ type Processor struct {
 	tts *tts.Client
 }
 
-func NewProcessor(luacfg *LuaConfig, ai *ai.Client, tts *tts.Client) *Processor {
+func NewProcessor(luaCfg *LuaConfig, ai *ai.Client, tts *tts.Client) *Processor {
 	return &Processor{
-		luaCfg: luacfg,
+		luaCfg: luaCfg,
 
 		ai:  ai,
 		tts: tts,
@@ -90,12 +73,33 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		cancel()
 	}()
 
+	twitchRewardIDToRewardID := make(map[string]string, 5)
+
+	userData, err := db.GetUserData(user)
+	if err != nil {
+		slg.GetSlog(ctx).Info("no user data found", "err", err)
+	} else {
+		rewards, err := db.GetRewards(userData.ID)
+		if err == nil {
+			for _, reward := range rewards {
+				twitchRewardIDToRewardID[reward.TwitchRewardID] = reward.RewardID
+			}
+		} else {
+			slg.GetSlog(ctx).Info("failed to get rewards", "err", err)
+		}
+	}
+
+	slg.GetSlog(ctx).Info("got rewards", "rewards", twitchRewardIDToRewardID)
+
 	settings, err := db.GetDbSettings(user)
 	if err != nil {
 		slg.GetSlog(ctx).Info("settings not found, defaulting")
 		settings = &db.Settings{
-			LuaScript: DefaultLuaScript,
+			LuaScript: api.DefaultLuaScript,
 		}
+	}
+	if len(settings.LuaScript) == 0 {
+		settings.LuaScript = api.DefaultLuaScript
 	}
 
 	slg.GetSlog(ctx).Info("Settings fetched", "settings", settings)
@@ -105,7 +109,7 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		IncludeGoStackTrace: true,
 	})
 
-	luaState.SetGlobal("channel", lua.LString(user))
+	luaState.SetGlobal("broadcaster", lua.LString(user))
 
 	for _, pair := range []struct {
 		n string
@@ -190,16 +194,29 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	luaState.SetGlobal("get_next_event", luaState.NewFunction(func(l *lua.LState) int {
 		select {
 		case msg := <-twitchChatCh:
-			slg.GetSlog(ctx).Info("pushing", "msg", msg)
-			l.Push(lua.LString(msg.UserName))
-			l.Push(lua.LString(msg.Message))
-			l.Push(lua.LString(msg.CustomRewardID))
+			slg.GetSlog(ctx).Info("recieved", "msg", msg)
+			if len(msg.CustomRewardID) != 0 {
+				if rewardID, ok := twitchRewardIDToRewardID[msg.CustomRewardID]; ok {
+					slg.GetSlog(ctx).Info("converted reward", "new_reward", rewardID)
+
+					l.Push(lua.LString(msg.UserName))
+					l.Push(lua.LString(msg.Message))
+					l.Push(lua.LString(rewardID))
+
+					return 3
+				}
+			} else {
+				l.Push(lua.LString(msg.UserName))
+				l.Push(lua.LString(msg.Message))
+				l.Push(lua.LString(msg.CustomRewardID))
+
+				return 3
+			}
 		case <-ctx.Done():
-			luaState.Close()
 			return 0
 		}
 
-		return 3
+		return 0
 	}))
 
 	if err := luaState.DoString(settings.LuaScript); err != nil {

@@ -193,6 +193,7 @@ func (m *Manager) HandleUser(user *db.Human) {
 						break loop
 					}
 					slg.GetSlog(ctx).Error("processor Process error", "err", err)
+					time.Sleep(time.Second)
 				}
 			}
 		}()
