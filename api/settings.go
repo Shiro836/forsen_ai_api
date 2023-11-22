@@ -19,6 +19,8 @@ func settingsHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(500)
 			w.Write([]byte("failed to read settings.html"))
+
+			return
 		}
 
 		w.Header().Add("Content-Type", "text/html")
@@ -122,16 +124,22 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte("unauthorized"))
+
+		return
 	} else if userData, err := db.GetUserDataBySessionId(cookie.Value); err != nil {
 		fmt.Println(err)
 
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to get settings"))
+
+		return
 	} else if settings, err = db.GetDbSettings(userData.UserLoginData.UserName); err != nil {
 		fmt.Println(err)
 
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to get settings"))
+
+		return
 	}
 
 	if len(settings.LuaScript) == 0 {

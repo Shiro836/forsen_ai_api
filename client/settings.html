@@ -64,6 +64,26 @@ var editor;
 
             document.getElementById("update_whitelist_result").innerText = xhr.responseText
         }
+
+        function handleSubmit(event) {
+            const form = event.currentTarget;
+            const url = new URL(form.action) + "/" + document.getElementById("char_name").value;
+            const formData = new FormData(form);
+            const searchParams = new URLSearchParams(formData);
+
+            const fetchOptions = {
+                method: form.method,
+                body: formData,
+            };
+
+            fetch(url, fetchOptions)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById("upload_card_result").innerText = data
+                })
+
+            event.preventDefault();
+        }
     </script>
 </head>
 <body>
@@ -87,7 +107,19 @@ var editor;
     <br>
     <button onclick="updateSettings()">Update</button>
     <div id="state">Loading Settings...</div>
+    <br>
+    <h3>Upload character png card. You can find them here !!NSFW WARNING!! - <a href="https://chub.ai" target="_blank">chub.ai</a> (download png with T sign that says it's compatible with SillyTavern) . Or create card yourself in SillyTavern app.</h3>
+    <div><input type="char_name" id="char_name"name="char_name"/><label for="char_name">Character Name</label></div>
+    <form id="upload_card" action="/upload_card" method="post" enctype="multipart/form-data">
+        <label for="file">File</label>
+        <input id="file" name="file" type="file" />
+        <button>Upload</button>
+    </form>
+    <div id="upload_card_result"></div>
+    <h3>You can then reference this card in lua code under the name you set above.</h3>
     <script>
+        upload_char_form = document.getElementById('upload_card');
+        upload_char_form.addEventListener('submit', handleSubmit);
         loadSettings()
     </script>
     <br>

@@ -9,8 +9,6 @@ create table if not exists user_data (
 
     session text,
 
-    reward_id text,
-
     settings text,
 
     unique(user_id)

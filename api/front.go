@@ -10,17 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func jsFileHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := os.ReadFile("client/webrtc.js")
-	if err != nil {
-		w.WriteHeader(500)
-		w.Write([]byte("failed to read webrtc.js"))
-	}
-
-	w.Header().Add("Content-Type", "application/javascript")
-	w.Write(data)
-}
-
 func jsWhitelistHandler(w http.ResponseWriter, r *http.Request) {
 	data, err := os.ReadFile("client/whitelist.js")
 	if err != nil {
@@ -37,24 +26,6 @@ func descriptionHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to read description.html"))
-
-		return
-	}
-
-	w.Header().Add("Content-Type", "text/html")
-	w.Write(data)
-}
-
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-	user := chi.URLParam(r, "user")
-	if !isValidUser(user, w) {
-		return
-	}
-
-	data, err := os.ReadFile("client/index.html")
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("failed to read index.html"))
 
 		return
 	}

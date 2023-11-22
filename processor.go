@@ -10,6 +10,7 @@ import (
 
 	"app/ai"
 	"app/api"
+	"app/char"
 	"app/conns"
 	"app/db"
 	"app/slg"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/go-audio/wav"
 	lua "github.com/yuin/gopher-lua"
+	"golang.org/x/exp/maps"
 )
 
 type LuaConfig struct {
@@ -73,6 +75,7 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		cancel()
 	}()
 
+	charNameToCard := make(map[string][]byte, 10)
 	twitchRewardIDToRewardID := make(map[string]string, 5)
 
 	userData, err := db.GetUserData(user)
@@ -87,9 +90,18 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		} else {
 			slg.GetSlog(ctx).Info("failed to get rewards", "err", err)
 		}
+
+		cards, err := db.GetAllCards(userData.ID)
+		if err == nil {
+			for _, card := range cards {
+				charNameToCard[card.CharName] = card.Card
+			}
+		} else {
+			slg.GetSlog(ctx).Info("failed to get char cards", "err", err)
+		}
 	}
 
-	slg.GetSlog(ctx).Info("got rewards", "rewards", twitchRewardIDToRewardID)
+	slg.GetSlog(ctx).Info("got from db", "rewards", twitchRewardIDToRewardID, "cards", maps.Keys(charNameToCard))
 
 	settings, err := db.GetDbSettings(user)
 	if err != nil {
@@ -130,6 +142,36 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	}
 
 	twitchChatCh := twitch.MessagesFetcher(ctx, user)
+
+	luaState.SetGlobal("get_char_cards", luaState.NewFunction(func(l *lua.LState) int {
+		arrTbl := l.NewTable()
+
+		for charName, card := range charNameToCard {
+			parsedCard, err := char.FromPngSillyTavernCard(card)
+			if err != nil {
+				slg.GetSlog(ctx).Error("failed to parse card", "err", err)
+				continue
+			}
+
+			cardTbl := l.NewTable()
+
+			cardTbl.RawSetString("name", lua.LString(charName))
+			cardTbl.RawSetString("char_name", lua.LString(parsedCard.Name))
+			cardTbl.RawSetString("description", lua.LString(parsedCard.Description))
+			cardTbl.RawSetString("personality", lua.LString(parsedCard.Personality))
+			cardTbl.RawSetString("first_message", lua.LString(parsedCard.FirstMessage))
+			cardTbl.RawSetString("message_example", lua.LString(parsedCard.MessageExample))
+			cardTbl.RawSetString("scenario", lua.LString(parsedCard.Scenario))
+			cardTbl.RawSetString("system_prompt", lua.LString(parsedCard.SystemPrompt))
+			cardTbl.RawSetString("post_history_instructions", lua.LString(parsedCard.PostHistoryInstructions))
+
+			arrTbl.Append(cardTbl)
+		}
+
+		l.Push(arrTbl)
+
+		return 1
+	}))
 
 	luaState.SetGlobal("ai", luaState.NewFunction(func(l *lua.LState) int {
 		request := l.Get(1).String()

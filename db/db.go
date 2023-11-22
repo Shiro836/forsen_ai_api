@@ -2,10 +2,12 @@ package db
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
@@ -233,6 +235,10 @@ func GetRewards(userID int) ([]Reward, error) {
 		rewards = append(rewards, nextReward)
 	}
 
+	if row.Err() != nil {
+		return nil, fmt.Errorf("get rewards scan err: %w", err)
+	}
+
 	return rewards, nil
 }
 
@@ -410,4 +416,63 @@ func UpdateDbWhitelist(upd *WhitelistUpdate, adder string) error {
 			return nil
 		}
 	}
+}
+
+type Card struct {
+	CharName string
+	Card     []byte
+}
+
+func GetAllCards(userID int) ([]*Card, error) {
+	rows, err := db.Query(`
+	select char_name, card from char_cards
+	where user_id = $1
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all char cards: %w", err)
+	}
+
+	cards := make([]*Card, 0, 10)
+
+	var charName, cardStr string
+	for rows.Next() {
+		if err := rows.Scan(&charName, &cardStr); err != nil {
+			return nil, fmt.Errorf("failed to scan all char cards: %w", err)
+		} else if cardData, err := base64.StdEncoding.DecodeString(cardStr); err != nil {
+			slog.Error("corrupted card", "err", err)
+		} else {
+			cards = append(cards, &Card{
+				CharName: charName,
+				Card:     cardData,
+			})
+		}
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("failed to scan all char cards: %w", err)
+	}
+
+	return cards, nil
+}
+
+func AddCharCard(userID int, charName string, cardData []byte) error {
+	if _, err := db.Exec(`
+	insert into char_cards(
+		user_id,
+		char_name,
+		card
+	) values (
+		$1,
+		$2,
+		$3
+	)
+	`,
+		userID,
+		charName,
+		base64.StdEncoding.EncodeToString(cardData),
+	); err != nil {
+		return fmt.Errorf("failed to insert char card: %w", err)
+	}
+
+	return nil
 }
