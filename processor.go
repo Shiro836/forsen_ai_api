@@ -10,7 +10,6 @@ import (
 
 	"app/ai"
 	"app/api"
-	"app/char"
 	"app/conns"
 	"app/db"
 	"app/slg"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/go-audio/wav"
 	lua "github.com/yuin/gopher-lua"
-	"golang.org/x/exp/maps"
 )
 
 type LuaConfig struct {
@@ -62,6 +60,11 @@ func sleepForAudioLen(wavData []byte) {
 func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) error {
 	ctx, cancel := context.WithCancel(ctx)
 
+	eventWriter(&conns.DataEvent{
+		EventType: conns.EventTypeText,
+		EventData: []byte("start"),
+	})
+
 	defer func() {
 		cancel()
 		if r := recover(); r != nil {
@@ -75,7 +78,7 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		cancel()
 	}()
 
-	charNameToCard := make(map[string][]byte, 10)
+	//charNameToCard := make(map[string][]byte, 10)
 	twitchRewardIDToRewardID := make(map[string]string, 5)
 
 	userData, err := db.GetUserData(user)
@@ -91,17 +94,20 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 			slg.GetSlog(ctx).Info("failed to get rewards", "err", err)
 		}
 
-		cards, err := db.GetAllCards(userData.ID)
-		if err == nil {
-			for _, card := range cards {
-				charNameToCard[card.CharName] = card.Card
-			}
-		} else {
-			slg.GetSlog(ctx).Info("failed to get char cards", "err", err)
-		}
+		// cards, err := db.GetAllCards(userData.ID)
+		// if err == nil {
+		// 	for _, card := range cards {
+		// 		charNameToCard[card.CharName] = card.Card
+		// 	}
+		// } else {
+		// 	slg.GetSlog(ctx).Info("failed to get char cards", "err", err)
+		// }
 	}
 
-	slg.GetSlog(ctx).Info("got from db", "rewards", twitchRewardIDToRewardID, "cards", maps.Keys(charNameToCard))
+	slg.GetSlog(ctx).Info("got from db",
+		"rewards", twitchRewardIDToRewardID,
+		// "cards", maps.Keys(charNameToCard),
+	)
 
 	settings, err := db.GetDbSettings(user)
 	if err != nil {
@@ -120,8 +126,6 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		SkipOpenLibs:        true,
 		IncludeGoStackTrace: true,
 	})
-
-	luaState.SetGlobal("broadcaster", lua.LString(user))
 
 	for _, pair := range []struct {
 		n string
@@ -143,125 +147,29 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 
 	twitchChatCh := twitch.MessagesFetcher(ctx, user)
 
-	luaState.SetGlobal("get_char_cards", luaState.NewFunction(func(l *lua.LState) int {
-		arrTbl := l.NewTable()
+	luaState.SetGlobal("broadcaster", lua.LString(user))
+	luaState.SetGlobal("get_char_card", luaGetCharCard(ctx, luaState))
+	// luaState.SetGlobal("get_char_cards", luaGetAllCharCards(ctx, luaState, charNameToCard))
+	luaState.SetGlobal("ai", p.luaAi(ctx, luaState))
+	luaState.SetGlobal("text", luaText(luaState, eventWriter))
+	luaState.SetGlobal("tts", p.luaTts(ctx, luaState, eventWriter))
+	luaState.SetGlobal("get_next_event", luaGetNextEvent(ctx, luaState, twitchChatCh, twitchRewardIDToRewardID))
 
-		for charName, card := range charNameToCard {
-			parsedCard, err := char.FromPngSillyTavernCard(card)
-			if err != nil {
-				slg.GetSlog(ctx).Error("failed to parse card", "err", err)
-				continue
-			}
+	if err := luaState.DoString(settings.LuaScript); err != nil {
+		if ctx.Err() != nil {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte("end"),
+			})
 
-			cardTbl := l.NewTable()
-
-			cardTbl.RawSetString("name", lua.LString(charName))
-			cardTbl.RawSetString("char_name", lua.LString(parsedCard.Name))
-			cardTbl.RawSetString("description", lua.LString(parsedCard.Description))
-			cardTbl.RawSetString("personality", lua.LString(parsedCard.Personality))
-			cardTbl.RawSetString("first_message", lua.LString(parsedCard.FirstMessage))
-			cardTbl.RawSetString("message_example", lua.LString(parsedCard.MessageExample))
-			cardTbl.RawSetString("scenario", lua.LString(parsedCard.Scenario))
-			cardTbl.RawSetString("system_prompt", lua.LString(parsedCard.SystemPrompt))
-			cardTbl.RawSetString("post_history_instructions", lua.LString(parsedCard.PostHistoryInstructions))
-
-			arrTbl.Append(cardTbl)
+			return nil
 		}
-
-		l.Push(arrTbl)
-
-		return 1
-	}))
-
-	luaState.SetGlobal("ai", luaState.NewFunction(func(l *lua.LState) int {
-		request := l.Get(1).String()
-
-		aiResponse, err := p.ai.Ask(ctx, 0, request)
-		if err != nil {
-			l.Push(lua.LString("ai request error: " + err.Error()))
-			return 1
-		}
-
-		l.Push(lua.LString(aiResponse))
-		return 1
-	}))
-
-	luaState.SetGlobal("text", luaState.NewFunction(func(l *lua.LState) int {
-		request := l.Get(1).String()
 
 		eventWriter(&conns.DataEvent{
 			EventType: conns.EventTypeText,
-			EventData: []byte(request),
+			EventData: []byte("lua exec err: " + err.Error()),
 		})
 
-		return 0
-	}))
-
-	luaState.SetGlobal("tts_no_sleep", luaState.NewFunction(func(l *lua.LState) int {
-		request := l.Get(1).String()
-
-		ttsResponse, err := p.tts.TTS(ctx, request, nil)
-		if err != nil {
-			l.Push(lua.LString("tts request error: " + err.Error()))
-			return 1
-		}
-
-		eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeAudio,
-			EventData: ttsResponse,
-		})
-
-		return 0
-	}))
-
-	luaState.SetGlobal("tts", luaState.NewFunction(func(l *lua.LState) int {
-		request := l.Get(1).String()
-
-		ttsResponse, err := p.tts.TTS(ctx, request, nil)
-		if err != nil {
-			l.Push(lua.LString("tts request error: " + err.Error()))
-			return 1
-		}
-
-		if eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeAudio,
-			EventData: ttsResponse,
-		}) {
-			sleepForAudioLen(ttsResponse)
-		}
-
-		return 0
-	}))
-
-	luaState.SetGlobal("get_next_event", luaState.NewFunction(func(l *lua.LState) int {
-		select {
-		case msg := <-twitchChatCh:
-			slg.GetSlog(ctx).Info("recieved", "msg", msg)
-			if len(msg.CustomRewardID) != 0 {
-				if rewardID, ok := twitchRewardIDToRewardID[msg.CustomRewardID]; ok {
-					slg.GetSlog(ctx).Info("converted reward", "new_reward", rewardID)
-
-					l.Push(lua.LString(msg.UserName))
-					l.Push(lua.LString(msg.Message))
-					l.Push(lua.LString(rewardID))
-
-					return 3
-				}
-			} else {
-				l.Push(lua.LString(msg.UserName))
-				l.Push(lua.LString(msg.Message))
-				l.Push(lua.LString(msg.CustomRewardID))
-
-				return 3
-			}
-		case <-ctx.Done():
-			return 0
-		}
-
-		return 0
-	}))
-
-	if err := luaState.DoString(settings.LuaScript); err != nil {
 		return fmt.Errorf("lua execution err: %w", err)
 	}
 

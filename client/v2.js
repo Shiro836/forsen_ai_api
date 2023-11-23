@@ -66,7 +66,7 @@ async function pageReady() {
       log(data)
       switch (data.type) {
         case 'text':
-          document.getElementById("text").innerHTML=data.text;
+          document.getElementById("text").innerText=data.data;
           break
         case 'audio':
           playWavFile(base64ToArrayBuffer(data.data))

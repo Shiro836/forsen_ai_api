@@ -22,6 +22,7 @@ type Manager struct {
 
 	subCount       map[string]int
 	dataStreams    map[string][]chan *DataEvent
+	isClosed       map[string][]bool
 	updateEventsCh map[string]chan struct{}
 }
 
@@ -35,6 +36,7 @@ func NewConnectionManager(ctx context.Context, processor Processor) *Manager {
 
 		subCount:       make(map[string]int, 100),
 		dataStreams:    make(map[string][]chan *DataEvent, 100),
+		isClosed:       make(map[string][]bool, 100),
 		updateEventsCh: make(map[string]chan struct{}, 100),
 	}
 }
@@ -87,6 +89,7 @@ func (m *Manager) Subscribe(user string) (<-chan *DataEvent, func()) {
 	m.subCount[user]++
 
 	m.dataStreams[user] = append(m.dataStreams[user], make(chan *DataEvent))
+	m.isClosed[user] = append(m.isClosed[user], false)
 
 	ind := len(m.dataStreams[user]) - 1
 
@@ -97,8 +100,10 @@ func (m *Manager) Subscribe(user string) (<-chan *DataEvent, func()) {
 		m.subCount[user]--
 
 		close(m.dataStreams[user][ind])
+		m.isClosed[user][ind] = true
 		if m.subCount[user] == 0 {
 			delete(m.dataStreams, user)
+			delete(m.isClosed, user)
 		}
 	}
 }
@@ -119,6 +124,11 @@ loop:
 			func() {
 				m.rwMutex.RLock()
 				defer m.rwMutex.RUnlock()
+
+				if m.isClosed[user][i] {
+					cont_loop = true
+					return
+				}
 
 				select {
 				case m.dataStreams[user][i] <- event:
@@ -193,7 +203,7 @@ func (m *Manager) HandleUser(user *db.Human) {
 						break loop
 					}
 					slg.GetSlog(ctx).Error("processor Process error", "err", err)
-					time.Sleep(time.Second)
+					time.Sleep(2 * time.Second)
 				}
 			}
 		}()

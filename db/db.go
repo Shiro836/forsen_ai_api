@@ -476,3 +476,57 @@ func AddCharCard(userID int, charName string, cardData []byte) error {
 
 	return nil
 }
+
+func GetCharCard(charName string) (*Card, error) {
+	var cardStr string
+
+	row := db.QueryRow(`
+	select card from char_cards
+	where char_name = $1
+	`, charName)
+	if err := row.Scan(&cardStr); err != nil {
+		return nil, fmt.Errorf("failed to get char card: %w", err)
+	} else if card, err := base64.StdEncoding.DecodeString(cardStr); err != nil {
+		return nil, fmt.Errorf("failed to decode char card: %w", err)
+	} else {
+		return &Card{
+			CharName: charName,
+			Card:     card,
+		}, nil
+	}
+}
+
+func AddVoice(charName string, voice []byte) error {
+	if _, err := db.Exec(`
+	insert into voices(
+		char_name,
+		voice
+	) values (
+		$1,
+		$2
+	)
+	`,
+		charName,
+		base64.StdEncoding.EncodeToString(voice),
+	); err != nil {
+		return fmt.Errorf("failed to insert voice: %w", err)
+	}
+
+	return nil
+}
+
+func GetVoice(charName string) ([]byte, error) {
+	var voiceStr string
+
+	row := db.QueryRow(`
+	select voice from voices
+	where char_name = $1
+	`, charName)
+	if err := row.Scan(&voiceStr); err != nil {
+		return nil, fmt.Errorf("failed to get char card: %w", err)
+	} else if voice, err := base64.StdEncoding.DecodeString(voiceStr); err != nil {
+		return nil, fmt.Errorf("failed to decode char card: %w", err)
+	} else {
+		return voice, nil
+	}
+}

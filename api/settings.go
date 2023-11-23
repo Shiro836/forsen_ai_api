@@ -100,18 +100,25 @@ end
 
 function ask(request)
 	local ai_resp = ai("PROMPT: " .. request .. " FORSEN: ")
-	tts(user .. " asked me: " .. request)
+	local say1 = user .. " asked me: " .. request
+
+	text(say1)
+	tts(say1)
+	text(ai_resp)
 	tts(ai_resp)
 end
 
 while true do
 	user, msg, reward_id = get_next_event()
 	if reward_id == "tts" then
+		text(msg)
 		tts(msg)
 	elseif reward_id == "ask" then
 		ask(msg)
 	elseif startswith(msg, "!tts ") then
-		tts(string.sub(msg, 6, #msg))
+		local say1 = string.sub(msg, 6, #msg)
+		text(say1)
+		tts(say1)
 	elseif startswith(msg, "!ask ") then
 		ask(string.sub(msg, 6, #msg))
 	end

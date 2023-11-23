@@ -39,23 +39,30 @@ func New(httpClient HTTPClient, cfg *Config) *Client {
 type ttsReq struct {
 	Text     string `json:"text"`
 	RefAudio string `json:"ref_audio"`
+
+	Alpha float64 `json:"alpha"`
+	Beta  float64 `json:"beta"`
+
+	EmbeddingScale int `json:"embedding_scale"`
 }
 
 type ttsResp struct {
 	Audio string `json:"audio"`
 }
 
-//go:embed forsen_4.wav
-var forsenRef []byte
-
 func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
 	if refAudio == nil {
-		refAudio = forsenRef
+		return nil, fmt.Errorf("no audio provided")
 	}
 
 	req := &ttsReq{
 		Text:     msg,
 		RefAudio: base64.StdEncoding.EncodeToString(refAudio),
+
+		Alpha: 0.1,
+		Beta:  0.2,
+
+		EmbeddingScale: 1,
 	}
 
 	data, err := json.Marshal(&req)

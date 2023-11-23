@@ -93,8 +93,9 @@ func main() {
 	signal.Notify(stop, os.Interrupt)
 
 	srv := &http.Server{
-		Addr:    ":" + strconv.Itoa(cfg.Api.Port),
-		Handler: router,
+		Addr:           ":" + strconv.Itoa(cfg.Api.Port),
+		Handler:        router,
+		MaxHeaderBytes: 20971520,
 	}
 
 	wg := sync.WaitGroup{}

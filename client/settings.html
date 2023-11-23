@@ -65,7 +65,7 @@ var editor;
             document.getElementById("update_whitelist_result").innerText = xhr.responseText
         }
 
-        function handleSubmit(event) {
+        function handleSubmitCard(event) {
             const form = event.currentTarget;
             const url = new URL(form.action) + "/" + document.getElementById("char_name").value;
             const formData = new FormData(form);
@@ -80,6 +80,25 @@ var editor;
                 .then(response => response.text())
                 .then(data => {
                     document.getElementById("upload_card_result").innerText = data
+                })
+
+            event.preventDefault();
+        }
+        function handleSubmitVoice(event) {
+            const form = event.currentTarget;
+            const url = new URL(form.action) + "/" + document.getElementById("voice_char_name").value;
+            const formData = new FormData(form);
+            const searchParams = new URLSearchParams(formData);
+
+            const fetchOptions = {
+                method: form.method,
+                body: formData,
+            };
+
+            fetch(url, fetchOptions)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById("upload_voice_result").innerText = data
                 })
 
             event.preventDefault();
@@ -117,9 +136,18 @@ var editor;
     </form>
     <div id="upload_card_result"></div>
     <h3>You can then reference this card in lua code under the name you set above.</h3>
+    <div><input type="voice_char_name" id="voice_char_name"name="voice_char_name"/><label for="voice_char_name">Character Name</label></div>
+    <form id="upload_voice" action="/upload_voice" method="post" enctype="multipart/form-data">
+        <label for="file">File</label>
+        <input id="file" name="file" type="file" />
+        <button>Upload</button>
+    </form>
+    <div id="upload_voice_result"></div>
     <script>
         upload_char_form = document.getElementById('upload_card');
-        upload_char_form.addEventListener('submit', handleSubmit);
+        upload_char_form.addEventListener('submit', handleSubmitCard);
+        upload_voice_form = document.getElementById('upload_voice');
+        upload_voice_form.addEventListener('submit', handleSubmitVoice);
         loadSettings()
     </script>
     <br>

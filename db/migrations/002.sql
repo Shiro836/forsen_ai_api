@@ -25,3 +25,13 @@ create table if not exists reward_ids (
 
 create index if not exists reward_ids_reward_id on reward_ids(reward_id);
 create index if not exists reward_ids_twitch_reward_id on reward_ids(twitch_reward_id);
+
+create table if not exists voices (
+    id integer primary key autoincrement null,
+    char_name text not null,
+    voice text not null,
+
+    unique(char_name)
+);
+
+create index if not exists voices_char_name on voices(char_name);
