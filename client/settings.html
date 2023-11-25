@@ -135,7 +135,8 @@ var editor;
         <button>Upload</button>
     </form>
     <div id="upload_card_result"></div>
-    <h3>You can then reference this card in lua code under the name you set above.</h3>
+    <h3>After uploading you can reference this card in lua code under the name you set above.<br>megumin = get_char_card("megumin")<br>text(megumin.name)</h3>
+    <h3>Add a voice for a TTS. Audio must be without music, without long pauses. You can use <a href="https://vocalremover.org/">vocalremover.org</a> to remove music and same site to cut it. </h3>
     <div><input type="voice_char_name" id="voice_char_name"name="voice_char_name"/><label for="voice_char_name">Character Name</label></div>
     <form id="upload_voice" action="/upload_voice" method="post" enctype="multipart/form-data">
         <label for="file">File</label>
@@ -143,6 +144,7 @@ var editor;
         <button>Upload</button>
     </form>
     <div id="upload_voice_result"></div>
+    <h3>After uploading you can use this voice in tts in lua code under the name you set above.<br>tts("megumin", "You will be exhausted from all the explosions we will do together this night.")</h3>
     <script>
         upload_char_form = document.getElementById('upload_card');
         upload_char_form.addEventListener('submit', handleSubmitCard);
