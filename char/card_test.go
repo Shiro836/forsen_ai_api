@@ -10,7 +10,7 @@ import (
 	_ "embed"
 )
 
-//go:embed test_cards/forsen.png
+//go:embed test_cards/gordon.png
 var pngCard []byte
 
 func TestFromSillyTavernCard(t *testing.T) {

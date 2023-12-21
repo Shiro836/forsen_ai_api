@@ -38,8 +38,8 @@ func (c *Client) Ask(ctx context.Context, min_tokens int, prompt string) (string
 		TopP:      0.95,
 		Stop:      []string{"###"},
 
-		Temperature:      0.7,
-		FrequencyPenalty: 0.7,
+		Temperature:      0.5,
+		FrequencyPenalty: 0.9,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to do ai request: %w", err)

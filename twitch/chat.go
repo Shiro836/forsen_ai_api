@@ -14,7 +14,7 @@ type ChatMessage struct {
 }
 
 func MessagesFetcher(ctx context.Context, user string) chan *ChatMessage {
-	ch := make(chan *ChatMessage, 3)
+	ch := make(chan *ChatMessage, 200)
 
 	go func() {
 		defer close(ch)

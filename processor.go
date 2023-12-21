@@ -12,6 +12,7 @@ import (
 	"app/api"
 	"app/conns"
 	"app/db"
+	"app/rvc"
 	"app/slg"
 	"app/tts"
 	"app/twitch"
@@ -28,16 +29,18 @@ type LuaConfig struct {
 type Processor struct {
 	luaCfg *LuaConfig
 
+	rvc *rvc.Client
 	ai  *ai.Client
 	tts *tts.Client
 }
 
-func NewProcessor(luaCfg *LuaConfig, ai *ai.Client, tts *tts.Client) *Processor {
+func NewProcessor(luaCfg *LuaConfig, ai *ai.Client, tts *tts.Client, rvc *rvc.Client) *Processor {
 	return &Processor{
 		luaCfg: luaCfg,
 
 		ai:  ai,
 		tts: tts,
+		rvc: rvc,
 	}
 }
 

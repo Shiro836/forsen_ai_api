@@ -114,15 +114,15 @@ type sillyTavernCard struct {
 	Personality  string `json:"personality"`
 	FirstMessage string `json:"first_mes"`
 	// Avatar       string // how should it look like?
-	MessageExample          string   `json:"mes_example"`
-	Scenario                string   `json:"scenario"`
-	CreatorNotes            string   `json:"creator_notes"`
-	SystemPrompt            string   `json:"system_prompt"`
-	PostHistoryInstructions string   `json:"post_history_instructions"`
-	AlternateGreetings      []string `json:"alternate_greetings"`
-	Tags                    []string `json:"tags"`
-	Creator                 string   `json:"creator"`
-	CharacterVersion        string   `json:"character_version"`
+	MessageExample          string `json:"mes_example"`
+	Scenario                string `json:"scenario"`
+	CreatorNotes            string `json:"creator_notes"`
+	SystemPrompt            string `json:"system_prompt"`
+	PostHistoryInstructions string `json:"post_history_instructions"`
+	//AlternateGreetings      []string `json:"alternate_greetings"`
+	Tags             []string `json:"tags"`
+	Creator          string   `json:"creator"`
+	CharacterVersion string   `json:"character_version"`
 	// Extensions              extensions `json:"extensions"`
 	CharacterBook struct {
 		Name              string     `json:"character_book"`

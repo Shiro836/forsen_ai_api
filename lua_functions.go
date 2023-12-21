@@ -100,6 +100,15 @@ func luaText(luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction
 	})
 }
 
+func (p *Processor) rvcVoice(ttsResponse []byte, voice string) ([]byte, error) {
+	switch voice {
+	case "megumin":
+		return p.rvc.Rvc(context.Background(), "megumin", ttsResponse)
+	default:
+		return ttsResponse, nil
+	}
+}
+
 func (p *Processor) luaTts(ctx context.Context, luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
 		voice := l.Get(1).String()
@@ -107,13 +116,18 @@ func (p *Processor) luaTts(ctx context.Context, luaState *lua.LState, eventWrite
 
 		if voiceFile, err := db.GetVoice(voice); err != nil {
 			eventWriter(&conns.DataEvent{
-				EventType: conns.EventTypeAudio,
+				EventType: conns.EventTypeText,
 				EventData: []byte("failed to get voice from db: " + err.Error()),
 			})
 		} else if ttsResponse, err := p.tts.TTS(ctx, request, voiceFile); err != nil {
 			eventWriter(&conns.DataEvent{
-				EventType: conns.EventTypeAudio,
+				EventType: conns.EventTypeText,
 				EventData: []byte("failed to tts: " + err.Error()),
+			})
+		} else if ttsResponse, err = p.rvcVoice(ttsResponse, voice); err != nil {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte("failed to rvc: " + err.Error()),
 			})
 		} else if eventWriter(&conns.DataEvent{
 			EventType: conns.EventTypeAudio,

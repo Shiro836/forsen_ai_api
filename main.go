@@ -5,6 +5,7 @@ import (
 	"app/api"
 	"app/conns"
 	"app/db"
+	"app/rvc"
 	"app/slg"
 	"app/swearfilter"
 	"app/tts"
@@ -76,10 +77,11 @@ func main() {
 
 	ctx = slg.WithSlog(ctx, slogLogger)
 
+	rvc := rvc.New(httpClient, &cfg.Rvc)
 	ai := ai.New(httpClient, &cfg.AI)
 	tts := tts.New(httpClient, &cfg.TTS)
 
-	processor := NewProcessor(&cfg.Lua, ai, tts)
+	processor := NewProcessor(&cfg.Lua, ai, tts, rvc)
 
 	connManager := conns.NewConnectionManager(ctx, processor)
 
