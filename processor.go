@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"app/ai"
@@ -130,6 +131,21 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		IncludeGoStackTrace: true,
 	})
 
+	closeOnce := sync.Once{}
+
+	defer func() {
+		closeOnce.Do(func() {
+			luaState.Close()
+		})
+	}()
+
+	go func() {
+		<-ctx.Done()
+		closeOnce.Do(func() {
+			luaState.Close()
+		})
+	}()
+
 	for _, pair := range []struct {
 		n string
 		f lua.LGFunction
@@ -157,6 +173,7 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	luaState.SetGlobal("text", luaText(luaState, eventWriter))
 	luaState.SetGlobal("tts", p.luaTts(ctx, luaState, eventWriter))
 	luaState.SetGlobal("get_next_event", luaGetNextEvent(ctx, luaState, twitchChatCh, twitchRewardIDToRewardID))
+	luaState.SetGlobal("set_model", luaSetModel(ctx, luaState, eventWriter))
 
 	if err := luaState.DoString(settings.LuaScript); err != nil {
 		if ctx.Err() != nil {

@@ -14,7 +14,7 @@ type ChatMessage struct {
 }
 
 func MessagesFetcher(ctx context.Context, user string) chan *ChatMessage {
-	ch := make(chan *ChatMessage, 200)
+	ch := make(chan *ChatMessage, 1000)
 
 	go func() {
 		defer close(ch)
@@ -31,7 +31,7 @@ func MessagesFetcher(ctx context.Context, user string) chan *ChatMessage {
 
 			select {
 			case ch <- &ChatMessage{
-				UserName:       message.User.DisplayName,
+				UserName:       message.User.Name,
 				Message:        message.Message,
 				CustomRewardID: message.CustomRewardID,
 			}:

@@ -1,3 +1,7 @@
+// import { Application } from '@pixi/app';
+// import { Live2DModel } from 'cubism4';
+// const live2d = require('pixi-live2d-display/cubism4');
+
 let serverConnection;
 let audioContext;
 
@@ -22,8 +26,94 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+PIXI.live2d.ZipLoader.zipReader = (data, url) => JSZip.loadAsync(data);
+
+PIXI.live2d.ZipLoader.readText = (jsZip, path) => {
+    const file = jsZip.file(path);
+
+    if (!file) {
+        throw new Error('Cannot find file: ' + path);
+    }
+
+    return file.async('text');
+};
+
+PIXI.live2d.ZipLoader.getFilePaths = (jsZip) => {
+    const paths = [];
+
+    jsZip.forEach(relativePath => paths.push(relativePath));
+
+    return Promise.resolve(paths);
+};
+
+PIXI.live2d.ZipLoader.getFiles = (jsZip, paths) =>
+    Promise.all(paths.map(
+        async path => {
+            const fileName = path.slice(path.lastIndexOf('/') + 1);
+
+            const blob = await jsZip.file(path).async('blob');
+
+            return new File([blob], fileName);
+        }));
+
+PIXI.live2d.SoundManager.volume = 0.0;
+
 async function pageReady() {
-  video = document.getElementById('video');
+  const canvas = document.getElementById('canvas')
+
+  const app = new PIXI.Application({
+      view: canvas,
+      autoResize: true,
+      width: 800,
+      height: 600,
+      backgroundColor: '#0000ff'
+  });
+
+  model_proxy = null
+  model_url = null
+
+  function remove_model() {
+    app.stage.removeChildren()
+
+    model_proxy.destroy()
+
+    model_proxy = null
+    model_url = null
+  }
+
+  async function set_model_on_stage_url(url) {
+    if (model_url === url) {
+      return
+    }
+    app.stage.removeChildren()
+    
+    const model = await PIXI.live2d.Live2DModel.from('zip://' + url);
+    model_proxy = model
+    model_url = url
+    log(model)
+
+    model.x = 400;
+    model.y = 550;
+    model.anchor.set(0.5, 0.5);
+    // model.position.y = (canvas.height / 2) - (model.height / 2);
+  
+    model.scale.set(0.25);
+    // model.x = 150;
+  
+    app.stage.addChild(model);
+  }
+
+  function model_motion(category, index) {
+    if (model_proxy != null) {
+      model_proxy.motion(category, index, 2)
+    }
+  }
+
+  async function play_model_audio(url) {
+    if (model_proxy != null) {
+      model_proxy.speak(url)
+    }
+  }
 
   audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate:24000});
 
@@ -53,6 +143,42 @@ async function pageReady() {
       }, 1000);
     };
 
+    const models = new Map();
+
+    function set_model(char_name) {
+      if (char_name === '') {
+        remove_model()
+        return
+      }
+      set_model_on_stage_url('/get_model/'+char_name)
+      return
+
+      if (models.has(char_name)) {
+        log(char_name + ' is in cache')
+        set_model_on_stage(models.get(char_name))
+        return
+      }
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("GET", "/get_model/" + char_name, true);
+      xhr.onload = (e) => {
+        if (xhr.readyState === 4) {
+          if (xhr.status === 200) {
+            model = base64ToArrayBuffer(xhr.response);
+            models.set(char_name, model);
+            log('cached ' + char_name)
+            set_model_on_stage(model)
+          } else {
+            log('get_model err - ' + xhr.statusText);
+          }
+        }
+      };
+      xhr.onerror = (e) => {
+        console.error(xhr.statusText);
+      };
+      xhr.send(null);
+    }
+
     ws.onmessage = function (event) {
       log(event.data)
 
@@ -69,7 +195,29 @@ async function pageReady() {
           document.getElementById("text").innerText=data.data;
           break
         case 'audio':
-          playWavFile(base64ToArrayBuffer(data.data))
+          // model_motion("00_Anger_01", 0)
+          rawAudio = base64ToArrayBuffer(data.data)
+          // var rawAudioCopy = new ArrayBuffer(rawAudio.byteLength);
+          // new Uint8Array(rawAudioCopy).set(new Uint8Array(rawAudio));
+
+          if (model_proxy === null) {
+            playWavFile(rawAudio)
+            break
+          }
+
+          const dataArray = new Uint8Array(rawAudio);
+
+          const blob = new Blob([dataArray], { type: 'audio/wav' });
+
+          const blobUrl = URL.createObjectURL(blob);
+          play_model_audio(blobUrl)
+          // PIXI.live2d.SoundManager.play(new Audio(blobUrl))
+          break
+        case 'model':
+          set_model(data.data)
+          break
+        case 'image':
+          set_model(data.data)
           break
         default:
           log('unknown type')
@@ -79,6 +227,9 @@ async function pageReady() {
   }
 
   connect();
+  // set_model_on_stage_url('/get_model/'+"megumin")
+  // 00_Anger_01
+  // setTimeout(function() { model_motion("", 20); }, 1000);
 }
 
 function log(error) {

@@ -144,7 +144,7 @@ function gradual_tts(voice, msg)
   local sentences = splitTextIntoSentences(msg)
  
     total = ""
-  
+
     for i, sentence in ipairs(sentences) do
       total=total..sentence
       text(total)
@@ -155,13 +155,14 @@ function gradual_tts(voice, msg)
 end
 
 function ask(voice, card, request)
-    prefix = prep_card(card, user)
+  prefix = prep_card(card, user)
 
   local ai_resp = ai(prefix .. " ###" .. user.. ": " .. request .. " ###" .. card.name .. ": ")
   local say1 = user .. " asked me: " .. request
 
   gradual_tts(voice, say1)
   gradual_tts(voice, ai_resp)
+  text(" ")
 end
 
 function discuss(card1, card2, voice1, voice2, theme, times)
@@ -183,6 +184,7 @@ function discuss(card1, card2, voice1, voice2, theme, times)
 end
 
 forsen = get_char_card("forsen")
+forsen2 = get_char_card("forsen2")
 kazuma = get_char_card("kazuma")
 megumin = get_char_card("megumin")
 neuro = get_char_card("neuro")
@@ -191,13 +193,20 @@ biden = get_char_card("biden")
 trump = get_char_card("trump")
 daphne_greengrass = get_char_card("daphne_greengrass")
 harry_potter = get_char_card("harry_potter")
+jesus = get_char_card("jesus")
+adolf = get_char_card("adolf")
+horse_cock = get_char_card("horse_cock")
+gura = get_char_card("gura")
+wiz = get_char_card("wiz")
+aqua2 = get_char_card("aqua2")
+darkness = get_char_card("darkness")
 
 while true do
   user, msg, reward_id = get_next_event()
   if reward_id == "tts forsen" then
     gradual_tts("forsen", msg)
   elseif reward_id == "ask forsen" then
-    ask("forsen", forsen, msg)
+    ask("forsen", forsen2, msg)
   elseif reward_id == "ask neuro" then
     ask("neuro", neuro, msg)
   elseif reward_id == "ask megumin" then
@@ -214,6 +223,10 @@ while true do
     ask("daphne_greengrass", daphne_greengrass, msg)
   elseif reward_id == "ask harry_potter" then
     ask("harry_potter", harry_potter, msg)
+  elseif reward_id == "ask jesus" then
+    ask("jesus", jesus, msg)
+  elseif reward_id == "ask gura" then
+    ask("gura", gura, msg)
   end
 end
 `

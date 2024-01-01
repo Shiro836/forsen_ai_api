@@ -169,3 +169,16 @@ func luaGetNextEvent(ctx context.Context, luaState *lua.LState, twitchChatCh cha
 		return 0
 	})
 }
+
+func luaSetModel(ctx context.Context, luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
+	return luaState.NewFunction(func(l *lua.LState) int {
+		model := l.Get(1).String()
+
+		eventWriter(&conns.DataEvent{
+			EventType: conns.EventTypeSetModel,
+			EventData: []byte(model),
+		})
+
+		return 0
+	})
+}

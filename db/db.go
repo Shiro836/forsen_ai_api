@@ -523,10 +523,45 @@ func GetVoice(charName string) ([]byte, error) {
 	where char_name = $1
 	`, charName)
 	if err := row.Scan(&voiceStr); err != nil {
-		return nil, fmt.Errorf("failed to get char card: %w", err)
+		return nil, fmt.Errorf("failed to get voice: %w", err)
 	} else if voice, err := base64.StdEncoding.DecodeString(voiceStr); err != nil {
-		return nil, fmt.Errorf("failed to decode char card: %w", err)
+		return nil, fmt.Errorf("failed to decode voice: %w", err)
 	} else {
 		return voice, nil
+	}
+}
+
+func AddModel(charName string, model []byte) error {
+	if _, err := db.Exec(`
+	insert into live2dmodels(
+		char_name,
+		model
+	) values (
+		$1,
+		$2
+	)
+	`,
+		charName,
+		base64.StdEncoding.EncodeToString(model),
+	); err != nil {
+		return fmt.Errorf("failed to insert model: %w", err)
+	}
+
+	return nil
+}
+
+func GetModel(charName string) ([]byte, error) {
+	var modelStr string
+
+	row := db.QueryRow(`
+	select model from live2dmodels
+	where char_name = $1
+	`, charName)
+	if err := row.Scan(&modelStr); err != nil {
+		return nil, fmt.Errorf("failed to get model: %w", err)
+	} else if model, err := base64.StdEncoding.DecodeString(modelStr); err != nil {
+		return nil, fmt.Errorf("failed to decode model: %w", err)
+	} else {
+		return model, nil
 	}
 }

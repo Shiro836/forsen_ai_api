@@ -103,6 +103,25 @@ var editor;
 
             event.preventDefault();
         }
+        function handleSubmitModel(event) {
+            const form = event.currentTarget;
+            const url = new URL(form.action) + "/" + document.getElementById("model_char_name").value;
+            const formData = new FormData(form);
+            const searchParams = new URLSearchParams(formData);
+
+            const fetchOptions = {
+                method: form.method,
+                body: formData,
+            };
+
+            fetch(url, fetchOptions)
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById("upload_model_result").innerText = data
+                })
+
+            event.preventDefault();
+        }
     </script>
 </head>
 <body>
@@ -145,11 +164,21 @@ var editor;
     </form>
     <div id="upload_voice_result"></div>
     <h3>After uploading you can use this voice in tts in lua code under the name you set above.<br>tts("megumin", "You will be exhausted from all the explosions we will do together this night.")</h3>
+    <h3>Add a live2d model - must be a .zip file with runtime files(.moc3 or .moc) </h3>
+    <div><input type="model_char_name" id="model_char_name"name="model_char_name"/><label for="model_char_name">Model Character Name</label></div>
+    <form id="upload_model" action="/upload_model" method="post" enctype="multipart/form-data">
+        <label for="file">File</label>
+        <input id="file" name="file" type="file" />
+        <button>Upload</button>
+    </form>
+    <div id="upload_model_result"></div>
     <script>
         upload_char_form = document.getElementById('upload_card');
         upload_char_form.addEventListener('submit', handleSubmitCard);
         upload_voice_form = document.getElementById('upload_voice');
         upload_voice_form.addEventListener('submit', handleSubmitVoice);
+        upload_model_form = document.getElementById('upload_model');
+        upload_model_form.addEventListener('submit', handleSubmitModel);
         loadSettings()
     </script>
     <br>

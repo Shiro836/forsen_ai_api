@@ -67,6 +67,13 @@ func NewRouter(api *API) *chi.Mux {
 
 	router.Post("/upload_card/{char_name}", api.UploadCharCardHandler)
 	router.Post("/upload_voice/{char_name}", api.UploadVoiceHandler)
+	router.Post("/upload_model/{char_name}", api.UploadModel)
+
+	router.Get("/get_model/{char_name}", api.GetModel)
+
+	fs := http.FileServer(http.Dir("client/static"))
+
+	router.Handle("/static/*", http.StripPrefix("/static/", fs))
 
 	return router
 }

@@ -43,6 +43,13 @@ func (api *API) sendData(wsClient *ws.Client, data *conns.DataEvent) error {
 		}); err != nil {
 			return fmt.Errorf("failed to marshal frontMessage: %w", err)
 		}
+	case conns.EventTypeSetModel:
+		if msg.Message, err = json.Marshal(&frontMessage{
+			Type: "model",
+			Data: string(data.EventData),
+		}); err != nil {
+			return fmt.Errorf("failed to marshal frontMessage: %w", err)
+		}
 	case conns.EventTypeInfo:
 	case conns.EventTypeError:
 	default:

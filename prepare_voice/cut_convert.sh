@@ -1,1 +1,1 @@
-ffmpeg -i data/harry_potter.mp3 -ss 0 -vn -ar 24000 -ac 1 wavs/harry_potter.wav
+ffmpeg -i data/gura.m4a -ss 20 -t 10 -vn -ar 24000 -ac 1 wavs/gura.wav
