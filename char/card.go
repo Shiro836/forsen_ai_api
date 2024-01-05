@@ -33,3 +33,13 @@ func (c *Card) ToJson() ([]byte, error) {
 		return data, nil
 	}
 }
+
+func TryParse(cardData []byte) (*Card, error) {
+	var card *Card
+
+	if err := json.Unmarshal(cardData, &card); err == nil {
+		return card, nil
+	} else {
+		return FromPngSillyTavernCard(cardData)
+	}
+}

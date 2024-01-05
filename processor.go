@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"app/db"
 	"app/rvc"
 	"app/slg"
+	"app/swearfilter"
 	"app/tts"
 	"app/twitch"
 
@@ -61,7 +63,7 @@ func sleepForAudioLen(wavData []byte) {
 	time.Sleep(duration)
 }
 
-func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) error {
+func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	eventWriter(&conns.DataEvent{
@@ -72,7 +74,10 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	defer func() {
 		cancel()
 		if r := recover(); r != nil {
-			slg.GetSlog(ctx).Error("connection panic", "user", user, "r", r, "stack", string(debug.Stack()))
+			stack := string(debug.Stack())
+
+			err = fmt.Errorf("paniced in Process: %s", stack)
+			slg.GetSlog(ctx).Error("connection panic", "user", user, "r", r, "stack", stack)
 		}
 	}()
 
@@ -166,6 +171,18 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 
 	twitchChatCh := twitch.MessagesFetcher(ctx, user)
 
+	swears := make([]string, len(swearfilter.Swears))
+	copy(swears, swearfilter.Swears)
+
+	if userData != nil {
+		filters, err := db.GetFilters(userData.ID)
+		if err == nil {
+			swears = append(swears, strings.Split(filters, ",")...)
+		}
+	}
+
+	var swearFilter *swearfilter.SwearFilter = swearfilter.NewSwearFilter(false, swears...)
+
 	luaState.SetGlobal("broadcaster", lua.LString(user))
 	luaState.SetGlobal("get_char_card", luaGetCharCard(ctx, luaState))
 	// luaState.SetGlobal("get_char_cards", luaGetAllCharCards(ctx, luaState, charNameToCard))
@@ -174,6 +191,9 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	luaState.SetGlobal("tts", p.luaTts(ctx, luaState, eventWriter))
 	luaState.SetGlobal("get_next_event", luaGetNextEvent(ctx, luaState, twitchChatCh, twitchRewardIDToRewardID))
 	luaState.SetGlobal("set_model", luaSetModel(ctx, luaState, eventWriter))
+	luaState.SetGlobal("set_image", luaSetImage(ctx, luaState, eventWriter))
+	luaState.SetGlobal("filter_text", luaFilter(ctx, luaState, swearFilter))
+	luaState.SetGlobal("get_custom_chars", luaGetCustomChars(ctx, luaState, userData))
 
 	if err := luaState.DoString(settings.LuaScript); err != nil {
 		if ctx.Err() != nil {

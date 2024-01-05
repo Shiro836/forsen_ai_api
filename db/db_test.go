@@ -22,7 +22,7 @@ func TestCreateDB(t *testing.T) {
 		testDB = db.CreateDb(testDbName)
 	})
 
-	_, err := testDB.Query("select * from char_cards")
+	_, err := testDB.Query("select * from custom_chars")
 	assert.NoError(err)
 
 	_ = os.Remove(testDbName)

@@ -71,6 +71,11 @@ func NewRouter(api *API) *chi.Mux {
 
 	router.Get("/get_model/{char_name}", api.GetModel)
 
+	router.Post("/update_filters", api.UpdateFilters)
+	router.Get("/get_filters", api.GetFilters)
+
+	router.Post("/upload_full_card", api.UploadFullCardHandler)
+
 	fs := http.FileServer(http.Dir("client/static"))
 
 	router.Handle("/static/*", http.StripPrefix("/static/", fs))

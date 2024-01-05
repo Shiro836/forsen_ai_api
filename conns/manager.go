@@ -52,10 +52,12 @@ type Text struct {
 const (
 	EventTypeAudio EventType = iota + 1
 	EventTypeText
+	EventTypeImage
 	EventTypeSetModel
 	EventTypeSetMotion
 	EventTypeInfo
 	EventTypeError
+	EventTypePing
 )
 
 type EventType int
@@ -66,6 +68,8 @@ func (et EventType) String() string {
 		return "event_type_audio"
 	case EventTypeText:
 		return "event_type_text"
+	case EventTypeImage:
+		return "event_type_image"
 	case EventTypeSetModel:
 		return "event_type_model"
 	case EventTypeSetMotion:

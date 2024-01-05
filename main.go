@@ -7,7 +7,6 @@ import (
 	"app/db"
 	"app/rvc"
 	"app/slg"
-	"app/swearfilter"
 	"app/tts"
 	"app/twitch"
 	"strconv"
@@ -43,8 +42,6 @@ func writeFile(fileName string, data []byte) error {
 
 	return nil
 }
-
-var swearFilter *swearfilter.SwearFilter = swearfilter.NewSwearFilter(false, swearfilter.Swears...)
 
 func main() {
 	db.InitDB()

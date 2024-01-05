@@ -2,12 +2,15 @@ package api
 
 import (
 	"app/db"
+	"app/slg"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/nicklaw5/helix/v2"
@@ -94,6 +97,7 @@ func (api *API) channelPointsRewardCreateHandler(w http.ResponseWriter, r *http.
 }
 
 var DefaultLuaScript = `
+
 function splitTextIntoSentences(text)
     local sentences = {}
     local start = 1
@@ -141,6 +145,8 @@ function prep_card(card, user)
 end
 
 function gradual_tts(voice, msg)
+  msg = filter_text(msg)
+
   local sentences = splitTextIntoSentences(msg)
  
     total = ""
@@ -152,6 +158,7 @@ function gradual_tts(voice, msg)
             tts(voice, sentence)
         end
     end
+  text(" ")
 end
 
 function ask(voice, card, request)
@@ -162,7 +169,6 @@ function ask(voice, card, request)
 
   gradual_tts(voice, say1)
   gradual_tts(voice, ai_resp)
-  text(" ")
 end
 
 function discuss(card1, card2, voice1, voice2, theme, times)
@@ -194,39 +200,78 @@ trump = get_char_card("trump")
 daphne_greengrass = get_char_card("daphne_greengrass")
 harry_potter = get_char_card("harry_potter")
 jesus = get_char_card("jesus")
-adolf = get_char_card("adolf")
+adolf = get_char_card("adolf4")
 horse_cock = get_char_card("horse_cock")
 gura = get_char_card("gura")
 wiz = get_char_card("wiz")
 aqua2 = get_char_card("aqua2")
 darkness = get_char_card("darkness")
 
+custom_chars = {get_custom_chars()}
+custom_cards = {}
+for i=1, #custom_chars do
+  table.insert(custom_cards, get_char_card(broadcaster.."_"..custom_chars[i]))
+end
+
 while true do
   user, msg, reward_id = get_next_event()
   if reward_id == "tts forsen" then
+    set_image("/static/images/forsen.png")
     gradual_tts("forsen", msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask forsen" then
+    set_image("/static/images/forsen.png")
     ask("forsen", forsen2, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask neuro" then
+    set_image("/static/images/neuro.png")
     ask("neuro", neuro, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask megumin" then
+    set_image("/static/images/megumin.png")
     ask("megumin", megumin, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask kazuma" then
+    set_image("/static/images/kazuma.png")
     ask("kazuma", kazuma, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask gordon" then
+    set_image("/static/images/gordon.png")
     ask("gordon", gordon, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask trump" then
+    set_image("/static/images/trump.png")
     ask("trump", trump, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask biden" then
+    set_image("/static/images/biden.png")
     ask("biden", biden, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask daphne_greengrass" then
     ask("daphne_greengrass", daphne_greengrass, msg)
   elseif reward_id == "ask harry_potter" then
+    set_image("/static/images/harry.png")
     ask("harry_potter", harry_potter, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask jesus" then
+    set_image("/static/images/jesus.png")
     ask("jesus", jesus, msg)
+    set_image("/static/images/empty.png")
   elseif reward_id == "ask gura" then
+    set_image("/static/images/gura.png")
     ask("gura", gura, msg)
+    set_image("/static/images/empty.png")
+  elseif reward_id == "ask adolf" then
+    set_image("/static/images/adolf.png")
+    ask("adolf2", adolf, msg)
+    set_image("/static/images/empty.png")
+  else
+    for i = 1, #custom_chars do
+      if reward_id == custom_chars[i] then
+        ask(broadcaster.."_"..custom_chars[i], custom_cards[i], msg)
+        break
+      end
+    end
   end
 end
 `
@@ -291,5 +336,57 @@ func (api *API) updateSettings(w http.ResponseWriter, r *http.Request) {
 	} else {
 		api.connManager.NotifyUpdateSettings(userData.UserLoginData.UserName)
 		w.Write([]byte("success"))
+	}
+}
+
+func (api *API) GetFilters(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("unauthorized"))
+
+		return
+	} else if userData, err := db.GetUserDataBySessionId(cookie.Value); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("user data not found"))
+
+		return
+	} else if filters, err := db.GetFilters(userData.ID); err != nil {
+		w.Write([]byte(""))
+
+		// w.WriteHeader(http.StatusInternalServerError)
+		// w.Write([]byte(err.Error()))
+
+		return
+	} else {
+		w.Write([]byte(filters))
+	}
+}
+
+func (api *API) UpdateFilters(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("unauthorized"))
+
+		return
+	} else if userData, err := db.GetUserDataBySessionId(cookie.Value); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("user data not found"))
+
+		return
+	} else if r = r.WithContext(slg.WithSlog(r.Context(), slog.With("user", userData.UserLoginData.UserName))); false {
+	} else if filters, err := io.ReadAll(r.Body); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("failed to read body: " + err.Error()))
+
+		return
+	} else if slg.GetSlog(r.Context()).Info("", "filters", filters); false {
+	} else if err := db.UpdateFilters(userData.ID, strings.ReplaceAll(string(filters), " ", "")); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else {
+		api.connManager.NotifyUpdateSettings(userData.UserLoginData.UserName)
+		w.Write([]byte(filters))
 	}
 }

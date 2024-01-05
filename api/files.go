@@ -1,8 +1,13 @@
 package api
 
 import (
+	"app/char"
 	"app/db"
+	"app/slg"
+	"encoding/base64"
+	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -206,4 +211,75 @@ func (api *API) GetModel(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+}
+
+type FullCard struct {
+	Card           *char.Card `json:"char_card"`
+	ReferenceAudio string     `json:"ref_audio"`
+	Image          string     `json:"image"`
+}
+
+func (api *API) UploadFullCardHandler(w http.ResponseWriter, r *http.Request) {
+	var userData *db.UserData
+
+	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("unauthorized"))
+
+		return
+	} else if userData, err = db.GetUserDataBySessionId(cookie.Value); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("user data not found"))
+
+		return
+	}
+
+	r = r.WithContext(slg.WithSlog(r.Context(), slog.With("user", userData.UserLoginData.UserName)))
+
+	var fullCard *FullCard
+
+	if data, err := io.ReadAll(r.Body); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if err := json.Unmarshal(data, &fullCard); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	}
+
+	charName := userData.UserLoginData.UserName + "_" + fullCard.Card.Name
+
+	cardData, err := json.Marshal(fullCard.Card)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	}
+
+	if err := db.AddCharCard(userData.ID, charName, cardData); err != nil {
+		slg.GetSlog(r.Context()).Error("failed to add char card", "err", err)
+	}
+
+	if rawAudio, err := base64.StdEncoding.DecodeString(fullCard.ReferenceAudio); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if err := db.AddVoice(charName, rawAudio); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if err := db.AddCustomChar(userData.ID, fullCard.Card.Name); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	}
+
+	w.Write([]byte("success"))
 }

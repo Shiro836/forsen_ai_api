@@ -1,1 +1,1 @@
-ffmpeg -i data/gura.m4a -ss 20 -t 10 -vn -ar 24000 -ac 1 wavs/gura.wav
+ffmpeg -i data/adolf.m4a -ss 10 -t 9 -vn -ar 24000 -ac 1 wavs/adolf.wav

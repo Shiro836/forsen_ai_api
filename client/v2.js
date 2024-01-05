@@ -145,6 +145,10 @@ async function pageReady() {
 
     const models = new Map();
 
+    function set_image(url) {
+      document.getElementById("char_image").src=url;
+    }
+
     function set_model(char_name) {
       if (char_name === '') {
         remove_model()
@@ -217,7 +221,9 @@ async function pageReady() {
           set_model(data.data)
           break
         case 'image':
-          set_model(data.data)
+          set_image(data.data)
+          break
+        case 'ping':
           break
         default:
           log('unknown type')

@@ -481,8 +481,12 @@ func GetCharCard(charName string) (*Card, error) {
 	var cardStr string
 
 	row := db.QueryRow(`
-	select card from char_cards
-	where char_name = $1
+		select
+			card
+		from
+			char_cards
+		where
+			char_name = $1
 	`, charName)
 	if err := row.Scan(&cardStr); err != nil {
 		return nil, fmt.Errorf("failed to get char card: %w", err)
@@ -494,6 +498,36 @@ func GetCharCard(charName string) (*Card, error) {
 			Card:     card,
 		}, nil
 	}
+}
+
+func DeleteCharCard(charName string) error {
+	if res, err := db.Exec(`
+		DELETE
+			FROM char_cards
+		WHERE
+			char_name = $2
+	`, charName); err != nil {
+		return fmt.Errorf("failed to delete char card: %w", err)
+	} else if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
+		return fmt.Errorf("0 rows affected char cards delete")
+	}
+
+	return nil
+}
+
+func DeleteVoice(charName string) error {
+	if res, err := db.Exec(`
+		DELETE
+			FROM voices
+		WHERE
+			char_name = $2
+	`, charName); err != nil {
+		return fmt.Errorf("failed to delete voice: %w", err)
+	} else if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
+		return fmt.Errorf("0 rows affected voices delete")
+	}
+
+	return nil
 }
 
 func AddVoice(charName string, voice []byte) error {
@@ -564,4 +598,103 @@ func GetModel(charName string) ([]byte, error) {
 	} else {
 		return model, nil
 	}
+}
+
+func UpdateFilters(userID int, filters string) error {
+	if _, err := db.Exec(`
+		insert into filters(user_id, filters)
+			values($1, $2)
+		on conflict(user_id) do update set
+			filters = excluded.filters
+		where
+			filters.user_id = excluded.user_id
+		`, userID, filters); err != nil {
+		return fmt.Errorf("failed to upsert filters: %w", err)
+	}
+
+	return nil
+}
+
+const DefaultFilters = `jew,hitler,israel,black,terrorist,terrorism,homo,nazi,trans`
+
+func GetFilters(userID int) (string, error) {
+	var filters string
+
+	row := db.QueryRow(`
+		select
+			filters
+		from
+			filters
+		where
+			user_id = $1
+	`, userID)
+	if err := row.Scan(&filters); err != nil {
+		return DefaultFilters, nil
+	}
+
+	return filters, nil
+}
+
+func DeleteCustomChar(userID int, charName string) error {
+	if res, err := db.Exec(`
+		DELETE
+			FROM custom_chars
+		WHERE
+			user_id = $1 and char_name = $2
+	`, userID, charName); err != nil {
+		return fmt.Errorf("failed to delete custom char: %w", err)
+	} else if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
+		return fmt.Errorf("0 rows affected custom char delete")
+	}
+
+	return nil
+}
+
+func AddCustomChar(userID int, charName string) error {
+	if _, err := db.Exec(`
+		insert into custom_chars(
+			user_id,
+			char_name
+		) values (
+			$1,
+			$2
+		)
+		`,
+		userID,
+		charName,
+	); err != nil {
+		return fmt.Errorf("failed to insert custom char: %w", err)
+	}
+
+	return nil
+}
+
+func GetCustomChars(userID int) ([]string, error) {
+	chars := make([]string, 0, 10)
+
+	rows, err := db.Query(`
+		select
+			char_name
+		from
+			custom_chars
+		where
+			user_id = $1
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query custom chars: %w", err)
+	}
+
+	var char string
+	for rows.Next() {
+		if err := rows.Scan(&char); err != nil {
+			return nil, fmt.Errorf("failed to scan custom chars: %w", err)
+		}
+
+		chars = append(chars, char)
+	}
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("custom chars Next err: %w", err)
+	}
+
+	return chars, nil
 }

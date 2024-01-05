@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"app/conns"
 	"app/slg"
@@ -43,10 +44,24 @@ func (api *API) sendData(wsClient *ws.Client, data *conns.DataEvent) error {
 		}); err != nil {
 			return fmt.Errorf("failed to marshal frontMessage: %w", err)
 		}
+	case conns.EventTypeImage:
+		if msg.Message, err = json.Marshal(&frontMessage{
+			Type: "image",
+			Data: string(data.EventData),
+		}); err != nil {
+			return fmt.Errorf("failed to marshal frontMessage: %w", err)
+		}
 	case conns.EventTypeSetModel:
 		if msg.Message, err = json.Marshal(&frontMessage{
 			Type: "model",
 			Data: string(data.EventData),
+		}); err != nil {
+			return fmt.Errorf("failed to marshal frontMessage: %w", err)
+		}
+	case conns.EventTypePing:
+		if msg.Message, err = json.Marshal(&frontMessage{
+			Type: "ping",
+			Data: "ping",
 		}); err != nil {
 			return fmt.Errorf("failed to marshal frontMessage: %w", err)
 		}
@@ -91,6 +106,9 @@ func (api *API) consumerHandler(w http.ResponseWriter, r *http.Request) {
 	dataCh, unsubscribe := api.connManager.Subscribe(user)
 	defer unsubscribe()
 
+	t := time.NewTicker(3 * time.Second)
+	defer t.Stop()
+
 loop:
 	for {
 		select {
@@ -100,6 +118,11 @@ loop:
 		}
 
 		select {
+		case <-t.C:
+			if err := api.sendData(wsClient, &conns.DataEvent{EventType: conns.EventTypePing}); err != nil {
+				slg.GetSlog(r.Context()).Info("ping failed", "err", err)
+				break loop
+			}
 		case data, ok := <-dataCh:
 			if !ok {
 				slg.GetSlog(r.Context()).Info("data stream ended")

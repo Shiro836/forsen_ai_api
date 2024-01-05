@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <link rel="stylesheet" href="/static/settings.css">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings</title>
@@ -14,14 +15,20 @@
             console.log("cleared cookie")
             location.reload()
         }
-        function addChannelPointReward() {
-            document.getElementById("add_reward_result").innerText = "Loading..."
-
+        function addChannelPointRewardName(name) {
             var xmlHttp = new XMLHttpRequest();
-            xmlHttp.open("GET", "/add_channel_point_reward/" + document.getElementById("reward_id").value, false); // false for synchronous request
+            xmlHttp.open("GET", "/add_channel_point_reward/" + name, false); // false for synchronous request
             xmlHttp.send(null);
 
-            document.getElementById("add_reward_result").innerText = xmlHttp.responseText
+            return xmlHttp.responseText
+        }
+        function addChannelPointReward() {
+            document.getElementById("add_reward_result").innerText = "Loading..."
+            document.getElementById("add_reward_result").innerText = addChannelPointRewardName(document.getElementById("reward_id").value)
+        }
+        function addChannelPointRewardSimple(name) {
+            document.getElementById("add_reward_result_simple").innerText = "Loading..."
+            document.getElementById("add_reward_result_simple").innerText = addChannelPointRewardName(name)
         }
 var editor;
         function updateSettings() {
@@ -40,14 +47,15 @@ var editor;
         }
         function loadSettings() {
             var xmlHttp = new XMLHttpRequest();
-            xmlHttp.open("GET", "/get_settings", false); // false for synchronous request
+            xmlHttp.open("GET", "/get_settings", true); // false for synchronous request
+            xmlHttp.onload = (e) => {
+                if (xmlHttp.readyState === 4) {
+                    const res = JSON.parse(xmlHttp.responseText);
+                    editor.setValue(res["lua_script"])
+                    document.getElementById("state").textContent = ""
+                }
+            };
             xmlHttp.send(null);
-
-            const res = JSON.parse(xmlHttp.responseText);
-
-            editor.setValue(res["lua_script"])
-
-            document.getElementById("state").textContent = ""
         }
         function addWhitelistEntry(is_add) {
             document.getElementById("update_whitelist_result").innerText = "Updating Whitelist..."
@@ -122,71 +130,434 @@ var editor;
 
             event.preventDefault();
         }
+        function onLoad() {
+            document.getElementById('simple_checkbox').addEventListener('change', (event) => {
+                if (event.currentTarget.checked) {
+                    document.getElementById('simple_ui').style = "display: none;"
+                    document.getElementById('advanced_ui').style = "display: block;"
+                } else {
+                    document.getElementById('simple_ui').style = "display: block;"
+                    document.getElementById('advanced_ui').style = "display: none;"
+                }
+            })
+            document.getElementById("default_tab_ui").click();
+            getFilters(function(filters) {
+                document.getElementById("filters").textContent = filters
+            })
+        }
+        function openTab(evt, tabName) {
+            // Declare all variables
+            var i, tabcontent, tablinks;
+
+            // Get all elements with class="tabcontent" and hide them
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+
+            // Get all elements with class="tablinks" and remove the class "active"
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+
+            // Show the current tab, and add an "active" class to the button that opened the tab
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+        function updateFilters(filters) {
+            console.log(filters)
+            var xmlHttp = new XMLHttpRequest();
+            xmlHttp.open("POST", "/update_filters", false); // false for synchronous request
+            xmlHttp.send(filters);
+
+            return xmlHttp.responseText
+        }
+        function getFilters(callback) {
+            var xmlHttp = new XMLHttpRequest();
+            xmlHttp.open("GET", "/get_filters", true); // false for synchronous request
+            xmlHttp.onload = (e) => {
+                if (xmlHttp.readyState === 4) {
+                    callback(xmlHttp.responseText)
+                }
+            };
+            xmlHttp.send(null);
+        }
     </script>
 </head>
-<body>
-    <button onclick="logout()">Logout</button>
-    <h3>Channel point reward must be created using this button, NOT BY YOURSELF. After adding the reward, you can edit its parameters on twitch website including rewards name, description and prompt.</h3>
-    <div><input type="text" id="reward_id"name="reward_id"/><label for="reward_id">Reward ID</label></div>
-    <button onclick="addChannelPointReward()">Add Channel Point Reward on your channel</button>
-    <div id="add_reward_result"></div>
-    <h3>After adding reward, events will come to lua in get_next_event() in reward_id variable. </h3>
-    <br>
-    <h3>Lua code that will be executed on the server:</h3>
-    <textarea id="code-editor"></textarea>
+<body style="display: flex; flex-direction: column; align-content: flex-start;">
+    <div style="display: flex; flex-direction: row; margin-bottom: 20px; align-items: center;">
+        <button class="button-66" onclick="logout()">Logout</button>
+        <h1 style="margin-left: 50px;">
+            Simple
+            <label class="switch">
+                <input id="simple_checkbox" type="checkbox">
+                <span class="slider"></span>
+            </label>
+            Advanced
+        </h1>
+    </div>
+    <div id="simple_ui" style="display: flex; flex-direction: column;">
+        <!-- Tab links -->
+        <div class="tab">
+            <button class="button-49" class="tablinks" onclick="openTab(event, 'Default')" id="default_tab_ui">Add Default Characters</button>
+            <button class="button-49" class="tablinks" onclick="openTab(event, 'Custom')">Add Custom Character</button>
+            <button class="button-49" class="tablinks" onclick="openTab(event, 'Filters')">Filters</button>
+        </div>
+        
+        <!-- Tab content -->
+        <div id="Default" class="tabcontent">
+            <div id="grid_wrapper" style="display: grid; grid-template-columns: 200px 200px 200px; text-align: center;">
+                <div class="box" onclick="addChannelPointRewardSimple('ask jesus')"><img src="/static/images/jesus.png" width="200px" height="200px">Add Jesus</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask forsen')"><img src="/static/images/forsen.png" width="200px" height="200px">Add Forsen</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask megumin')"><img src="/static/images/megumin.png" width="200px" height="200px">Add Megumin</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask kazuma')"><img src="/static/images/kazuma.png" width="200px" height="200px">Add Kazuma</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask trump')"><img src="/static/images/trump.png" width="200px" height="200px">Add Trump</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask gordon')"><img src="/static/images/gordon.png" width="200px" height="200px">Add Gordon Ramsey</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask biden')"><img src="/static/images/biden.png" width="200px" height="200px">Add Biden(pedo)</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask neuro')"><img src="/static/images/neuro.png" width="200px" height="200px">Add Neuro</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask harry_potter')"><img src="/static/images/harry.png" width="200px" height="200px">Add Harry Potter</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask adolf')"><img src="/static/images/adolf.png" width="200px" height="200px">Add Adolf(be careful)</div>
+                <div class="box" onclick="addChannelPointRewardSimple('ask gura')"><img src="/static/images/gura.png" width="200px" height="200px">Add Gura</div>
+            </div>
+            <br>
+            <div id="add_reward_result_simple"></div>
+        </div>
+        
+        <div id="Custom" class="tabcontent">
+            <div style="display: flex; flex-direction: column;">
+                <div style="display: flex; flex-direction: row; align-content: flex-end; align-items: center;">
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                        <br>
+                        <label for="custom_char_name">Character Name</label>
+                        <textarea rows="1" cols="80" id="custom_char_name">Shiro</textarea>
+                        <br>
+                        <label for="custom_char_description">Description</label>
+                        <textarea rows="4" cols="80" id="custom_char_description">Shiro likes to program things. Lives in Russia. Big fan of forsen. </textarea>
+                        <br>
+                        <label for="custom_char_personality">Personality</label>
+                        <textarea rows="3" cols="80" id="custom_char_personality">
+Adaptable, Smart, Based, Working Out, 70 wpm, Confident and other good traits
+</textarea>
+                        <br>
+                        <label for="custom_char_first_message">First Message</label>
+                        <textarea rows="3" cols="80" id="custom_char_first_message">
+{{char}} : Hello, what do you want to ask me?
+</textarea>
+                        <br>
+                        <label for="custom_char_message_example">Messages Example</label>
+                        <textarea rows="15" cols="80" id="custom_char_message_example">
+&lt;START&gt;
+{{user}} : Who are you?
+{{char}} : I am shiro - replica of real Shiro836 on twitch.
+&lt;START&gt;
+{{user}} : Who do you care about the most?
+{{char}} : I only care about myself. But can help others if I can.
+&lt;START&gt;
+{{user}} : What's your best programming language?
+{{char}} : It's golang - the best ever programming language. I hate all other languages but I forced to write on them. Like python - I forced ot write it because it's used in machine learning a lot. And js - it's used in frontend. But they are garbage.
+&lt;START&gt;
+{{user}} : What do you usually say to your teammates in cs?
+{{char}} : Go fuck yourself. Your mom is a whore.
+</textarea>
+                        <br>
+                        <label for="custom_char_scenario">Scenario</label>
+                        <textarea rows="2" cols="80" id="custom_char_scenario">
+You are speaking to an AI chatbot on a twitch website.
+</textarea>
+                    </div>
+                    <div style="margin-left: auto; margin-right: auto; margin-left: 20px;">
+                        <br>
+                        <div style="display: flex; flex-direction: column; align-items: center;">
+                            <script>
+                                const blobToDataUrl = blob => new Promise((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onload = () => resolve(reader.result);
+                                    reader.onerror = reject;
+                                    reader.readAsDataURL(blob);
+                                });
+
+                                const blobToBase64 = blob => blobToDataUrl(blob).then(text => text.slice(text.indexOf(",")));
+
+                                function handleBlob(blob) {
+                                    recordedAudio.src = URL.createObjectURL(blob);
+                                    recordedAudio.controls=true;
+                                    recordedAudio.autoplay=false;
+                                    console.log(blob)
+
+                                    let container = new DataTransfer();
+                                    // let file = new File([e.data], "mic_recorded.wav",{type:"audio/wav", lastModified:new Date().getTime()});
+                                    // container.items.add(file);
+                                    let file = new File([blob], "mic_recorded.wav", {type:"audio/wav"})
+                                    container.items.add(file);
+
+                                    document.getElementById("custom_char_ref_audio").files = container.files;
+                                }
+
+                                function handlerFunction(stream) {
+                                    rec = new MediaRecorder(stream);
+                                    rec.ondataavailable = e => {
+                                        audioChunks.push(e.data);
+                                        if (rec.state == "inactive") {
+                                            let blob = new Blob(audioChunks,{type:'audio/wav'});
+                                            handleBlob(blob)
+                                        }
+                                    }
+                                    const record = document.getElementById("record")
+                                    const stopRecord = document.getElementById("stopRecord")
+                                    orig_btn_clr = record.style.backgroundColor
+                                    record.onclick = e => {
+                                        record.disabled = true;
+                                        record.style.backgroundColor = "red"
+                                        stopRecord.disabled=false;
+                                        audioChunks = [];
+                                        rec.start();
+                                    }
+                                    stopRecord.onclick = e => {
+                                        record.disabled = false;
+                                        stopRecord.disabled=true;
+                                        record.style.backgroundColor = orig_btn_clr
+                                        rec.stop();
+                                    }
+                                    document.getElementById("button_setup_mic").style = "display: none;"
+                                    document.getElementById("mic_actions_wrapper").style = ""
+                                }
+
+                                var constraints = {
+                                    audio: true,
+                                    video: false
+                                }
+
+                                var gumStream;
+                                var rec;
+                                var input;
+                                var audioContext;
+
+                                function setup_mic() {
+                                    navigator.mediaDevices.getUserMedia({audio:true})
+                                    .then((stream) => {
+                                        URL = window.URL;
+                                        
+                                        var AudioContext = window.AudioContext || window.webkitAudioContext;
+                                        audioContext = new AudioContext;
+
+                                        document.getElementById("recordButton").addEventListener("click", startRecording);
+                                        document.getElementById("stopButton").addEventListener("click", stopRecording);
+                                        document.getElementById("pauseButton").addEventListener("click", pauseRecording);
+
+                                        console.log("getUserMedia() success, stream created, initializing Recorder.js ..."); 
+                                        /* assign to gumStream for later use */
+                                        gumStream = stream;
+                                        /* use the stream */
+                                        input = audioContext.createMediaStreamSource(stream);
+                                        /* Create the Recorder object and configure to record mono sound (1 channel) Recording 2 channels will double the file size */
+                                        rec = new Recorder(input, {
+                                            numChannels: 1
+                                        })
+
+                                        document.getElementById("controls").style.display = ""
+                                        document.getElementById("button_setup_mic").style.display = "none"
+                                    })
+                                    // .then(stream => {handlerFunction(stream)})                     
+                                }
+
+                                var orig_start_rec_button_clr = document.getElementById('recordButton').style.color;
+
+                                function pauseRecording() {
+                                    console.log("pauseButton clicked rec.recording=", rec.recording);
+                                    if (rec.recording) {
+                                        //pause 
+                                        rec.stop();
+                                        pauseButton.innerHTML = "Resume";
+
+                                        document.getElementById('recordButton').style.color = orig_start_rec_button_clr;
+                                    } else {
+                                        //resume 
+                                        rec.record()
+                                        pauseButton.innerHTML = "Pause";
+
+                                        document.getElementById('recordButton').style.color = 'red';
+                                    }
+                                }
+                                function stopRecording() {
+                                    document.getElementById('recordButton').style.color = orig_start_rec_button_clr;
+
+                                    console.log("stopButton clicked");
+                                    //disable the stop button, enable the record too allow for new recordings 
+                                    stopButton.disabled = true;
+                                    recordButton.disabled = false;
+                                    pauseButton.disabled = true;
+                                    //reset button just in case the recording is stopped while paused 
+                                    pauseButton.innerHTML = "Pause";
+                                    //tell the recorder to stop the recording 
+                                    rec.stop(); //stop microphone access 
+                                    gumStream.getAudioTracks()[0].stop();
+                                    //create the wav blob and pass it on to createDownloadLink 
+                                    rec.exportWAV(createDownloadLink);
+
+                                    document.getElementById("controls").style.display = "none"
+                                    document.getElementById("button_setup_mic").style.display = ""
+                                }
+                                function createDownloadLink(blob) {
+                                    handleBlob(blob);
+                                }
+                                function startRecording() {
+                                    orig_start_rec_button_clr = document.getElementById('recordButton').style.color;
+                                    document.getElementById('recordButton').style.color = 'red';
+
+                                    recordButton.disabled = true;
+                                    stopButton.disabled = false;
+                                    pauseButton.disabled = false;
+
+                                    rec.record();
+                                }
+                            </script>
+                            Audio Reference File
+                            <br>
+                            <br>
+                            <audio id="recordedAudio"></audio>
+                            <button class="button-66" id="button_setup_mic" onclick="setup_mic()">Record Using Mic</button>
+                            <div id="controls" style="display: none;">
+                                <div style="display: flex; flex-direction: row;">
+                                    <button class="button-66" id="recordButton">Record</button>
+                                    <button style="margin-left: 5px; margin-right: 5px;" class="button-66" id="pauseButton" disabled>Pause</button>
+                                    <button class="button-66" id="stopButton" disabled>Stop</button>
+                                </div>
+                            </div>
+                            <form action="" style="display: flex; flex-direction: column;">
+                                <input id="custom_char_ref_audio" placeholder="file" type="file" />
+                                <br>
+                                <!-- <button class="button-66">Submit</button> -->
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <br>
+                <div style="display: flex; flex-direction: row-reverse;">
+                    <div style="display: flex; flex-direction: column; margin-left: 20px;">
+                        <button id="custom_char_button_add" class="button-66">Add Character</button>
+                        <div id="custom_char_status_add" style="font-size: 20px;"></div>
+                    </div>
+                    <div style="display: flex; flex-direction: column;">
+                        <button id="custom_char_button_add_reward" class="button-66" onclick="document.getElementById('custom_char_status_add_reward').innerText=addChannelPointRewardName(document.getElementById('custom_char_name').value)">Add Reward</button>
+                        <div id="custom_char_status_add_reward" style="font-size: 20px;"></div>
+                    </div>
+                </div>
+                <script>
+                    document.getElementById("custom_char_button_add").onclick = (e) => {
+                        orig_clr = document.getElementById('custom_char_status_add').style.color;
+
+                        if (!document.getElementById('custom_char_ref_audio').files || document.getElementById('custom_char_ref_audio').files.length == 0) {
+                            document.getElementById('custom_char_status_add').style.color = 'red'
+                            document.getElementById('custom_char_status_add').innerText = 'Add Reference Audio';
+
+                            return
+                        }
+
+                        blobToBase64(document.getElementById('custom_char_ref_audio').files[0]).then(base64 => {
+                            request_json = {
+                                'char_card': {
+                                    'name' : document.getElementById("custom_char_name").value,
+                                    'description' : document.getElementById("custom_char_description").value,
+                                    'personality' : document.getElementById("custom_char_personality").value,
+                                    'first_message' : document.getElementById("custom_char_first_message").value,
+                                    'message_example' : document.getElementById("custom_char_message_example").value,
+                                    'scenario' : document.getElementById("custom_char_scenario").value,
+                                },
+                                'ref_audio': base64.slice(1),
+                            }
+
+                            var xhr = new XMLHttpRequest();
+                            xhr.open("POST", "/upload_full_card", true);
+                            xhr.onreadystatechange = function () {
+                                if (xhr.readyState === 4) {
+                                    document.getElementById('custom_char_status_add').style.color = orig_clr
+                                    document.getElementById("custom_char_status_add").innerText = xhr.responseText;
+                                }
+                            };
+                            var data = JSON.stringify(request_json);
+                            console.log(data)
+                            xhr.send(data);
+                        })
+                    }
+                </script>
+                <script src="https://cdn.rawgit.com/mattdiamond/Recorderjs/08e7abd9/dist/recorder.js"></script>
+            </div>
+        </div>
+        
+        <div id="Filters" class="tabcontent">
+            <textarea rows="5" cols="80" id="filters"></textarea>
+            <button class="button-66" onclick="document.getElementById('result').innerText=updateFilters(document.getElementById('filters').value)">Update Filters</button>
+            <div id="result"></div>
+        </div>
+        
+    </div>
+    <div id="advanced_ui" style="display: none;">
+        <h3>Channel point reward must be created using this button, NOT BY YOURSELF. After adding the reward, you can edit its parameters on twitch website including rewards name, description and prompt.</h3>
+        <div><input type="text" id="reward_id"name="reward_id"/><label for="reward_id">Reward ID</label></div>
+        <button class="button-52" role="button" onclick="addChannelPointReward()">Add Channel Point Reward on your channel</button>
+        <div id="add_reward_result"></div>
+        <h3>After adding reward, events will come to lua in get_next_event() in reward_id variable. </h3>
+        <br>
+        <h3>Lua code that will be executed on the server:</h3>
+        <textarea id="code-editor"></textarea>
+        <script>
+            editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
+                    lineNumbers: true,
+                    mode: 'text/x-lua',
+                    theme: 'default'
+                });
+        </script>
+        <br>
+        <br>
+        <button class="button-52" role="button" onclick="updateSettings()">Update</button>
+        <div id="state">Loading Settings...</div>
+        <br>
+        <h3>Upload character png card. You can find them here !!NSFW WARNING!! - <a href="https://chub.ai" target="_blank">chub.ai</a> (download png with T sign that says it's compatible with SillyTavern) . Or create card yourself in SillyTavern app.</h3>
+        <div><input type="char_name" id="char_name"name="char_name"/><label for="char_name">Character Name</label></div>
+        <form id="upload_card" action="/upload_card" method="post" enctype="multipart/form-data">
+            <label for="file">File</label>
+            <input id="file" name="file" type="file" />
+            <button>Upload</button>
+        </form>
+        <div id="upload_card_result"></div>
+        <h3>After uploading you can reference this card in lua code under the name you set above.<br>megumin = get_char_card("megumin")<br>text(megumin.name)</h3>
+        <h3>Add a voice for a TTS. Audio must be without music, without long pauses. You can use <a href="https://vocalremover.org/">vocalremover.org</a> to remove music and same site to cut it. </h3>
+        <div><input type="voice_char_name" id="voice_char_name"name="voice_char_name"/><label for="voice_char_name">Character Name</label></div>
+        <form id="upload_voice" action="/upload_voice" method="post" enctype="multipart/form-data">
+            <label for="file">File</label>
+            <input id="file" name="file" type="file" />
+            <button>Upload</button>
+        </form>
+        <div id="upload_voice_result"></div>
+        <h3>After uploading you can use this voice in tts in lua code under the name you set above.<br>tts("megumin", "You will be exhausted from all the explosions we will do together this night.")</h3>
+        <h3>Add a live2d model - must be a .zip file with runtime files(.moc3 or .moc) </h3>
+        <div><input type="model_char_name" id="model_char_name"name="model_char_name"/><label for="model_char_name">Model Character Name</label></div>
+        <form id="upload_model" action="/upload_model" method="post" enctype="multipart/form-data">
+            <label for="file">File</label>
+            <input id="file" name="file" type="file" />
+            <button>Upload</button>
+        </form>
+        <div id="upload_model_result"></div>
+        <script>
+            upload_char_form = document.getElementById('upload_card');
+            upload_char_form.addEventListener('submit', handleSubmitCard);
+            upload_voice_form = document.getElementById('upload_voice');
+            upload_voice_form.addEventListener('submit', handleSubmitVoice);
+            upload_model_form = document.getElementById('upload_model');
+            upload_model_form.addEventListener('submit', handleSubmitModel);
+            loadSettings()
+        </script>
+        <br>
+        <div>Update whitelist:</div>
+        <input type="text" id="whitelist_login"/>
+        <button onclick="addWhitelistEntry(true)">Add To Whitelist</button>
+        <button onclick="addWhitelistEntry(false)">Ban</button>
+        <output id="update_whitelist_result"></output>
+        <h3>Want to reset lua code back to default? Make editor empty and press update and then reload the page.</h3>
+    </div>
     <script>
-        editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
-                lineNumbers: true,
-                mode: 'text/x-lua',
-                theme: 'default'
-            });
+        onLoad()
     </script>
-    <br>
-    <br>
-    <button onclick="updateSettings()">Update</button>
-    <div id="state">Loading Settings...</div>
-    <br>
-    <h3>Upload character png card. You can find them here !!NSFW WARNING!! - <a href="https://chub.ai" target="_blank">chub.ai</a> (download png with T sign that says it's compatible with SillyTavern) . Or create card yourself in SillyTavern app.</h3>
-    <div><input type="char_name" id="char_name"name="char_name"/><label for="char_name">Character Name</label></div>
-    <form id="upload_card" action="/upload_card" method="post" enctype="multipart/form-data">
-        <label for="file">File</label>
-        <input id="file" name="file" type="file" />
-        <button>Upload</button>
-    </form>
-    <div id="upload_card_result"></div>
-    <h3>After uploading you can reference this card in lua code under the name you set above.<br>megumin = get_char_card("megumin")<br>text(megumin.name)</h3>
-    <h3>Add a voice for a TTS. Audio must be without music, without long pauses. You can use <a href="https://vocalremover.org/">vocalremover.org</a> to remove music and same site to cut it. </h3>
-    <div><input type="voice_char_name" id="voice_char_name"name="voice_char_name"/><label for="voice_char_name">Character Name</label></div>
-    <form id="upload_voice" action="/upload_voice" method="post" enctype="multipart/form-data">
-        <label for="file">File</label>
-        <input id="file" name="file" type="file" />
-        <button>Upload</button>
-    </form>
-    <div id="upload_voice_result"></div>
-    <h3>After uploading you can use this voice in tts in lua code under the name you set above.<br>tts("megumin", "You will be exhausted from all the explosions we will do together this night.")</h3>
-    <h3>Add a live2d model - must be a .zip file with runtime files(.moc3 or .moc) </h3>
-    <div><input type="model_char_name" id="model_char_name"name="model_char_name"/><label for="model_char_name">Model Character Name</label></div>
-    <form id="upload_model" action="/upload_model" method="post" enctype="multipart/form-data">
-        <label for="file">File</label>
-        <input id="file" name="file" type="file" />
-        <button>Upload</button>
-    </form>
-    <div id="upload_model_result"></div>
-    <script>
-        upload_char_form = document.getElementById('upload_card');
-        upload_char_form.addEventListener('submit', handleSubmitCard);
-        upload_voice_form = document.getElementById('upload_voice');
-        upload_voice_form.addEventListener('submit', handleSubmitVoice);
-        upload_model_form = document.getElementById('upload_model');
-        upload_model_form.addEventListener('submit', handleSubmitModel);
-        loadSettings()
-    </script>
-    <br>
-    <div>Update whitelist:</div>
-    <input type="text" id="whitelist_login"/>
-    <button onclick="addWhitelistEntry(true)">Add To Whitelist</button>
-    <button onclick="addWhitelistEntry(false)">Ban</button>
-    <output id="update_whitelist_result"></output>
-    <h3>Want to reset lua code back to default? Make editor empty and press update and then reload the page.</h3>
 </body>
 </html>
