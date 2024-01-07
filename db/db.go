@@ -501,30 +501,26 @@ func GetCharCard(charName string) (*Card, error) {
 }
 
 func DeleteCharCard(charName string) error {
-	if res, err := db.Exec(`
+	if _, err := db.Exec(`
 		DELETE
 			FROM char_cards
 		WHERE
-			char_name = $2
+			char_name = $1
 	`, charName); err != nil {
 		return fmt.Errorf("failed to delete char card: %w", err)
-	} else if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
-		return fmt.Errorf("0 rows affected char cards delete")
 	}
 
 	return nil
 }
 
 func DeleteVoice(charName string) error {
-	if res, err := db.Exec(`
+	if _, err := db.Exec(`
 		DELETE
 			FROM voices
 		WHERE
-			char_name = $2
+			char_name = $1
 	`, charName); err != nil {
 		return fmt.Errorf("failed to delete voice: %w", err)
-	} else if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
-		return fmt.Errorf("0 rows affected voices delete")
 	}
 
 	return nil
@@ -615,7 +611,7 @@ func UpdateFilters(userID int, filters string) error {
 	return nil
 }
 
-const DefaultFilters = `jew,hitler,israel,black,terrorist,terrorism,homo,nazi,trans`
+const DefaultFilters = `jew,hitler,israel,black,terrorist,terrorism,homo,nazi,trans,goyim`
 
 func GetFilters(userID int) (string, error) {
 	var filters string
@@ -636,15 +632,13 @@ func GetFilters(userID int) (string, error) {
 }
 
 func DeleteCustomChar(userID int, charName string) error {
-	if res, err := db.Exec(`
+	if _, err := db.Exec(`
 		DELETE
 			FROM custom_chars
 		WHERE
 			user_id = $1 and char_name = $2
 	`, userID, charName); err != nil {
 		return fmt.Errorf("failed to delete custom char: %w", err)
-	} else if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
-		return fmt.Errorf("0 rows affected custom char delete")
 	}
 
 	return nil

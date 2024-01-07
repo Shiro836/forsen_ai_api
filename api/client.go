@@ -75,6 +75,9 @@ func NewRouter(api *API) *chi.Mux {
 	router.Get("/get_filters", api.GetFilters)
 
 	router.Post("/upload_full_card", api.UploadFullCardHandler)
+	router.Get("/delete_full_card/{char_name}", api.DeleteFullCardHandler)
+	router.Get("/get_full_card_list", api.GetFullCardListHandler)
+	router.Get("/get_full_card/{char_name}", api.GetFullCardHandler)
 
 	fs := http.FileServer(http.Dir("client/static"))
 

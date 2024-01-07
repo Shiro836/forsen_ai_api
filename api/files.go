@@ -213,6 +213,143 @@ func (api *API) GetModel(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type FullCardList struct {
+	Chars []string `json:"chars"`
+}
+
+func (api *API) GetFullCardListHandler(w http.ResponseWriter, r *http.Request) {
+	var userData *db.UserData
+
+	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("unauthorized"))
+
+		return
+	} else if userData, err = db.GetUserDataBySessionId(cookie.Value); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("user data not found"))
+
+		return
+	}
+
+	if chars, err := db.GetCustomChars(userData.ID); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if data, err := json.Marshal(&FullCardList{Chars: chars}); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else {
+		w.Write(data)
+	}
+}
+
+func (api *API) GetFullCardHandler(w http.ResponseWriter, r *http.Request) {
+	charName := chi.URLParam(r, "char_name")
+	if len(charName) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("empty char_name in path"))
+
+		return
+	}
+
+	var userData *db.UserData
+	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("unauthorized"))
+
+		return
+	} else if userData, err = db.GetUserDataBySessionId(cookie.Value); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("user data not found"))
+
+		return
+	}
+
+	var card *char.Card
+	fullCharName := userData.UserLoginData.UserName + "_" + charName
+
+	if dbCard, err := db.GetCharCard(fullCharName); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if err = json.Unmarshal(dbCard.Card, &card); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if voiceData, err := db.GetVoice(fullCharName); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if b64Voice := base64.StdEncoding.EncodeToString(voiceData); false {
+	} else if fullCardData, err := json.Marshal(&FullCard{
+		Card:           card,
+		ReferenceAudio: b64Voice,
+	}); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else {
+		w.Write(fullCardData)
+	}
+}
+
+func (api *API) DeleteFullCardHandler(w http.ResponseWriter, r *http.Request) {
+	charName := chi.URLParam(r, "char_name")
+	if len(charName) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("empty char_name in path"))
+
+		return
+	}
+
+	var userData *db.UserData
+
+	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("unauthorized"))
+
+		return
+	} else if userData, err = db.GetUserDataBySessionId(cookie.Value); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("user data not found"))
+
+		return
+	}
+
+	r = r.WithContext(slg.WithSlog(r.Context(), slog.With("user", userData.UserLoginData.UserName)))
+	fullCharName := userData.UserLoginData.UserName + "_" + charName
+
+	if err := db.DeleteCharCard(fullCharName); err != nil {
+		slg.GetSlog(r.Context()).Error("failed to delete char card", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if err := db.DeleteVoice(fullCharName); err != nil {
+		slg.GetSlog(r.Context()).Error("failed to delete voice", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if err := db.DeleteCustomChar(userData.ID, charName); err != nil {
+		slg.GetSlog(r.Context()).Error("failed to delete custom char", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	}
+
+	w.Write([]byte("success"))
+}
+
 type FullCard struct {
 	Card           *char.Card `json:"char_card"`
 	ReferenceAudio string     `json:"ref_audio"`

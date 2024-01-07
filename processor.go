@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"app/db"
 	"app/rvc"
 	"app/slg"
-	"app/swearfilter"
 	"app/tts"
 	"app/twitch"
 
@@ -171,18 +169,6 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 
 	twitchChatCh := twitch.MessagesFetcher(ctx, user)
 
-	swears := make([]string, len(swearfilter.Swears))
-	copy(swears, swearfilter.Swears)
-
-	if userData != nil {
-		filters, err := db.GetFilters(userData.ID)
-		if err == nil {
-			swears = append(swears, strings.Split(filters, ",")...)
-		}
-	}
-
-	var swearFilter *swearfilter.SwearFilter = swearfilter.NewSwearFilter(false, swears...)
-
 	luaState.SetGlobal("broadcaster", lua.LString(user))
 	luaState.SetGlobal("get_char_card", luaGetCharCard(ctx, luaState))
 	// luaState.SetGlobal("get_char_cards", luaGetAllCharCards(ctx, luaState, charNameToCard))
@@ -192,7 +178,7 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	luaState.SetGlobal("get_next_event", luaGetNextEvent(ctx, luaState, twitchChatCh, twitchRewardIDToRewardID))
 	luaState.SetGlobal("set_model", luaSetModel(ctx, luaState, eventWriter))
 	luaState.SetGlobal("set_image", luaSetImage(ctx, luaState, eventWriter))
-	luaState.SetGlobal("filter_text", luaFilter(ctx, luaState, swearFilter))
+	luaState.SetGlobal("filter_text", luaFilter(ctx, luaState, userData))
 	luaState.SetGlobal("get_custom_chars", luaGetCustomChars(ctx, luaState, userData))
 
 	if err := luaState.DoString(settings.LuaScript); err != nil {

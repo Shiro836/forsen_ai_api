@@ -89,7 +89,7 @@ func (api *API) channelPointsRewardCreateHandler(w http.ResponseWriter, r *http.
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("internal server error"))
 	} else {
-		api.connManager.NotifyUpdateSettings(userData.UserLoginData.UserName)
+		// api.connManager.NotifyUpdateSettings(userData.UserLoginData.UserName)
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("success"))
@@ -386,7 +386,7 @@ func (api *API) UpdateFilters(w http.ResponseWriter, r *http.Request) {
 
 		return
 	} else {
-		api.connManager.NotifyUpdateSettings(userData.UserLoginData.UserName)
+		// api.connManager.NotifyUpdateSettings(userData.UserLoginData.UserName)
 		w.Write([]byte(filters))
 	}
 }

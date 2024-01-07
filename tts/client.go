@@ -59,8 +59,8 @@ func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, 
 		Text:     msg,
 		RefAudio: base64.StdEncoding.EncodeToString(refAudio),
 
-		Alpha: 0.1,
-		Beta:  0.2,
+		Alpha: 0.3,
+		Beta:  0.7,
 
 		EmbeddingScale: 1,
 	}

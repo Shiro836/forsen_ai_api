@@ -19,12 +19,10 @@ func luaGetCharCard(ctx context.Context, luaState *lua.LState) *lua.LFunction {
 		charName := l.Get(1).String()
 		if card, err := db.GetCharCard(charName); err != nil {
 			slg.GetSlog(ctx).Error("failed to get card", "err", err)
-			l.Push(lua.LString("failed to get card: " + err.Error()))
-			return 1
+			return 0
 		} else if parsedCard, err := char.TryParse(card.Card); err != nil {
 			slg.GetSlog(ctx).Error("failed to parse card", "err", err)
-			l.Push(lua.LString("failed to parse card: " + err.Error()))
-			return 1
+			return 0
 		} else {
 			cardTbl := l.NewTable()
 
@@ -199,13 +197,28 @@ func luaSetImage(ctx context.Context, luaState *lua.LState, eventWriter conns.Ev
 	})
 }
 
-func luaFilter(ctx context.Context, luaState *lua.LState, swearfilter *swearfilter.SwearFilter) *lua.LFunction {
+func luaFilter(ctx context.Context, luaState *lua.LState, userData *db.UserData) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
 		request := l.Get(1).String()
 
+		if userData == nil {
+			l.Push(lua.LString(request))
+			return 1
+		}
+
+		swears := make([]string, len(swearfilter.Swears))
+		copy(swears, swearfilter.Swears)
+
+		filters, err := db.GetFilters(userData.ID)
+		if err == nil {
+			swears = append(swears, strings.Split(filters, ",")...)
+		}
+
+		swearFilterObj := swearfilter.NewSwearFilter(false, swears...)
+
 		filtered := request
 
-		tripped, _ := swearfilter.Check(request)
+		tripped, _ := swearFilterObj.Check(request)
 		for _, word := range tripped {
 			filtered = IReplace(filtered, word, strings.Repeat("*", len(word)))
 		}
