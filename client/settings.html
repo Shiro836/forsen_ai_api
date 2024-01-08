@@ -222,7 +222,7 @@
 <body style="display: flex; flex-direction: column; align-content: flex-start;">
     <div style="display: flex; flex-direction: row; margin-bottom: 20px; align-items: center;">
         <button class="button-66" onclick="logout()">Logout</button>
-        <h1 style="margin-left: 50px;">
+        <h1 style="margin-left: 50px; display: none;">
             Simple
             <label class="switch">
                 <input id="simple_checkbox" type="checkbox">
@@ -238,6 +238,7 @@
                 Default Characters</button>
             <button class="button-49" class="tablinks" onclick="openTab(event, 'Custom')">Add Custom Character</button>
             <button class="button-49" class="tablinks" onclick="openTab(event, 'Filters')">Filters</button>
+            <button class="button-49" class="tablinks" onclick="openTab(event, 'Whitelist')">Whitelist</button>
         </div>
 
         <!-- Tab content -->
@@ -319,7 +320,8 @@ You are speaking to {{char}}.
                             <div id="load_custom_char_status"></div>
                             <div style="display: flex; flex-direction: row;">
                                 <button id="load_custom_char_btn" class="button-66">Load</button>
-                                <button id="delete_custom_char_btn" class="button-66" style="margin-left: 10px;">Delete</button>
+                                <button id="delete_custom_char_btn" class="button-66"
+                                    style="margin-left: 10px;">Delete</button>
                             </div>
                             <script>
                                 document.getElementById('delete_custom_char_btn').addEventListener("click", (e) => {
@@ -379,7 +381,7 @@ You are speaking to {{char}}.
                                             ref_audio = res['ref_audio']
 
                                             let blob = new Blob([base64ToArrayBuffer(ref_audio)], { type: 'audio/wav' });
-                                            handleBlob(blob)
+                                            handleBlob(blob);
 
                                             load_custom_char_status.innerText = 'success';
                                         }
@@ -621,6 +623,73 @@ You are speaking to {{char}}.
                                 <br>
                                 <!-- <button class="button-66">Submit</button> -->
                             </form>
+                            <script>
+                                function tts() {
+                                    var tts_btn = document.getElementById('button_tts');
+                                    tts_btn.disabled = true;
+
+                                    orig_clr = document.getElementById('custom_char_status_add').style.color;
+
+                                    if (!document.getElementById('custom_char_ref_audio').files || document.getElementById('custom_char_ref_audio').files.length == 0) {
+                                        document.getElementById('tts_status').style.color = 'red'
+                                        document.getElementById('tts_status').innerText = 'Add Reference Audio';
+
+                                        return
+                                    }
+
+                                    blobToBase64(document.getElementById('custom_char_ref_audio').files[0]).then(base64 => {
+                                        request_json = {
+                                            'text' : document.getElementById('tts_text').value,
+                                            'ref_audio': base64.slice(1),
+                                        }
+
+                                        var xhr = new XMLHttpRequest();
+                                        xhr.open("POST", "/tts", true);
+                                        xhr.onreadystatechange = function () {
+                                            if (xhr.readyState === 4) {
+                                                tts_btn.disabled = false;
+                                                
+                                                tts_status = document.getElementById('tts_status')
+                                                var res;
+                                                try {
+                                                    res = JSON.parse(xhr.responseText);
+                                                } catch (error) {
+                                                    tts_status.innerText = xhr.responseText;
+                                                }
+
+                                                audio = res['tts_result'];
+
+                                                let blob = new Blob([base64ToArrayBuffer(audio)], { type: 'audio/wav' });
+
+                                                tts_result = document.getElementById('tts_result');
+                                                console.log(xhr.response);
+
+                                                tts_result.src = URL.createObjectURL(blob);
+                                                tts_result.controls = true;
+                                                tts_result.autoplay = false;
+
+                                                document.getElementById('tts_status').style.color = orig_clr;
+                                            }
+                                        };
+                                        xhr.onerror = (e) => {
+                                            tts_btn.disabled = false;
+                                        }
+                                        var data = JSON.stringify(request_json);
+                                        console.log(data)
+                                        xhr.send(data);
+                                    })
+                                }
+                            </script>
+                            <div style="display: flex; flex-direction: column; align-items: center;">
+                                <div style="display: flex; flex-direction: row; align-items: center;">
+                                    <label for="tts_text">TTS text:</label>
+                                    <input type="text" id="tts_text" style="margin-left: 10px;">
+                                </div>
+                                <button class="button-66" id="button_tts" onclick="tts()" style="margin-top: 10px;">TTS Test</button>
+                                <div id="tts_status"></div>
+                                <label for="tts_result">TTS result:</label>
+                                <audio id="tts_result"></audio>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -685,6 +754,14 @@ You are speaking to {{char}}.
                 onclick="document.getElementById('result').innerText=updateFilters(document.getElementById('filters').value)">Update
                 Filters</button>
             <div id="result"></div>
+        </div>
+
+        <div id="Whitelist" class="tabcontent">
+            <div>Update whitelist:</div>
+            <input type="text" id="whitelist_login" />
+            <button onclick="addWhitelistEntry(true)">Add To Whitelist</button>
+            <button onclick="addWhitelistEntry(false)">Ban</button>
+            <output id="update_whitelist_result"></output>
         </div>
 
     </div>
@@ -755,11 +832,6 @@ You are speaking to {{char}}.
             loadSettings()
         </script>
         <br>
-        <div>Update whitelist:</div>
-        <input type="text" id="whitelist_login" />
-        <button onclick="addWhitelistEntry(true)">Add To Whitelist</button>
-        <button onclick="addWhitelistEntry(false)">Ban</button>
-        <output id="update_whitelist_result"></output>
         <h3>Want to reset lua code back to default? Make editor empty and press update and then reload the page.</h3>
     </div>
     <script>

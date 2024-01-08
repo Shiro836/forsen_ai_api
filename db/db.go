@@ -455,7 +455,7 @@ func GetAllCards(userID int) ([]*Card, error) {
 	return cards, nil
 }
 
-func AddCharCard(userID int, charName string, cardData []byte) error {
+func UpsertCharCard(userID int, charName string, cardData []byte) error {
 	if _, err := db.Exec(`
 	insert into char_cards(
 		user_id,
@@ -466,6 +466,10 @@ func AddCharCard(userID int, charName string, cardData []byte) error {
 		$2,
 		$3
 	)
+	on conflict(char_name) do update set
+		card = excluded.card
+	where
+		char_cards.char_name = excluded.char_name
 	`,
 		userID,
 		charName,
@@ -526,7 +530,7 @@ func DeleteVoice(charName string) error {
 	return nil
 }
 
-func AddVoice(charName string, voice []byte) error {
+func UpsertVoice(charName string, voice []byte) error {
 	if _, err := db.Exec(`
 	insert into voices(
 		char_name,
@@ -535,6 +539,10 @@ func AddVoice(charName string, voice []byte) error {
 		$1,
 		$2
 	)
+	on conflict(char_name) do update set
+		voice = excluded.voice
+	where
+		voices.char_name = excluded.char_name
 	`,
 		charName,
 		base64.StdEncoding.EncodeToString(voice),
@@ -652,7 +660,7 @@ func AddCustomChar(userID int, charName string) error {
 		) values (
 			$1,
 			$2
-		)
+		) on conflict do nothing
 		`,
 		userID,
 		charName,

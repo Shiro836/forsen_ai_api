@@ -3,6 +3,7 @@ package api
 import (
 	"app/conns"
 	"app/db"
+	"app/tts"
 	"app/twitch"
 	"log/slog"
 	"net/http"
@@ -20,14 +21,16 @@ type Config struct {
 }
 
 type API struct {
+	ttsClient   *tts.Client
 	connManager *conns.Manager
 	twitch      *twitch.Client
 }
 
-func NewAPI(connManager *conns.Manager, twitch *twitch.Client) *API {
+func NewAPI(connManager *conns.Manager, twitch *twitch.Client, ttsClient *tts.Client) *API {
 	return &API{
 		connManager: connManager,
 		twitch:      twitch,
+		ttsClient:   ttsClient,
 	}
 }
 
@@ -78,6 +81,8 @@ func NewRouter(api *API) *chi.Mux {
 	router.Get("/delete_full_card/{char_name}", api.DeleteFullCardHandler)
 	router.Get("/get_full_card_list", api.GetFullCardListHandler)
 	router.Get("/get_full_card/{char_name}", api.GetFullCardHandler)
+
+	router.Post("/tts", api.tts)
 
 	fs := http.FileServer(http.Dir("client/static"))
 

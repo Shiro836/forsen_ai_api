@@ -97,7 +97,6 @@ func (api *API) channelPointsRewardCreateHandler(w http.ResponseWriter, r *http.
 }
 
 var DefaultLuaScript = `
-
 function splitTextIntoSentences(text)
     local sentences = {}
     local start = 1
@@ -201,17 +200,7 @@ daphne_greengrass = get_char_card("daphne_greengrass")
 harry_potter = get_char_card("harry_potter")
 jesus = get_char_card("jesus")
 adolf = get_char_card("adolf4")
-horse_cock = get_char_card("horse_cock")
 gura = get_char_card("gura")
-wiz = get_char_card("wiz")
-aqua2 = get_char_card("aqua2")
-darkness = get_char_card("darkness")
-
-custom_chars = {get_custom_chars()}
-custom_cards = {}
-for i=1, #custom_chars do
-  table.insert(custom_cards, get_char_card(broadcaster.."_"..custom_chars[i]))
-end
 
 while true do
   user, msg, reward_id = get_next_event()
@@ -247,8 +236,6 @@ while true do
     set_image("/static/images/biden.png")
     ask("biden", biden, msg)
     set_image("/static/images/empty.png")
-  elseif reward_id == "ask daphne_greengrass" then
-    ask("daphne_greengrass", daphne_greengrass, msg)
   elseif reward_id == "ask harry_potter" then
     set_image("/static/images/harry.png")
     ask("harry_potter", harry_potter, msg)
@@ -265,12 +252,11 @@ while true do
     set_image("/static/images/adolf.png")
     ask("adolf2", adolf, msg)
     set_image("/static/images/empty.png")
-  else
-    for i = 1, #custom_chars do
-      if reward_id == custom_chars[i] then
-        ask(broadcaster.."_"..custom_chars[i], custom_cards[i], msg)
-        break
-      end
+  elseif #reward_id ~= 0 then
+    local char_name = broadcaster.."_"..reward_id
+    card = {get_char_card(char_name)}
+    if #card ~= 0 then
+      ask(char_name, card[1], msg)
     end
   end
 end

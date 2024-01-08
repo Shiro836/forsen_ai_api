@@ -60,7 +60,7 @@ func (api *API) UploadCharCardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = db.AddCharCard(userData.ID, charName, bytes); err != nil {
+	if err = db.UpsertCharCard(userData.ID, charName, bytes); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 
@@ -115,7 +115,7 @@ func (api *API) UploadVoiceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = db.AddVoice(charName, bytes); err != nil {
+	if err = db.UpsertVoice(charName, bytes); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 
@@ -397,16 +397,17 @@ func (api *API) UploadFullCardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.AddCharCard(userData.ID, charName, cardData); err != nil {
-		slg.GetSlog(r.Context()).Error("failed to add char card", "err", err)
-	}
-
-	if rawAudio, err := base64.StdEncoding.DecodeString(fullCard.ReferenceAudio); err != nil {
+	if err := db.UpsertCharCard(userData.ID, charName, cardData); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 
 		return
-	} else if err := db.AddVoice(charName, rawAudio); err != nil {
+	} else if rawAudio, err := base64.StdEncoding.DecodeString(fullCard.ReferenceAudio); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if err := db.UpsertVoice(charName, rawAudio); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 

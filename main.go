@@ -84,7 +84,7 @@ func main() {
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	apiClient := api.NewAPI(connManager, twitchClient)
+	apiClient := api.NewAPI(connManager, twitchClient, tts)
 
 	router := api.NewRouter(apiClient)
 
