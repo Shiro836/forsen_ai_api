@@ -751,16 +751,18 @@ You are speaking to {{char}}.
         <div id="Filters" class="tabcontent">
             <textarea rows="5" cols="80" id="filters"></textarea>
             <button class="button-66"
-                onclick="document.getElementById('result').innerText=updateFilters(document.getElementById('filters').value)">Update
+                onclick="document.getElementById('filters_result').innerText=updateFilters(document.getElementById('filters').value)">Update
                 Filters</button>
-            <div id="result"></div>
+            <div id="filters_result"></div>
         </div>
 
-        <div id="Whitelist" class="tabcontent">
-            <div>Update whitelist:</div>
+        <div id="Whitelist" class="tabcontent" style="display: flex; flex-direction: column;">
+            <label for="whitelist_login">Update whitelist:</label>
             <input type="text" id="whitelist_login" />
-            <button onclick="addWhitelistEntry(true)">Add To Whitelist</button>
-            <button onclick="addWhitelistEntry(false)">Ban</button>
+            <div style="display: flex; flex-direction: row; margin-top: 10px;">
+                <button class="button-66" onclick="addWhitelistEntry(true)">Add To Whitelist</button>
+                <button class="button-66" onclick="addWhitelistEntry(false)" style="margin-left: 10px;">Ban</button>
+            </div>
             <output id="update_whitelist_result"></output>
         </div>
 

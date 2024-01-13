@@ -108,7 +108,7 @@ func UpsertUserData(userData *UserData) error {
 			session = excluded.session
 		where excluded.user_id = user_data.user_id;
 	`,
-		userData.UserLoginData.UserName,
+		strings.ToLower(userData.UserLoginData.UserName),
 		userData.UserLoginData.UserId,
 		userData.RefreshToken,
 		userData.AccessToken,
@@ -130,7 +130,7 @@ func UpdateUserData(userData *UserData) error {
 		where
 			user_id = $4
 		`,
-		userData.UserLoginData.UserName,
+		strings.ToLower(userData.UserLoginData.UserName),
 		userData.RefreshToken,
 		userData.AccessToken,
 		userData.UserLoginData.UserId,
@@ -144,6 +144,8 @@ func UpdateUserData(userData *UserData) error {
 }
 
 func GetUserData(user string) (*UserData, error) {
+	user = strings.ToLower(user)
+
 	row := db.QueryRow(`
 		select
 			id,
@@ -202,7 +204,7 @@ func GetUserDataBySessionId(sessionId string) (*UserData, error) {
 func GetRewardID(user string) (string, error) {
 	row := db.QueryRow(`
 		select reward_id from user_data where login = $1
-	`, user)
+	`, strings.ToLower(user))
 
 	var rewardID string
 	if err := row.Scan(&rewardID); err != nil {
@@ -299,7 +301,7 @@ func UpdateDbSettings(settings *Settings, login string) error {
 		where login = $2
 	`,
 		settingsData,
-		login,
+		strings.ToLower(login),
 	); err != nil {
 		return fmt.Errorf("failed to update db settings: %w", err)
 	}
