@@ -142,11 +142,11 @@
                     document.getElementById('simple_ui').style = "display: block;"
                     document.getElementById('advanced_ui').style = "display: none;"
                 }
-            })
+            });
             document.getElementById("default_tab_ui").click();
             getFilters((filters) => {
                 document.getElementById("filters").textContent = filters
-            })
+            });
             loadChars((chars) => {
                 var list = document.getElementById('chars_list');
                 chars.forEach(function (item) {
@@ -156,7 +156,8 @@
                     list.appendChild(option);
                 });
                 setupDataList()
-            })
+            });
+            update_queue_loop();
         }
         function loadChars(callback) {
             var xmlHttp = new XMLHttpRequest();
@@ -760,28 +761,99 @@ You are speaking to {{char}}.
         </div>
 
         <div id="Control Panel" class="tabcontent">
-            <table>
-                <tbody>
-                    <tr>
-                        <th>ID</th>
-                        <th>UserName</th>
-                        <th>Message</th>
-                        <th>RewardID</th>
-                        <th>Actions</th>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="msg_queue_container">
+                <table id="msg_table">
+                    <tbody>
+                        <tr>
+                            <th>ID</th>
+                            <th>UserName</th>
+                            <th>Message</th>
+                            <th>RewardID</th>
+                            <th>Actions</th>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
             <script>
-                function get_all_msgs() {
+                function delete_msg(msg_id) {
                     var xmlHttp = new XMLHttpRequest();
-                    xmlHttp.open("GET", "/get_full_card_list", true); // false for synchronous request
+                    xmlHttp.open("DELETE", "/delete_queue_msg/" + msg_id.toString(), true); // false for synchronous request
                     xmlHttp.onload = (e) => {
                         if (xmlHttp.readyState === 4) {
-                            const res = JSON.parse(xmlHttp.responseText);
-                            callback(res['chars'])
+                            console.log("delete success")
                         }
                     };
                     xmlHttp.send(null);
+                }
+
+                var table = document.getElementById("msg_table");
+                function setup_row(row, msg) {
+                    var id = row.insertCell(0);
+                    var user_name = row.insertCell(1);
+                    var message = row.insertCell(2);
+                    var custom_reward_id = row.insertCell(3);
+                    var actions = row.insertCell(4);
+                    id.innerHTML = msg['id'];
+                    user_name.innerHTML = msg['user_name'];
+                    message.innerHTML = msg['message'];
+                    custom_reward_id.innerHTML = msg['custom_reward_id'];
+                    actions.innerHTML = '<button class="button-66" onclick="delete_msg(' + msg['id'] + ')">Delete</button>';
+                }
+                var last_updated = 0;
+                function get_queue(callback, state) {
+                    var xmlHttp = new XMLHttpRequest();
+                    xmlHttp.open("GET", "/get_queue/" + state + "/" + last_updated.toString(), true); // false for synchronous request
+                    xmlHttp.onload = (e) => {
+                        if (xmlHttp.readyState === 4) {
+                            const res = JSON.parse(xmlHttp.responseText);
+                            callback(res['msgs']);
+                        }
+                    };
+                    xmlHttp.send(null);
+                }
+
+                var cur_row = 1;
+                function update_queue_loop() {
+                    var state = 'any';
+                    if (last_updated === 0) {
+                        state = 'wait';
+                    }
+
+                    get_queue((msgs) => {
+                        for (var key in msgs) {
+                            var msg = msgs[key];
+
+                            if (msg['custom_reward_id'].length == 0) {
+                                continue;
+                            }
+
+                            last_updated = Math.max(last_updated, Number(msg['updated']))
+
+                            if (msg['state'] != 'wait') {
+                                var found = false;
+
+                                for (var i = 1, row; row = table.rows[i]; i++) {
+                                    if (row.cells[0].innerHTML == msg['id']) {
+                                        console.log("deleting row ", i);
+                                        found = true;
+                                        table.deleteRow(i);
+                                        break;
+                                    }
+                                }
+
+                                if (found) {
+                                    cur_row--;
+                                }
+                            } else {
+                                var row = table.insertRow(cur_row);
+                                setup_row(row, msg);
+
+                                cur_row++;
+                            }
+                        };
+
+                        setTimeout(update_queue_loop, 1000);
+                    }, state);
                 }
             </script>
         </div>

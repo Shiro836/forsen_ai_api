@@ -1,7 +1,8 @@
 package tools
 
 const (
-	Wait State = iota
+	Any State = iota
+	Wait
 	Deleted
 	Processed
 )
@@ -10,6 +11,8 @@ type State int
 
 func (s State) String() string {
 	switch s {
+	case Any:
+		return "any"
 	case Wait:
 		return "wait"
 	case Deleted:

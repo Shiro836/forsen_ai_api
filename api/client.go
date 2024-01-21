@@ -84,7 +84,8 @@ func NewRouter(api *API) *chi.Mux {
 
 	router.Post("/tts", api.TTS)
 
-	router.Post("/get_queue", api.GetQue)
+	router.Get("/get_queue/{state}/{updated}", api.GetQue)
+	router.Delete("/delete_queue_msg/{msg_id}", api.DeleteMsgFromQue)
 
 	fs := http.FileServer(http.Dir("client/static"))
 

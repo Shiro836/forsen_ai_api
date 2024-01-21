@@ -1,6 +1,7 @@
 package db
 
 import (
+	"app/tools"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -781,22 +782,46 @@ func GetNextMsg(userID int, state string) (*Message, error) {
 	return msg, nil
 }
 
-func GetAllQueueMessages(userID int, state string) ([]*Message, error) {
-	rows, err := db.Query(`
-		select
-			id, user_name, message, custom_reward_id
-		from
-			msg_queue
-		where
-			state=$1
-		and
-			user_id=$2
-		order by id asc
-		limit 1000
-	`,
-		state,
-		userID,
-	)
+func GetAllQueueMessages(userID int, state string, updated int) ([]*Message, error) {
+	var rows *sql.Rows
+	var err error
+
+	if state == tools.Any.String() {
+		rows, err = db.Query(`
+			select
+				id, user_name, message, custom_reward_id, state, updated
+			from
+				msg_queue
+			where
+				updated > $1
+			and
+				user_id=$2
+			order by id desc
+			limit 1000
+		`,
+			updated,
+			userID,
+		)
+	} else {
+		rows, err = db.Query(`
+			select
+				id, user_name, message, custom_reward_id, state, updated
+			from
+				msg_queue
+			where
+				updated > $1
+			and
+				state=$2
+			and
+				user_id=$3
+			order by id desc
+			limit 1000
+		`,
+			updated,
+			state,
+			userID,
+		)
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get messages from queue: %w", err)
@@ -805,10 +830,9 @@ func GetAllQueueMessages(userID int, state string) ([]*Message, error) {
 	msgs := make([]*Message, 0, 100)
 	for rows.Next() {
 		var msg Message
-		if err := rows.Scan(&msg.ID, &msg.UserName, &msg.Message, &msg.CustomRewardID); err != nil {
+		if err := rows.Scan(&msg.ID, &msg.UserName, &msg.Message, &msg.CustomRewardID, &msg.State, &msg.Updated); err != nil {
 			return nil, fmt.Errorf("failed to scan next msg: %w", err)
 		}
-		msg.State = state
 
 		msgs = append(msgs, &msg)
 	}

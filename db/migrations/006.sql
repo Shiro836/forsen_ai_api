@@ -13,9 +13,7 @@ create table if not exists msg_queue (
     FOREIGN KEY(user_id) REFERENCES user_data(user_id)
 );
 
-
-create index if not exists msg_queue_state_user_id_id on msg_queue(state, user_id, id);
-create index if not exists msg_queue_updated_user_id on msg_queue(updated, user_id);
+create index if not exists msg_queue_updated_state_user_id on msg_queue(updated, state, user_id, id);
 
 create unique index if not exists user_data_lower_login on user_data(lower(login));
 create unique index if not exists char_cards_lower_char_name on char_cards(lower(char_name));

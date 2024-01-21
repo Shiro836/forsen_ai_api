@@ -13,15 +13,15 @@ import (
 )
 
 type Msg struct {
-	ID int `yaml:"id"`
+	ID int `json:"id"`
 
-	UserName       string `yaml:"user_name"`
-	Message        string `yaml:"message"`
-	CustomRewardID string `yaml:"custom_reward_id"`
+	UserName       string `json:"user_name"`
+	Message        string `json:"message"`
+	CustomRewardID string `json:"custom_reward_id"`
 
-	State string `yaml:"state"`
+	State string `json:"state"`
 
-	Updated int `yaml:"updated"`
+	Updated int `json:"updated"`
 }
 
 type Msgs struct {
@@ -45,7 +45,31 @@ func (api *API) GetQue(w http.ResponseWriter, r *http.Request) {
 
 	r = r.WithContext(slg.WithSlog(r.Context(), slog.With("user", userData.UserLoginData.UserName)))
 
-	msgs, err := db.GetAllQueueMessages(userData.UserLoginData.UserId, tools.Wait.String())
+	state := chi.URLParam(r, "state")
+	if len(state) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("empty state in path"))
+
+		return
+	}
+
+	updated := chi.URLParam(r, "updated")
+	if len(updated) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("empty updated in path"))
+
+		return
+	}
+
+	updatedInt, err := strconv.ParseInt(updated, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("updated is not int"))
+
+		return
+	}
+
+	msgs, err := db.GetAllQueueMessages(userData.UserLoginData.UserId, state, int(updatedInt))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("couldn't get messages from queue"))
@@ -58,12 +82,14 @@ func (api *API) GetQue(w http.ResponseWriter, r *http.Request) {
 	result := &Msgs{}
 
 	for _, msg := range msgs {
+		rewardID, _ := db.GetRewardIDFromTwitchRewardID(msg.CustomRewardID)
+
 		result.Msgs = append(result.Msgs, &Msg{
 			ID: msg.ID,
 
 			UserName:       msg.UserName,
 			Message:        msg.Message,
-			CustomRewardID: msg.CustomRewardID,
+			CustomRewardID: rewardID,
 
 			State: msg.State,
 

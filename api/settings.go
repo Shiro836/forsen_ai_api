@@ -188,8 +188,7 @@ function discuss(card1, card2, voice1, voice2, theme, times)
     end
 end
 
-forsen = get_char_card("forsen")
-forsen2 = get_char_card("forsen2")
+forsen = get_char_card("forsen2")
 kazuma = get_char_card("kazuma")
 megumin = get_char_card("megumin")
 neuro = get_char_card("neuro")
@@ -210,7 +209,7 @@ while true do
     set_image("/static/images/empty.png")
   elseif reward_id == "ask forsen" then
     set_image("/static/images/forsen.png")
-    ask("forsen", forsen2, msg)
+    ask("forsen", forsen, msg)
     set_image("/static/images/empty.png")
   elseif reward_id == "ask neuro" then
     set_image("/static/images/neuro.png")
