@@ -238,6 +238,7 @@
                 Default Characters</button>
             <button class="button-49" class="tablinks" onclick="openTab(event, 'Custom')">Add Custom Character</button>
             <button class="button-49" class="tablinks" onclick="openTab(event, 'Filters')">Filters</button>
+            <button class="button-49" class="tablinks" onclick="openTab(event, 'Control Panel')">Control Panel</button>
             <button class="button-49" class="tablinks" onclick="openTab(event, 'Whitelist')">Whitelist</button>
         </div>
 
@@ -285,11 +286,12 @@
                         <br>
                         <label for="custom_char_personality">Personality</label>
                         <textarea rows="3" cols="80" id="custom_char_personality">
-Adaptable, Smart, Based, Working Out, 70 wpm, Confident and other good traits
+Adaptable, Smart, Based, Working Out, Confident and other good traits
 </textarea>
                         <br>
                         <label for="custom_char_first_message">First Message</label>
                         <textarea rows="3" cols="80" id="custom_char_first_message">
+&lt;START&gt;
 {{char}} : Hello, what do you want to ask me?
 </textarea>
                         <br>
@@ -303,7 +305,7 @@ Adaptable, Smart, Based, Working Out, 70 wpm, Confident and other good traits
 {{char}} : I only care about myself. But can help others if I can.
 &lt;START&gt;
 {{user}} : What's your best programming language?
-{{char}} : It's golang - the best ever programming language. I hate all other languages but I forced to write on them. Like python - I forced ot write it because it's used in machine learning a lot. And js - it's used in frontend. But they are garbage.
+{{char}} : It's golang - the best ever programming language. I hate all other languages but I forced to write on them. Like python - I forced to write it because it's used in machine learning a lot. And js - it's used in frontend. But they are garbage.
 &lt;START&gt;
 {{user}} : What do you usually say to your teammates in cs?
 {{char}} : Go fuck yourself. Your mom is a whore.
@@ -619,7 +621,7 @@ You are speaking to {{char}}.
                                 </div>
                             </div>
                             <form action="" style="display: flex; flex-direction: column;">
-                                <input id="custom_char_ref_audio" placeholder="file" type="file" />
+                                <input id="custom_char_ref_audio" placeholder="file" type="file" accept="audio/wav" />
                                 <br>
                                 <!-- <button class="button-66">Submit</button> -->
                             </form>
@@ -639,7 +641,7 @@ You are speaking to {{char}}.
 
                                     blobToBase64(document.getElementById('custom_char_ref_audio').files[0]).then(base64 => {
                                         request_json = {
-                                            'text' : document.getElementById('tts_text').value,
+                                            'text': document.getElementById('tts_text').value,
                                             'ref_audio': base64.slice(1),
                                         }
 
@@ -648,7 +650,7 @@ You are speaking to {{char}}.
                                         xhr.onreadystatechange = function () {
                                             if (xhr.readyState === 4) {
                                                 tts_btn.disabled = false;
-                                                
+
                                                 tts_status = document.getElementById('tts_status')
                                                 var res;
                                                 try {
@@ -685,7 +687,8 @@ You are speaking to {{char}}.
                                     <label for="tts_text">TTS text:</label>
                                     <input type="text" id="tts_text" style="margin-left: 10px;">
                                 </div>
-                                <button class="button-66" id="button_tts" onclick="tts()" style="margin-top: 10px;">TTS Test</button>
+                                <button class="button-66" id="button_tts" onclick="tts()" style="margin-top: 10px;">TTS
+                                    Test</button>
                                 <div id="tts_status"></div>
                                 <label for="tts_result">TTS result:</label>
                                 <audio id="tts_result"></audio>
@@ -754,6 +757,33 @@ You are speaking to {{char}}.
                 onclick="document.getElementById('filters_result').innerText=updateFilters(document.getElementById('filters').value)">Update
                 Filters</button>
             <div id="filters_result"></div>
+        </div>
+
+        <div id="Control Panel" class="tabcontent">
+            <table>
+                <tbody>
+                    <tr>
+                        <th>ID</th>
+                        <th>UserName</th>
+                        <th>Message</th>
+                        <th>RewardID</th>
+                        <th>Actions</th>
+                    </tr>
+                </tbody>
+            </table>
+            <script>
+                function get_all_msgs() {
+                    var xmlHttp = new XMLHttpRequest();
+                    xmlHttp.open("GET", "/get_full_card_list", true); // false for synchronous request
+                    xmlHttp.onload = (e) => {
+                        if (xmlHttp.readyState === 4) {
+                            const res = JSON.parse(xmlHttp.responseText);
+                            callback(res['chars'])
+                        }
+                    };
+                    xmlHttp.send(null);
+                }
+            </script>
         </div>
 
         <div id="Whitelist" class="tabcontent" style="display: flex; flex-direction: column;">

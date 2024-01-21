@@ -26,3 +26,6 @@ ssl.crt
 ssl.key
 sqlite.db
 cfg.yaml
+
+_pgadmin
+_postgres

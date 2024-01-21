@@ -51,7 +51,7 @@ type rvcResp struct {
 	Audio string `json:"audio"`
 }
 
-func (c *Client) Rvc(ctx context.Context, voice string, audio []byte) ([]byte, error) {
+func (c *Client) Rvc(ctx context.Context, voice string, audio []byte, pitch int) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -59,7 +59,7 @@ func (c *Client) Rvc(ctx context.Context, voice string, audio []byte) ([]byte, e
 		Inputfile:    base64.StdEncoding.EncodeToString(audio),
 		ModelName:    voice,
 		IndexPath:    "assets/weights/" + voice + ".index",
-		F0upKey:      0,
+		F0upKey:      pitch,
 		F0method:     "rmvpe",
 		IndexRate:    0.66,
 		Device:       "cuda",

@@ -16,7 +16,7 @@ type TTSResponse struct {
 	Audio string `json:"tts_result"`
 }
 
-func (api *API) tts(w http.ResponseWriter, r *http.Request) {
+func (api *API) TTS(w http.ResponseWriter, r *http.Request) {
 	var ttsReq *TTSRequest
 
 	if data, err := io.ReadAll(r.Body); err != nil {

@@ -6,9 +6,12 @@ import (
 	"app/db"
 	"app/slg"
 	"app/swearfilter"
-	"app/twitch"
+	"app/tools"
 	"context"
+	"database/sql"
+	"errors"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	lua "github.com/yuin/gopher-lua"
@@ -104,7 +107,7 @@ func luaText(luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction
 func (p *Processor) rvcVoice(ttsResponse []byte, voice string) ([]byte, error) {
 	switch voice {
 	case "megumin":
-		return p.rvc.Rvc(context.Background(), "megumin", ttsResponse)
+		return p.rvc.Rvc(context.Background(), "megumin", ttsResponse, 3)
 	default:
 		return ttsResponse, nil
 	}
@@ -141,33 +144,40 @@ func (p *Processor) luaTts(ctx context.Context, luaState *lua.LState, eventWrite
 	})
 }
 
-func luaGetNextEvent(ctx context.Context, luaState *lua.LState, twitchChatCh chan *twitch.ChatMessage, twitchRewardIDToRewardID map[string]string) *lua.LFunction {
+func luaGetNextEvent(ctx context.Context, luaState *lua.LState, userID int) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
-		select {
-		case msg := <-twitchChatCh:
-			slg.GetSlog(ctx).Info("recieved", "msg", msg)
-			if len(msg.CustomRewardID) != 0 {
-				if rewardID, ok := twitchRewardIDToRewardID[msg.CustomRewardID]; ok {
-					slg.GetSlog(ctx).Info("converted reward", "new_reward", rewardID)
-
-					l.Push(lua.LString(msg.UserName))
-					l.Push(lua.LString(msg.Message))
-					l.Push(lua.LString(rewardID))
-
-					return 3
-				}
-			} else {
-				l.Push(lua.LString(msg.UserName))
-				l.Push(lua.LString(msg.Message))
-				l.Push(lua.LString(msg.CustomRewardID))
-
-				return 3
+		for {
+			select {
+			case <-ctx.Done():
+				return 0
+			default:
 			}
-		case <-ctx.Done():
-			return 0
-		}
 
-		return 0
+			msg, err := db.GetNextMsg(userID, tools.Wait.String())
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					time.Sleep(300 * time.Millisecond)
+					continue
+				}
+				slg.GetSlog(ctx).Error("failed to get next msg", "err", err)
+				return 0
+			}
+
+			defer db.UpdateState(msg.ID, tools.Processed.String())
+
+			var rewardID string
+			if len(msg.CustomRewardID) != 0 {
+				if rewardID, err = db.GetRewardIDFromTwitchRewardID(msg.CustomRewardID); err != nil {
+					slg.GetSlog(ctx).Error("failed to convert reward id", "err", err)
+				}
+			}
+
+			l.Push(lua.LString(msg.UserName))
+			l.Push(lua.LString(msg.Message))
+			l.Push(lua.LString(rewardID))
+
+			return 3
+		}
 	})
 }
 

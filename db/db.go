@@ -32,6 +32,9 @@ func CreateDb(filePath string) *sql.DB {
 		log.Fatal(err)
 	}
 
+	db.SetMaxIdleConns(1)
+	db.SetMaxOpenConns(1)
+
 	folder := "db/migrations"
 
 	migrations, err := os.ReadDir(folder)
@@ -154,7 +157,7 @@ func GetUserData(user string) (*UserData, error) {
 			access_token
 		from user_data
 		where
-			login = $1
+			lower(login) = lower($1)
 	`,
 		user,
 	)
@@ -201,10 +204,10 @@ func GetUserDataBySessionId(sessionId string) (*UserData, error) {
 	return userData, nil
 }
 
-func GetRewardID(user string) (string, error) {
+func GetRewardIDFromTwitchRewardID(twitchRewardID string) (string, error) {
 	row := db.QueryRow(`
-		select reward_id from user_data where login = $1
-	`, strings.ToLower(user))
+		select reward_id from reward_ids where twitch_reward_id = $1
+	`, twitchRewardID)
 
 	var rewardID string
 	if err := row.Scan(&rewardID); err != nil {
@@ -471,7 +474,7 @@ func UpsertCharCard(userID int, charName string, cardData []byte) error {
 	on conflict(char_name) do update set
 		card = excluded.card
 	where
-		char_cards.char_name = excluded.char_name
+		lower(char_cards.char_name) = lower(excluded.char_name)
 	`,
 		userID,
 		charName,
@@ -492,7 +495,7 @@ func GetCharCard(charName string) (*Card, error) {
 		from
 			char_cards
 		where
-			char_name = $1
+			lower(char_name) = lower($1)
 	`, charName)
 	if err := row.Scan(&cardStr); err != nil {
 		return nil, fmt.Errorf("failed to get char card: %w", err)
@@ -511,7 +514,7 @@ func DeleteCharCard(charName string) error {
 		DELETE
 			FROM char_cards
 		WHERE
-			char_name = $1
+			lower(char_name) = lower($1)
 	`, charName); err != nil {
 		return fmt.Errorf("failed to delete char card: %w", err)
 	}
@@ -524,7 +527,7 @@ func DeleteVoice(charName string) error {
 		DELETE
 			FROM voices
 		WHERE
-			char_name = $1
+			lower(char_name) = lower($1)
 	`, charName); err != nil {
 		return fmt.Errorf("failed to delete voice: %w", err)
 	}
@@ -544,7 +547,7 @@ func UpsertVoice(charName string, voice []byte) error {
 	on conflict(char_name) do update set
 		voice = excluded.voice
 	where
-		voices.char_name = excluded.char_name
+		lower(voices.char_name) = lower(excluded.char_name)
 	`,
 		charName,
 		base64.StdEncoding.EncodeToString(voice),
@@ -559,8 +562,12 @@ func GetVoice(charName string) ([]byte, error) {
 	var voiceStr string
 
 	row := db.QueryRow(`
-	select voice from voices
-	where char_name = $1
+	select
+		voice
+	from
+		voices
+	where
+		lower(char_name) = lower($1)
 	`, charName)
 	if err := row.Scan(&voiceStr); err != nil {
 		return nil, fmt.Errorf("failed to get voice: %w", err)
@@ -701,4 +708,114 @@ func GetCustomChars(userID int) ([]string, error) {
 	}
 
 	return chars, nil
+}
+
+type Message struct {
+	ID int
+
+	UserName       string
+	Message        string
+	CustomRewardID string
+
+	State string
+
+	Updated int
+}
+
+func UpdateState(messageID int, state string) error {
+	_, err := db.Exec(`
+		update
+			msg_queue
+		set
+			state=$1,
+			updated=(select coalesce(max(updated) + 1, 1) from msg_queue)
+		where
+			id=$2
+	`,
+		state,
+		messageID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update state: %w", err)
+	}
+
+	return nil
+}
+
+func PushMsg(userID int, msg *Message) error {
+	_, err := db.Exec(`
+		insert into msg_queue(user_id, user_name, message, custom_reward_id, state, updated)
+		values($1, $2, $3, $4, $5, (select coalesce(max(updated) + 1, 1) from msg_queue))`,
+		userID, msg.UserName, msg.Message, msg.CustomRewardID, msg.State)
+
+	if err != nil {
+		return fmt.Errorf("failed to push msg: %w", err)
+	}
+
+	return nil
+}
+
+func GetNextMsg(userID int, state string) (*Message, error) {
+	row := db.QueryRow(`
+		select
+			id, user_name, message, custom_reward_id, state
+		from
+			msg_queue
+		where
+			state=$1
+		and
+			user_id=$2
+		order by id asc
+		limit 1
+		`,
+		state,
+		userID,
+	)
+
+	msg := &Message{}
+	if err := row.Scan(&msg.ID, &msg.UserName, &msg.Message, &msg.CustomRewardID, &msg.State); err != nil {
+		return nil, fmt.Errorf("failed to get next msg: %w", err)
+	}
+
+	return msg, nil
+}
+
+func GetAllQueueMessages(userID int, state string) ([]*Message, error) {
+	rows, err := db.Query(`
+		select
+			id, user_name, message, custom_reward_id
+		from
+			msg_queue
+		where
+			state=$1
+		and
+			user_id=$2
+		order by id asc
+		limit 1000
+	`,
+		state,
+		userID,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get messages from queue: %w", err)
+	}
+
+	msgs := make([]*Message, 0, 100)
+	for rows.Next() {
+		var msg Message
+		if err := rows.Scan(&msg.ID, &msg.UserName, &msg.Message, &msg.CustomRewardID); err != nil {
+			return nil, fmt.Errorf("failed to scan next msg: %w", err)
+		}
+		msg.State = state
+
+		msgs = append(msgs, &msg)
+	}
+
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("next msg rows err: %w", err)
+	}
+
+	return msgs, nil
 }

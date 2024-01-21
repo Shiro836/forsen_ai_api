@@ -15,6 +15,7 @@ import (
 	"app/db"
 	"app/rvc"
 	"app/slg"
+	"app/tools"
 	"app/tts"
 	"app/twitch"
 
@@ -91,6 +92,8 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	userData, err := db.GetUserData(user)
 	if err != nil {
 		slg.GetSlog(ctx).Info("no user data found", "err", err)
+		time.Sleep(4 * time.Second)
+		return
 	} else {
 		rewards, err := db.GetRewards(userData.ID)
 		if err == nil {
@@ -167,7 +170,31 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 		}
 	}
 
-	twitchChatCh := twitch.MessagesFetcher(ctx, user)
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer cancel()
+
+		twitchChatCh := twitch.MessagesFetcher(ctx, user)
+
+		for msg := range twitchChatCh {
+			if len(msg.Message) == 0 || len(msg.UserName) == 0 {
+				continue
+			}
+
+			if err := db.PushMsg(userData.UserLoginData.UserId, &db.Message{
+				UserName:       msg.UserName,
+				Message:        msg.Message,
+				CustomRewardID: msg.CustomRewardID,
+
+				State: tools.Wait.String(),
+			}); err != nil {
+				slg.GetSlog(ctx).Error("failed to insert msg", "err", err)
+			}
+		}
+	}()
 
 	luaState.SetGlobal("broadcaster", lua.LString(user))
 	luaState.SetGlobal("get_char_card", luaGetCharCard(ctx, luaState))
@@ -175,7 +202,7 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	luaState.SetGlobal("ai", p.luaAi(ctx, luaState))
 	luaState.SetGlobal("text", luaText(luaState, eventWriter))
 	luaState.SetGlobal("tts", p.luaTts(ctx, luaState, eventWriter))
-	luaState.SetGlobal("get_next_event", luaGetNextEvent(ctx, luaState, twitchChatCh, twitchRewardIDToRewardID))
+	luaState.SetGlobal("get_next_event", luaGetNextEvent(ctx, luaState, userData.UserLoginData.UserId))
 	luaState.SetGlobal("set_model", luaSetModel(ctx, luaState, eventWriter))
 	luaState.SetGlobal("set_image", luaSetImage(ctx, luaState, eventWriter))
 	luaState.SetGlobal("filter_text", luaFilter(ctx, luaState, userData))
@@ -200,6 +227,8 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	}
 
 	slg.GetSlog(ctx).Info("processor is closing")
+
+	wg.Wait()
 
 	return nil
 }

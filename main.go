@@ -54,6 +54,16 @@ func main() {
 		log.Fatal("can't unmarshal cfg.yaml file", err)
 	}
 
+	// createDbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// postgreDB, err := postgredb.New(createDbCtx, &postgredb.Config{
+	// 	ConnStr: cfg.DB.ConnStr,
+	// })
+	// if err != nil {
+	// 	log.Fatal("failed to init postgre db", err)
+	// }
+
+	// postgreDB.Test()
+
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 	}

@@ -41,12 +41,12 @@ func TestTest(t *testing.T) {
 		URL: "http://localhost:4111/tts",
 	})
 
-	audio, err := ttsClient.TTS(context.Background(), "forsen forsen forsen forsen forsen forsen forsen ", refAudio)
+	audio, err := ttsClient.TTS(context.Background(), "forsen forsen forsen forsen forsen forsen forsen. I am fucking whore!!! I am fucking whore???  I just don't like it when people ignore me. ", refAudio)
 	assert.NoError(err)
 
 	rvcClient := rvc.New(http.DefaultClient, &rvc.Config{URL: "http://localhost:8001/voice2voice"})
 
-	rvcAudio, err := rvcClient.Rvc(context.Background(), "megumin", audio)
+	rvcAudio, err := rvcClient.Rvc(context.Background(), "megumin", audio, 5)
 	assert.NoError(err)
 
 	err = writeFile("megumin_result.wav", rvcAudio)

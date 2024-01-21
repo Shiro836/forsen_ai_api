@@ -82,7 +82,9 @@ func NewRouter(api *API) *chi.Mux {
 	router.Get("/get_full_card_list", api.GetFullCardListHandler)
 	router.Get("/get_full_card/{char_name}", api.GetFullCardHandler)
 
-	router.Post("/tts", api.tts)
+	router.Post("/tts", api.TTS)
+
+	router.Post("/get_queue", api.GetQue)
 
 	fs := http.FileServer(http.Dir("client/static"))
 
