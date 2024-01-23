@@ -359,6 +359,8 @@ func GetDbWhitelist() (*Whitelist, error) {
 			return nil, fmt.Errorf("failed to scan whitelist entry: %w", err)
 		}
 
+		nextHuman.Login = strings.ToLower(nextHuman.Login)
+
 		res = append(res, nextHuman)
 	}
 
@@ -375,6 +377,8 @@ type WhitelistUpdate struct {
 }
 
 func UpdateDbWhitelist(upd *WhitelistUpdate, adder string) error {
+	upd.Login = strings.ToLower(upd.Login)
+
 	whitelist, err := GetDbWhitelist()
 	if err != nil {
 		return fmt.Errorf("failed to get whitelist: %w", err)

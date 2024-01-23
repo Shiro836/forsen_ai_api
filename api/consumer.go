@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"app/conns"
@@ -79,6 +80,7 @@ func (api *API) consumerHandler(w http.ResponseWriter, r *http.Request) {
 	if !isValidUser(user, w) {
 		return
 	}
+	user = strings.ToLower(user)
 
 	r = r.WithContext(slg.WithSlog(r.Context(), slog.With("user", user)))
 

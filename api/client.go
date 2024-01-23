@@ -66,7 +66,7 @@ func NewRouter(api *API) *chi.Mux {
 	router.Post("/update_settings", api.updateSettings)
 
 	router.Get("/get_whitelist", getWhitelist)
-	router.Post("/update_whitelist", updateWhitelist)
+	router.Post("/update_whitelist", api.updateWhitelist)
 
 	router.Post("/upload_card/{char_name}", api.UploadCharCardHandler)
 	router.Post("/upload_voice/{char_name}", api.UploadVoiceHandler)

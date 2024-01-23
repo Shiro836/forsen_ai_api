@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -93,6 +94,8 @@ func (d *DataEvent) String() string {
 }
 
 func (m *Manager) Subscribe(user string) (<-chan *DataEvent, func()) {
+	user = strings.ToLower(user)
+
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
 
@@ -165,8 +168,8 @@ func (m *Manager) NotifyUpdateWhitelist(user *db.Human) {
 }
 
 func (m *Manager) NotifyUpdateSettings(login string) {
-	m.rwMutex.Lock()
-	defer m.rwMutex.Unlock()
+	m.rwMutex.RLock()
+	defer m.rwMutex.RUnlock()
 
 	if ch, ok := m.updateEventsCh[login]; ok {
 		ch <- struct{}{}
@@ -174,6 +177,8 @@ func (m *Manager) NotifyUpdateSettings(login string) {
 }
 
 func (m *Manager) HandleUser(user *db.Human) {
+	user.Login = strings.ToLower(user.Login)
+
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
 
@@ -215,6 +220,7 @@ func (m *Manager) HandleUser(user *db.Human) {
 					slg.GetSlog(ctx).Error("processor Process error", "err", err)
 					time.Sleep(2 * time.Second)
 				}
+				time.Sleep(500 * time.Millisecond)
 			}
 		}()
 	}

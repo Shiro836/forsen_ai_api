@@ -45,7 +45,7 @@ func NewWsClient(conn *websocket.Conn) (client *Client, done chan struct{}) {
 	client = &Client{
 		conn: conn,
 
-		writeChan: make(chan *Message),
+		writeChan: make(chan *Message, 5),
 		readChan:  make(chan *Message),
 	}
 
