@@ -84,7 +84,7 @@ func (api *API) consumerHandler(w http.ResponseWriter, r *http.Request) {
 
 	r = r.WithContext(slg.WithSlog(r.Context(), slog.With("user", user)))
 
-	slg.GetSlog(r.Context()).Info("consumer connected", "ip", r.RemoteAddr)
+	slg.GetSlog(r.Context()).Info("consumer connected")
 
 	c, err := ws.Upgrader.Upgrade(w, r, nil)
 	if err != nil {

@@ -847,3 +847,8 @@ func GetAllQueueMessages(userID int, state string, updated int) ([]*Message, err
 
 	return msgs, nil
 }
+
+func CleanQueue() error {
+	_, err := db.Exec(`delete from msg_queue where state='processed'`)
+	return err
+}

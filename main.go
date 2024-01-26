@@ -13,7 +13,6 @@ import (
 
 	"context"
 	_ "embed"
-	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -22,26 +21,25 @@ import (
 	"sync"
 	"time"
 
-	"github.com/microcosm-cc/bluemonday"
 	"gopkg.in/yaml.v3"
 )
 
-var p = bluemonday.StrictPolicy()
+// var p = bluemonday.StrictPolicy()
 
-func writeFile(fileName string, data []byte) error {
-	file, err := os.Create(fileName)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer file.Close()
+// func writeFile(fileName string, data []byte) error {
+// 	file, err := os.Create(fileName)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to create file: %w", err)
+// 	}
+// 	defer file.Close()
 
-	_, err = file.Write(data)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
+// 	_, err = file.Write(data)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to create file: %w", err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func main() {
 	db.InitDB()
@@ -133,6 +131,25 @@ func main() {
 		}
 
 		slog.Info("Connections loop finished")
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		ticker := time.NewTicker(30 * time.Minute)
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := db.CleanQueue(); err != nil {
+					slogLogger.Error("failed to clean db msg queue", "err", err)
+				}
+			case <-ctx.Done():
+				ticker.Stop()
+				break
+			}
+		}
 	}()
 
 	select {

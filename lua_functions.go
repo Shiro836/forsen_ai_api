@@ -163,7 +163,11 @@ func luaGetNextEvent(ctx context.Context, luaState *lua.LState, userID int) *lua
 				return 0
 			}
 
-			defer db.UpdateState(msg.ID, tools.Processed.String())
+			defer func() {
+				if err := db.UpdateState(msg.ID, tools.Processed.String()); err != nil {
+					slg.GetSlog(ctx).Error("failed to update state", "err", err)
+				}
+			}()
 
 			var rewardID string
 			if len(msg.CustomRewardID) != 0 {
