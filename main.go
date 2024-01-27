@@ -139,6 +139,7 @@ func main() {
 
 		ticker := time.NewTicker(30 * time.Minute)
 
+	loop:
 		for {
 			select {
 			case <-ticker.C:
@@ -147,7 +148,7 @@ func main() {
 				}
 			case <-ctx.Done():
 				ticker.Stop()
-				break
+				break loop
 			}
 		}
 	}()

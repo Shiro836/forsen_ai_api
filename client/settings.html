@@ -241,6 +241,7 @@
             <button class="button-49" class="tablinks" onclick="openTab(event, 'Filters')">Filters</button>
             <button class="button-49" class="tablinks" onclick="openTab(event, 'Control Panel')">Control Panel</button>
             <button class="button-49" class="tablinks" onclick="openTab(event, 'Whitelist')">Whitelist</button>
+            <button class="button-49" class="tablinks" onclick="openTab(event, 'Setup Guide')">Setup Guide</button>
         </div>
 
         <!-- Tab content -->
@@ -866,6 +867,13 @@ You are speaking to {{char}}.
                 <button class="button-66" onclick="addWhitelistEntry(false)" style="margin-left: 10px;">Ban</button>
             </div>
             <output id="update_whitelist_result"></output>
+        </div>
+
+        <div id="Setup Guide" class="tabcontent">
+            <video width="1366" height="768" controls>
+                <source src="/static/videos/setup_guide.mp4" type="video/mp4">
+              Your browser does not support the video tag.
+            </video>
         </div>
 
     </div>
