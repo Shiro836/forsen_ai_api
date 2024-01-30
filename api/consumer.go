@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -34,7 +33,7 @@ func (api *API) sendData(wsClient *ws.Client, data *conns.DataEvent) error {
 	case conns.EventTypeAudio:
 		if msg.Message, err = json.Marshal(&frontMessage{
 			Type: "audio",
-			Data: base64.StdEncoding.EncodeToString(data.EventData),
+			Data: string(data.EventData),
 		}); err != nil {
 			return fmt.Errorf("failed to marshal frontMessage: %w", err)
 		}
@@ -63,6 +62,13 @@ func (api *API) sendData(wsClient *ws.Client, data *conns.DataEvent) error {
 		if msg.Message, err = json.Marshal(&frontMessage{
 			Type: "ping",
 			Data: "ping",
+		}); err != nil {
+			return fmt.Errorf("failed to marshal frontMessage: %w", err)
+		}
+	case conns.EventTypeSkip:
+		if msg.Message, err = json.Marshal(&frontMessage{
+			Type: "skip",
+			Data: string(data.EventData),
 		}); err != nil {
 			return fmt.Errorf("failed to marshal frontMessage: %w", err)
 		}

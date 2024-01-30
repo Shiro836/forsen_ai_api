@@ -29,3 +29,6 @@ cfg.yaml
 
 _pgadmin
 _postgres
+
+db/extracted
+playground

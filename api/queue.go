@@ -151,5 +151,7 @@ func (api *API) DeleteMsgFromQue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	api.connManager.SkipMessage(userData.UserLoginData.UserName, msgID)
+
 	w.Write([]byte("success"))
 }

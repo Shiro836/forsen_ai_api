@@ -143,7 +143,7 @@ function prep_card(card, user)
     .. "It was very good, thx for asking. I did a lot of things today and I feel very good."
 end
 
-function gradual_tts(voice, msg)
+function gradual_tts(msg_id, voice, msg)
   msg = filter_text(msg)
 
   local sentences = splitTextIntoSentences(msg)
@@ -152,22 +152,28 @@ function gradual_tts(voice, msg)
 
     for i, sentence in ipairs(sentences) do
       total=total..sentence
-      text(total)
+      text(msg_id, total)
       if #sentence > 2 then
-            tts(voice, sentence)
+            tts(msg_id, voice, sentence)
         end
     end
-  text(" ")
+  text(msg_id, " ")
 end
 
-function ask(voice, card, request)
+function ask(msg_id, voice, card, request, img_link)
   prefix = prep_card(card, user)
 
   local ai_resp = ai(prefix .. " ###" .. user.. ": " .. request .. " ###" .. card.name .. ": ")
   local say1 = user .. " asked me: " .. request
 
-  gradual_tts(voice, say1)
-  gradual_tts(voice, ai_resp)
+  if img_link ~= nil then
+    set_image(msg_id, img_link)
+  end
+
+  gradual_tts(msg_id, voice, say1)
+  gradual_tts(msg_id, voice, ai_resp)
+
+  set_image(msg_id, "/static/images/empty.png")
 end
 
 function discuss(card1, card2, voice1, voice2, theme, times)
@@ -202,60 +208,36 @@ adolf = get_char_card("adolf4")
 gura = get_char_card("gura")
 
 while true do
-  user, msg, reward_id = get_next_event()
+  msg_id, user, msg, reward_id = get_next_event()
   if reward_id == "tts forsen" then
-    set_image("/static/images/forsen.png")
-    gradual_tts("forsen", msg)
-    set_image("/static/images/empty.png")
+    gradual_tts(msg_id, "forsen", msg)
   elseif reward_id == "ask forsen" then
-    set_image("/static/images/forsen.png")
-    ask("forsen", forsen, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "forsen", forsen, msg, "/static/images/forsen.png")
   elseif reward_id == "ask neuro" then
-    set_image("/static/images/neuro.png")
-    ask("neuro", neuro, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "neuro", neuro, msg, "/static/images/neuro.png")
   elseif reward_id == "ask megumin" then
-    set_image("/static/images/megumin.png")
-    ask("megumin", megumin, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "megumin", megumin, msg, "/static/images/megumin.png")
   elseif reward_id == "ask kazuma" then
-    set_image("/static/images/kazuma.png")
-    ask("kazuma", kazuma, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "kazuma", kazuma, msg, "/static/images/kazuma.png")
   elseif reward_id == "ask gordon" then
-    set_image("/static/images/gordon.png")
-    ask("gordon", gordon, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "gordon", gordon, msg, "/static/images/gordon.png")
   elseif reward_id == "ask trump" then
-    set_image("/static/images/trump.png")
-    ask("trump", trump, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "trump", trump, msg, "/static/images/trump.png")
   elseif reward_id == "ask biden" then
-    set_image("/static/images/biden.png")
-    ask("biden", biden, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "biden", biden, msg, "/static/images/biden.png")
   elseif reward_id == "ask harry_potter" then
-    set_image("/static/images/harry.png")
-    ask("harry_potter", harry_potter, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "harry_potter", harry_potter, msg, "/static/images/harry.png")
   elseif reward_id == "ask jesus" then
-    set_image("/static/images/jesus.png")
-    ask("jesus", jesus, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "jesus", jesus, msg, "/static/images/jesus.png")
   elseif reward_id == "ask gura" then
-    set_image("/static/images/gura.png")
-    ask("gura", gura, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "gura", gura, msg, "/static/images/gura.png")
   elseif reward_id == "ask adolf" then
-    set_image("/static/images/adolf.png")
-    ask("adolf2", adolf, msg)
-    set_image("/static/images/empty.png")
+    ask(msg_id, "adolf2", adolf, msg, "/static/images/adolf.png")
   elseif #reward_id ~= 0 then
     local char_name = broadcaster.."_"..reward_id
     card = {get_char_card(char_name)}
     if #card ~= 0 then
-      ask(char_name, card[1], msg)
+      ask(msg_id, char_name, card[1], msg, card.img_link)
     end
   end
 end

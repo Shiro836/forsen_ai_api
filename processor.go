@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"time"
 
@@ -34,6 +35,8 @@ type Processor struct {
 	rvc *rvc.Client
 	ai  *ai.Client
 	tts *tts.Client
+
+	skippedMsgs map[int]struct{}
 }
 
 func NewProcessor(luaCfg *LuaConfig, ai *ai.Client, tts *tts.Client, rvc *rvc.Client) *Processor {
@@ -43,6 +46,8 @@ func NewProcessor(luaCfg *LuaConfig, ai *ai.Client, tts *tts.Client, rvc *rvc.Cl
 		ai:  ai,
 		tts: tts,
 		rvc: rvc,
+
+		skippedMsgs: make(map[int]struct{}, 20),
 	}
 }
 
@@ -51,7 +56,7 @@ func sleepForAudioLen(wavData []byte) {
 
 	d := wav.NewDecoder(reader)
 	if d == nil {
-		panic("error opening wav data")
+		slog.Error("error opening wav data")
 	}
 
 	duration, err := d.Duration()
@@ -62,7 +67,7 @@ func sleepForAudioLen(wavData []byte) {
 	time.Sleep(duration)
 }
 
-func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) (err error) {
+func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, user string) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	eventWriter(&conns.DataEvent{
@@ -81,43 +86,40 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	}()
 
 	go func() {
-		<-updates
-		slg.GetSlog(ctx).Info("processor signal recieved")
-		cancel()
-	}()
+	loop:
+		for {
+			select {
+			case upd := <-updates:
+				slg.GetSlog(ctx).Info("processor signal recieved", "upd_signal", upd)
+				switch upd.UpdateType {
+				case conns.RestartProcessor:
+					cancel()
+					break loop
+				case conns.SkipMessage:
+					msgID, err := strconv.Atoi(upd.Data)
+					if err != nil {
+						slg.GetSlog(ctx).Error("msg id is not integer", "err", err)
+					}
 
-	//charNameToCard := make(map[string][]byte, 10)
-	twitchRewardIDToRewardID := make(map[string]string, 5)
+					p.skippedMsgs[msgID] = struct{}{}
+
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeSkip,
+						EventData: []byte(upd.Data),
+					})
+				}
+			case <-ctx.Done():
+				break loop
+			}
+		}
+	}()
 
 	userData, err := db.GetUserData(user)
 	if err != nil {
 		slg.GetSlog(ctx).Info("no user data found", "err", err)
 		time.Sleep(4 * time.Second)
 		return
-	} else {
-		rewards, err := db.GetRewards(userData.ID)
-		if err == nil {
-			for _, reward := range rewards {
-				twitchRewardIDToRewardID[reward.TwitchRewardID] = reward.RewardID
-			}
-		} else {
-			slg.GetSlog(ctx).Info("failed to get rewards", "err", err)
-		}
-
-		// cards, err := db.GetAllCards(userData.ID)
-		// if err == nil {
-		// 	for _, card := range cards {
-		// 		charNameToCard[card.CharName] = card.Card
-		// 	}
-		// } else {
-		// 	slg.GetSlog(ctx).Info("failed to get char cards", "err", err)
-		// }
 	}
-
-	slg.GetSlog(ctx).Info("got from db",
-		"rewards", twitchRewardIDToRewardID,
-		// "cards", maps.Keys(charNameToCard),
-	)
 
 	settings, err := db.GetDbSettings(user)
 	if err != nil {
@@ -198,15 +200,15 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 
 	luaState.SetGlobal("broadcaster", lua.LString(user))
 	luaState.SetGlobal("get_char_card", luaGetCharCard(ctx, luaState))
-	// luaState.SetGlobal("get_char_cards", luaGetAllCharCards(ctx, luaState, charNameToCard))
 	luaState.SetGlobal("ai", p.luaAi(ctx, luaState))
-	luaState.SetGlobal("text", luaText(luaState, eventWriter))
+	luaState.SetGlobal("text", p.luaText(luaState, eventWriter))
 	luaState.SetGlobal("tts", p.luaTts(ctx, luaState, eventWriter))
 	luaState.SetGlobal("get_next_event", luaGetNextEvent(ctx, luaState, userData.UserLoginData.UserId))
-	luaState.SetGlobal("set_model", luaSetModel(ctx, luaState, eventWriter))
-	luaState.SetGlobal("set_image", luaSetImage(ctx, luaState, eventWriter))
+	luaState.SetGlobal("set_model", p.luaSetModel(ctx, luaState, eventWriter))
+	luaState.SetGlobal("set_image", p.luaSetImage(ctx, luaState, eventWriter))
 	luaState.SetGlobal("filter_text", luaFilter(ctx, luaState, userData))
-	luaState.SetGlobal("get_custom_chars", luaGetCustomChars(ctx, luaState, userData))
+	// luaState.SetGlobal("get_char_cards", luaGetAllCharCards(ctx, luaState, charNameToCard))
+	// luaState.SetGlobal("get_custom_chars", luaGetCustomChars(ctx, luaState, userData))
 
 	if err := luaState.DoString(settings.LuaScript); err != nil {
 		if ctx.Err() != nil {
@@ -231,4 +233,10 @@ func (p *Processor) Process(ctx context.Context, updates chan struct{}, eventWri
 	wg.Wait()
 
 	return nil
+}
+
+func (p *Processor) ToSkipMsg(msgID int) bool {
+	_, ok := p.skippedMsgs[msgID]
+
+	return ok
 }

@@ -5,6 +5,7 @@ const (
 	Wait
 	Deleted
 	Processed
+	Current
 )
 
 type State int
@@ -19,6 +20,8 @@ func (s State) String() string {
 		return "deleted"
 	case Processed:
 		return "processed"
+	case Current:
+		return "current"
 	default:
 		return "unknown"
 	}

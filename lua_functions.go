@@ -9,7 +9,10 @@ import (
 	"app/tools"
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -45,37 +48,6 @@ func luaGetCharCard(ctx context.Context, luaState *lua.LState) *lua.LFunction {
 	})
 }
 
-func luaGetAllCharCards(ctx context.Context, luaState *lua.LState, charNameToCard map[string][]byte) *lua.LFunction {
-	return luaState.NewFunction(func(l *lua.LState) int {
-		arrTbl := l.NewTable()
-
-		for charName, card := range charNameToCard {
-			parsedCard, err := char.FromPngSillyTavernCard(card)
-			if err != nil {
-				slg.GetSlog(ctx).Error("failed to parse card", "err", err)
-				continue
-			}
-
-			cardTbl := l.NewTable()
-
-			cardTbl.RawSetString("name", lua.LString(parsedCard.Name))
-			cardTbl.RawSetString("description", lua.LString(parsedCard.Description))
-			cardTbl.RawSetString("personality", lua.LString(parsedCard.Personality))
-			cardTbl.RawSetString("first_message", lua.LString(parsedCard.FirstMessage))
-			cardTbl.RawSetString("message_example", lua.LString(parsedCard.MessageExample))
-			cardTbl.RawSetString("scenario", lua.LString(parsedCard.Scenario))
-			cardTbl.RawSetString("system_prompt", lua.LString(parsedCard.SystemPrompt))
-			cardTbl.RawSetString("post_history_instructions", lua.LString(parsedCard.PostHistoryInstructions))
-
-			arrTbl.RawSetString(charName, cardTbl)
-		}
-
-		l.Push(arrTbl)
-
-		return 1
-	})
-}
-
 func (p *Processor) luaAi(ctx context.Context, luaState *lua.LState) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
 		request := l.Get(1).String()
@@ -91,9 +63,14 @@ func (p *Processor) luaAi(ctx context.Context, luaState *lua.LState) *lua.LFunct
 	})
 }
 
-func luaText(luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
+func (p *Processor) luaText(luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
-		request := l.Get(1).String()
+		msgID := int(lua.LVAsNumber(l.Get(1)))
+		request := l.Get(2).String()
+
+		if p.ToSkipMsg(msgID) {
+			return 0
+		}
 
 		eventWriter(&conns.DataEvent{
 			EventType: conns.EventTypeText,
@@ -113,10 +90,20 @@ func (p *Processor) rvcVoice(ttsResponse []byte, voice string) ([]byte, error) {
 	}
 }
 
+type audioEvent struct {
+	AudioBase64 string `json:"audio"`
+	MsgID       string `json:"msg_id"`
+}
+
 func (p *Processor) luaTts(ctx context.Context, luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
-		voice := l.Get(1).String()
-		request := l.Get(2).String()
+		msgID := int(lua.LVAsNumber(l.Get(1)))
+		voice := l.Get(2).String()
+		request := l.Get(3).String()
+
+		if p.ToSkipMsg(msgID) {
+			return 0
+		}
 
 		if voiceFile, err := db.GetVoice(voice); err != nil {
 			eventWriter(&conns.DataEvent{
@@ -133,9 +120,14 @@ func (p *Processor) luaTts(ctx context.Context, luaState *lua.LState, eventWrite
 				EventType: conns.EventTypeText,
 				EventData: []byte("failed to rvc: " + err.Error()),
 			})
+		} else if data, err := json.Marshal(&audioEvent{AudioBase64: base64.StdEncoding.EncodeToString(ttsResponse), MsgID: strconv.Itoa(msgID)}); err != nil {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte("failed to marshal json: " + err.Error()),
+			})
 		} else if eventWriter(&conns.DataEvent{
 			EventType: conns.EventTypeAudio,
-			EventData: ttsResponse,
+			EventData: data,
 		}) {
 			sleepForAudioLen(ttsResponse)
 		}
@@ -163,8 +155,12 @@ func luaGetNextEvent(ctx context.Context, luaState *lua.LState, userID int) *lua
 				return 0
 			}
 
+			if err := db.UpdateStatesWhere(userID, tools.Processed.String(), tools.Current.String()); err != nil {
+				slg.GetSlog(ctx).Error("failed to set current state messages to processed", "err", err)
+			}
+
 			defer func() {
-				if err := db.UpdateState(msg.ID, tools.Processed.String()); err != nil {
+				if err := db.UpdateState(msg.ID, tools.Current.String()); err != nil {
 					slg.GetSlog(ctx).Error("failed to update state", "err", err)
 				}
 			}()
@@ -176,18 +172,24 @@ func luaGetNextEvent(ctx context.Context, luaState *lua.LState, userID int) *lua
 				}
 			}
 
+			l.Push(lua.LNumber(msg.ID))
 			l.Push(lua.LString(msg.UserName))
 			l.Push(lua.LString(msg.Message))
 			l.Push(lua.LString(rewardID))
 
-			return 3
+			return 4
 		}
 	})
 }
 
-func luaSetModel(ctx context.Context, luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
+func (p *Processor) luaSetModel(ctx context.Context, luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
-		model := l.Get(1).String()
+		msgID := int(lua.LVAsNumber(l.Get(1)))
+		model := l.Get(2).String()
+
+		if p.ToSkipMsg(msgID) {
+			return 0
+		}
 
 		eventWriter(&conns.DataEvent{
 			EventType: conns.EventTypeSetModel,
@@ -198,9 +200,14 @@ func luaSetModel(ctx context.Context, luaState *lua.LState, eventWriter conns.Ev
 	})
 }
 
-func luaSetImage(ctx context.Context, luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
+func (p *Processor) luaSetImage(ctx context.Context, luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
-		imageUrl := l.Get(1).String()
+		msgID := int(lua.LVAsNumber(l.Get(1)))
+		imageUrl := l.Get(2).String()
+
+		if p.ToSkipMsg(msgID) {
+			return 0
+		}
 
 		eventWriter(&conns.DataEvent{
 			EventType: conns.EventTypeImage,
@@ -276,19 +283,50 @@ func IReplace(s, old, new string) string { // replace all, case insensitive
 	return b.String()
 }
 
-func luaGetCustomChars(ctx context.Context, luaState *lua.LState, userData *db.UserData) *lua.LFunction {
-	return luaState.NewFunction(func(l *lua.LState) int {
-		if userData == nil {
-			return 0
-		}
+// func luaGetCustomChars(ctx context.Context, luaState *lua.LState, userData *db.UserData) *lua.LFunction {
+// 	return luaState.NewFunction(func(l *lua.LState) int {
+// 		if userData == nil {
+// 			return 0
+// 		}
 
-		chars, err := db.GetCustomChars(userData.ID)
-		slg.GetSlog(ctx).Error("failed to get custom chars", "err", err)
+// 		chars, err := db.GetCustomChars(userData.ID)
+// 		slg.GetSlog(ctx).Error("failed to get custom chars", "err", err)
 
-		for _, char := range chars {
-			l.Push(lua.LString(char))
-		}
+// 		for _, char := range chars {
+// 			l.Push(lua.LString(char))
+// 		}
 
-		return len(chars)
-	})
-}
+// 		return len(chars)
+// 	})
+// }
+
+// func luaGetAllCharCards(ctx context.Context, luaState *lua.LState, charNameToCard map[string][]byte) *lua.LFunction {
+// 	return luaState.NewFunction(func(l *lua.LState) int {
+// 		arrTbl := l.NewTable()
+
+// 		for charName, card := range charNameToCard {
+// 			parsedCard, err := char.FromPngSillyTavernCard(card)
+// 			if err != nil {
+// 				slg.GetSlog(ctx).Error("failed to parse card", "err", err)
+// 				continue
+// 			}
+
+// 			cardTbl := l.NewTable()
+
+// 			cardTbl.RawSetString("name", lua.LString(parsedCard.Name))
+// 			cardTbl.RawSetString("description", lua.LString(parsedCard.Description))
+// 			cardTbl.RawSetString("personality", lua.LString(parsedCard.Personality))
+// 			cardTbl.RawSetString("first_message", lua.LString(parsedCard.FirstMessage))
+// 			cardTbl.RawSetString("message_example", lua.LString(parsedCard.MessageExample))
+// 			cardTbl.RawSetString("scenario", lua.LString(parsedCard.Scenario))
+// 			cardTbl.RawSetString("system_prompt", lua.LString(parsedCard.SystemPrompt))
+// 			cardTbl.RawSetString("post_history_instructions", lua.LString(parsedCard.PostHistoryInstructions))
+
+// 			arrTbl.RawSetString(charName, cardTbl)
+// 		}
+
+// 		l.Push(arrTbl)
+
+// 		return 1
+// 	})
+// }

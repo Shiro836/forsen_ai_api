@@ -24,7 +24,7 @@ type Manager struct {
 	subCount       map[string]int
 	dataStreams    map[string][]chan *DataEvent
 	isClosed       map[string][]bool
-	updateEventsCh map[string]chan struct{}
+	updateEventsCh map[string]chan *Update
 }
 
 func NewConnectionManager(ctx context.Context, processor Processor) *Manager {
@@ -38,7 +38,7 @@ func NewConnectionManager(ctx context.Context, processor Processor) *Manager {
 		subCount:       make(map[string]int, 100),
 		dataStreams:    make(map[string][]chan *DataEvent, 100),
 		isClosed:       make(map[string][]bool, 100),
-		updateEventsCh: make(map[string]chan struct{}, 100),
+		updateEventsCh: make(map[string]chan *Update, 100),
 	}
 }
 
@@ -59,6 +59,7 @@ const (
 	EventTypeInfo
 	EventTypeError
 	EventTypePing
+	EventTypeSkip
 )
 
 type EventType int
@@ -79,6 +80,8 @@ func (et EventType) String() string {
 		return "event_type_info"
 	case EventTypeError:
 		return "event_type_error"
+	case EventTypeSkip:
+		return "event_type_skip"
 	default:
 		return "event_type_unknown"
 	}
@@ -172,7 +175,21 @@ func (m *Manager) NotifyUpdateSettings(login string) {
 	defer m.rwMutex.RUnlock()
 
 	if ch, ok := m.updateEventsCh[login]; ok {
-		ch <- struct{}{}
+		ch <- &Update{
+			UpdateType: RestartProcessor,
+		}
+	}
+}
+
+func (m *Manager) SkipMessage(login string, msgID string) {
+	m.rwMutex.RLock()
+	defer m.rwMutex.RUnlock()
+
+	if ch, ok := m.updateEventsCh[login]; ok {
+		ch <- &Update{
+			UpdateType: SkipMessage,
+			Data:       msgID,
+		}
 	}
 }
 
@@ -192,7 +209,7 @@ func (m *Manager) HandleUser(user *db.Human) {
 			delete(m.updateEventsCh, user.Login)
 		}
 	} else if _, ok := m.updateEventsCh[user.Login]; !ok {
-		m.updateEventsCh[user.Login] = make(chan struct{})
+		m.updateEventsCh[user.Login] = make(chan *Update)
 
 		updates := m.updateEventsCh[user.Login]
 

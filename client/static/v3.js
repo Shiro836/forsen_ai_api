@@ -117,14 +117,26 @@ async function pageReady() {
 
   audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate:24000});
 
-  function playWavFile(arrayBuffer) {
+  const audio_sources = new Map();
+
+  function playWavFile(arrayBuffer, msg_id) {
     audioContext.decodeAudioData(arrayBuffer, function(buffer) {
       let source = audioContext.createBufferSource();
       source.buffer = buffer;
       source.channelCount = 1;
       source.connect(audioContext.destination);
       source.start();
+      
+      audio_sources.set(msg_id, source)
     });
+  }
+
+  function skip(msg_id) {
+    if (audio_sources.has(msg_id)) {
+      console.log(audio_sources);
+      console.log(audio_sources.get(msg_id));
+      audio_sources.get(msg_id).stop();
+    }
   }
 
   function connect() {
@@ -199,13 +211,15 @@ async function pageReady() {
           document.getElementById("text").innerText=data.data;
           break
         case 'audio':
+          let json = JSON.parse(data.data) 
+
           // model_motion("00_Anger_01", 0)
-          rawAudio = base64ToArrayBuffer(data.data)
+          rawAudio = base64ToArrayBuffer(json['audio'])
           // var rawAudioCopy = new ArrayBuffer(rawAudio.byteLength);
           // new Uint8Array(rawAudioCopy).set(new Uint8Array(rawAudio));
 
           if (model_proxy === null) {
-            playWavFile(rawAudio)
+            playWavFile(rawAudio, json['msg_id'])
             break
           }
 
@@ -222,6 +236,9 @@ async function pageReady() {
           break
         case 'image':
           set_image(data.data)
+          break
+        case 'skip':
+          skip(data.data)
           break
         case 'ping':
           break

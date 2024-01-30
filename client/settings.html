@@ -817,7 +817,7 @@ You are speaking to {{char}}.
                 function update_queue_loop() {
                     var state = 'any';
                     if (last_updated === 0) {
-                        state = 'wait';
+                        state = 'not_processed';
                     }
 
                     get_queue((msgs) => {
@@ -828,9 +828,7 @@ You are speaking to {{char}}.
                                 continue;
                             }
 
-                            last_updated = Math.max(last_updated, Number(msg['updated']))
-
-                            if (msg['state'] != 'wait') {
+                            if (msg['state'] == 'processed' || msg['state'] == 'deleted') {
                                 var found = false;
 
                                 for (var i = 1, row; row = table.rows[i]; i++) {
@@ -845,7 +843,27 @@ You are speaking to {{char}}.
                                 if (found) {
                                     cur_row--;
                                 }
-                            } else {
+
+                                continue;
+                            }
+
+                            last_updated = Math.max(last_updated, Number(msg['updated']))
+
+                            if (msg['state'] == 'wait' || msg['state'] == 'current') {
+                                var found = false;
+
+                                for (var i = 1, row; row = table.rows[i]; i++) {
+                                    if (row.cells[0].innerHTML == msg['id']) {
+                                        console.log("already exists ", i);
+                                        found = true;
+                                        break;
+                                    }
+                                }
+
+                                if (found) {
+                                    continue;
+                                }
+
                                 var row = table.insertRow(cur_row);
                                 setup_row(row, msg);
 

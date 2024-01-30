@@ -19,7 +19,7 @@ type mockProc struct {
 	mock.Mock
 }
 
-func (p *mockProc) Process(ctx context.Context, updates chan struct{}, eventWriter conns.EventWriter, user string) error {
+func (p *mockProc) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, user string) error {
 	args := p.Called(ctx, updates, eventWriter, user)
 	return args.Error(0)
 }

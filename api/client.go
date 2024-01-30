@@ -50,7 +50,6 @@ func NewRouter(api *API) *chi.Mux {
 	router.Use(middleware.Recoverer)
 	// TODO: add user authentication
 
-	router.Get("/v2.js", api.betaJsHandler)
 	router.Get("/whitelist.js", jsWhitelistHandler)
 
 	router.Get("/", descriptionHandler)

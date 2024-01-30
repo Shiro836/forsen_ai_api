@@ -806,6 +806,25 @@ func GetAllQueueMessages(userID int, state string, updated int) ([]*Message, err
 			updated,
 			userID,
 		)
+	} else if state == "not_processed" {
+		rows, err = db.Query(`
+			select
+				id, user_name, message, custom_reward_id, state, updated
+			from
+				msg_queue
+			where
+				updated > $1
+			and
+				(state=$2 or state=$3)
+			and
+				user_id=$4
+			order by id desc
+			limit 1000
+		`,
+			updated,
+			tools.Wait.String(), tools.Current.String(),
+			userID,
+		)
 	} else {
 		rows, err = db.Query(`
 			select
@@ -851,4 +870,28 @@ func GetAllQueueMessages(userID int, state string, updated int) ([]*Message, err
 func CleanQueue() error {
 	_, err := db.Exec(`delete from msg_queue where state='processed'`)
 	return err
+}
+
+func UpdateStatesWhere(userID int, newState string, oldState string) error {
+	_, err := db.Exec(`
+		update
+			msg_queue
+		set
+			state=$1,
+			updated=(select coalesce(max(updated) + 1, 1) from msg_queue)
+		where
+			state=$2
+		and
+			user_id=$3
+	`,
+		newState,
+		oldState,
+		userID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update state: %w", err)
+	}
+
+	return nil
 }
