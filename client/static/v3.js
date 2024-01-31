@@ -125,17 +125,68 @@ async function pageReady() {
             source.buffer = buffer;
             source.channelCount = 1;
             source.connect(audioContext.destination);
+
+            source.onended = () => {
+                audio_sources.delete(msg_id);
+            }
+
             source.start();
 
             audio_sources.set(msg_id, source)
         });
     }
 
+    let currentResponse = "";
+    function updateText(responseText) {
+        if (!responseText) textBox.innerHTML = ""
+
+        let text = responseText;
+        const responseBox = document.getElementById("response_box");
+        const textBox = document.getElementById("text_box");
+
+        if (responseText.startsWith(currentResponse)) {
+            text = responseText.slice(currentResponse.length);
+        } else {
+            textBox.innerHTML = "";
+        }
+        currentResponse = responseText;
+
+        const args = text.split(" ");
+        let i = 0;
+        const typeWriter = () => {
+            if (i < args.length) {
+                let word = args[i];
+                if (args.length > i + 1) {
+                    word += ' ';
+                }
+
+                const wordEl = document.createElement("span");
+                wordEl.innerText = word;
+                textBox.appendChild(wordEl);
+                responseBox.style.height = textBox.clientHeight + "px";
+                responseBox.scrollTo({ top: responseBox.scrollHeight });
+
+                i++;
+                setTimeout(typeWriter, 200);
+            }
+        }
+        typeWriter();
+    }
+
+    function set_image(url) {
+        const charImg = document.getElementById("char_image");
+
+        if (!url) return charImg.style.opacity = "0";
+
+        charImg.src = url;
+        charImg.style.opacity = "1";
+    }
+
     function skip(msg_id) {
         if (audio_sources.has(msg_id)) {
-            console.log(audio_sources);
-            console.log(audio_sources.get(msg_id));
             audio_sources.get(msg_id).stop();
+            updateText("");
+            set_image("");
         }
     }
 
@@ -156,10 +207,6 @@ async function pageReady() {
         };
 
         const models = new Map();
-
-        function set_image(url) {
-            document.getElementById("char_image").src = url;
-        }
 
         function set_model(char_name) {
             if (char_name === '') {
@@ -208,7 +255,7 @@ async function pageReady() {
             log(data)
             switch (data.type) {
                 case 'text':
-                    document.getElementById("text").innerText = data.data;
+                    updateText(data.data);
                     break
                 case 'audio':
                     let json = JSON.parse(data.data)

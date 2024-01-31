@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html style="height: 1000px; width: 800px;">
+<html>
 
     <head>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -14,17 +14,22 @@
         <!-- <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js"></script> -->
         <script src="/static/v3.js"></script>
         <script src="/whitelist.js"></script>
+        <link rel="stylesheet" href="/static/obs-overlay.css">
     </head>
 
-    <body style="display: flex; align-items: end; flex-direction: column; margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; overflow-y: hidden; ">
-        <strong style="justify-content: flex-end; max-height: 400px; margin-top: auto; flex-shrink: 0; width: 800px;">
-            <div id="text" style="overflow-wrap: break-word; font-size: 40px; color:#00ff19; text-shadow: rgb(0, 0, 0) 3px 0px 0px, rgb(0, 0, 0) 2.83487px 0.981584px 0px, rgb(0, 0, 0) 2.35766px 1.85511px 0px, rgb(0, 0, 0) 1.62091px 2.52441px 0px, rgb(0, 0, 0) 0.705713px 2.91581px 0px, rgb(0, 0, 0) -0.287171px 2.98622px 0px, rgb(0, 0, 0) -1.24844px 2.72789px 0px, rgb(0, 0, 0) -2.07227px 2.16926px 0px, rgb(0, 0, 0) -2.66798px 1.37182px 0px, rgb(0, 0, 0) -2.96998px 0.42336px 0px, rgb(0, 0, 0) -2.94502px -0.571704px 0px, rgb(0, 0, 0) -2.59586px -1.50383px 0px, rgb(0, 0, 0) -1.96093px -2.27041px 0px, rgb(0, 0, 0) -1.11013px -2.78704px 0px, rgb(0, 0, 0) -0.137119px -2.99686px 0px, rgb(0, 0, 0) 0.850987px -2.87677px 0px, rgb(0, 0, 0) 1.74541px -2.43999px 0px, rgb(0, 0, 0) 2.44769px -1.73459px 0px, rgb(0, 0, 0) 2.88051px -0.838247px 0px;"></div>
-        </strong>
-        <img id="char_image" style="border:none; margin-top: auto; color: #00000000; height: 600px;" src="https://upload.wikimedia.org/wikipedia/commons/5/59/Empty.png"></canvas>
-        <!-- <canvas id="canvas" style="margin-top: auto; color: #3300FF; width: 800px; height: 600px;"></canvas> -->
-        <script type="text/javascript">
-            pageReady();
-        </script>
+    <body>
+        <main>
+            <div id="response_box">
+                <div id="text_box"></div>
+            </div>
+            <div class="character">
+                <img id="char_image" src="">
+                <!-- <canvas id="canvas" style="margin-top: auto; color: #3300FF; width: 800px; height: 600px;"></canvas> -->
+            </div>
+            <script type="text/javascript">
+                pageReady();
+            </script>
+        </main>
     </body>
 
 </html>
