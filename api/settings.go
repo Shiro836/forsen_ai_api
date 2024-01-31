@@ -173,7 +173,8 @@ function ask(msg_id, voice, card, request, img_link)
   gradual_tts(msg_id, voice, say1)
   gradual_tts(msg_id, voice, ai_resp)
 
-  set_image(msg_id, "/static/images/empty.png")
+  -- clear the image
+  set_image(msg_id, "")
 end
 
 function discuss(card1, card2, voice1, voice2, theme, times)
