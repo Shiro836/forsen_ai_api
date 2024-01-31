@@ -243,7 +243,7 @@ async function pageReady() {
         }
 
         ws.onmessage = function (event) {
-            log(event.data)
+            // log(event.data)
 
             let uint8Array = new Uint8Array(event.data);
 
@@ -252,7 +252,7 @@ async function pageReady() {
 
             data = JSON.parse(utf8String)
 
-            log(data)
+            // log(data)
             switch (data.type) {
                 case 'text':
                     updateText(data.data);
