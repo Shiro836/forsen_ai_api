@@ -36,7 +36,8 @@ type Processor struct {
 	ai  *ai.Client
 	tts *tts.Client
 
-	skippedMsgs map[int]struct{}
+	skippedMsgs     map[int]struct{}
+	skippedMsgsLock sync.RWMutex
 }
 
 func NewProcessor(luaCfg *LuaConfig, ai *ai.Client, tts *tts.Client, rvc *rvc.Client) *Processor {
@@ -89,7 +90,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	loop:
 		for {
 			select {
-			case upd := <-updates:
+			case upd, ok := <-updates:
+				if !ok {
+					updates = nil
+					cancel()
+				}
+
 				slg.GetSlog(ctx).Info("processor signal recieved", "upd_signal", upd)
 				switch upd.UpdateType {
 				case conns.RestartProcessor:
@@ -101,7 +107,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 						slg.GetSlog(ctx).Error("msg id is not integer", "err", err)
 					}
 
-					p.skippedMsgs[msgID] = struct{}{}
+					func() {
+						p.skippedMsgsLock.Lock()
+						defer p.skippedMsgsLock.Unlock()
+
+						p.skippedMsgs[msgID] = struct{}{}
+					}()
 
 					eventWriter(&conns.DataEvent{
 						EventType: conns.EventTypeSkip,
@@ -203,7 +214,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	luaState.SetGlobal("ai", p.luaAi(ctx, luaState))
 	luaState.SetGlobal("text", p.luaText(luaState, eventWriter))
 	luaState.SetGlobal("tts", p.luaTts(ctx, luaState, eventWriter))
-	luaState.SetGlobal("get_next_event", luaGetNextEvent(ctx, luaState, userData.UserLoginData.UserId))
+	luaState.SetGlobal("get_next_event", p.luaGetNextEvent(ctx, luaState, userData.UserLoginData.UserId))
 	luaState.SetGlobal("set_model", p.luaSetModel(ctx, luaState, eventWriter))
 	luaState.SetGlobal("set_image", p.luaSetImage(ctx, luaState, eventWriter))
 	luaState.SetGlobal("filter_text", luaFilter(ctx, luaState, userData))
@@ -236,6 +247,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 }
 
 func (p *Processor) ToSkipMsg(msgID int) bool {
+	p.skippedMsgsLock.RLock()
+	defer p.skippedMsgsLock.RUnlock()
+
 	_, ok := p.skippedMsgs[msgID]
 
 	return ok

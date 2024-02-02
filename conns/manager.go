@@ -175,8 +175,11 @@ func (m *Manager) NotifyUpdateSettings(login string) {
 	defer m.rwMutex.RUnlock()
 
 	if ch, ok := m.updateEventsCh[login]; ok {
-		ch <- &Update{
+		select {
+		case ch <- &Update{
 			UpdateType: RestartProcessor,
+		}:
+		default:
 		}
 	}
 }
@@ -186,9 +189,12 @@ func (m *Manager) SkipMessage(login string, msgID string) {
 	defer m.rwMutex.RUnlock()
 
 	if ch, ok := m.updateEventsCh[login]; ok {
-		ch <- &Update{
+		select {
+		case ch <- &Update{
 			UpdateType: SkipMessage,
 			Data:       msgID,
+		}:
+		default:
 		}
 	}
 }
@@ -196,10 +202,12 @@ func (m *Manager) SkipMessage(login string, msgID string) {
 func (m *Manager) HandleUser(user *db.Human) {
 	user.Login = strings.ToLower(user.Login)
 
+	ctx := slg.WithSlog(m.ctx, slog.With("user", user.Login))
+
+	slg.GetSlog(ctx).Info("trying to unlock mutex for HandleUser")
+
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
-
-	ctx := slg.WithSlog(m.ctx, slog.With("user", user.Login))
 
 	if user.BannedBy != nil {
 		slg.GetSlog(ctx).Info("stopping processor")
@@ -240,6 +248,8 @@ func (m *Manager) HandleUser(user *db.Human) {
 				time.Sleep(500 * time.Millisecond)
 			}
 		}()
+	} else {
+		slg.GetSlog(ctx).Info("starting processor failed, updates already exists")
 	}
 }
 

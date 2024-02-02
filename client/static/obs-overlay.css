@@ -31,7 +31,7 @@ main {
     font-weight: bold;
     white-space: normal;
     word-break: break-word;
-    /* background: rgba(0, 0, 0, 0.5); */
+    background: rgba(0, 0, 0, 0.05);
     border-radius: .4em;
 }
 

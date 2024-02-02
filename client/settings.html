@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.3/codemirror.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.3/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.3/mode/lua/lua.min.js"></script>
+    <script src="static/whitelist.js"></script>
 
     <script defer>
         function isEmptyStr(value) {
@@ -158,6 +159,7 @@
                 setupDataList()
             });
             update_queue_loop();
+            updateWhitelist();
         }
         function loadChars(callback) {
             var xmlHttp = new XMLHttpRequest();
@@ -885,12 +887,14 @@ You are speaking to {{char}}.
                 <button class="button-66" onclick="addWhitelistEntry(false)" style="margin-left: 10px;">Ban</button>
             </div>
             <output id="update_whitelist_result"></output>
+            <div>Whitelist:</div>
+            <div id="whitelist" class="msg_queue_container">brrrr</div>
         </div>
 
         <div id="Setup Guide" class="tabcontent">
             <video width="1366" height="768" controls>
                 <source src="/static/videos/setup_guide.mp4" type="video/mp4">
-              Your browser does not support the video tag.
+                Your browser does not support the video tag.
             </video>
         </div>
 

@@ -136,7 +136,7 @@ func (p *Processor) luaTts(ctx context.Context, luaState *lua.LState, eventWrite
 	})
 }
 
-func luaGetNextEvent(ctx context.Context, luaState *lua.LState, userID int) *lua.LFunction {
+func (p *Processor) luaGetNextEvent(ctx context.Context, luaState *lua.LState, userID int) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
 		for {
 			select {
@@ -154,6 +154,15 @@ func luaGetNextEvent(ctx context.Context, luaState *lua.LState, userID int) *lua
 				slg.GetSlog(ctx).Error("failed to get next msg", "err", err)
 				return 0
 			}
+
+			func() {
+				p.skippedMsgsLock.Lock()
+				defer p.skippedMsgsLock.Unlock()
+
+				for k := range p.skippedMsgs {
+					delete(p.skippedMsgs, k)
+				}
+			}()
 
 			if err := db.UpdateStatesWhere(userID, tools.Processed.String(), tools.Current.String()); err != nil {
 				slg.GetSlog(ctx).Error("failed to set current state messages to processed", "err", err)
