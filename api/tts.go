@@ -40,7 +40,7 @@ func (api *API) TTS(w http.ResponseWriter, r *http.Request) {
 
 		return
 	} else if data, err := json.Marshal(&TTSResponse{
-		Audio: base64.StdEncoding.EncodeToString(ttsResult),
+		Audio: base64.StdEncoding.EncodeToString(ttsResult.Audio),
 	}); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

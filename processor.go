@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 	"runtime/debug"
 	"strconv"
 	"sync"
@@ -20,7 +18,6 @@ import (
 	"app/tts"
 	"app/twitch"
 
-	"github.com/go-audio/wav"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -52,21 +49,21 @@ func NewProcessor(luaCfg *LuaConfig, ai *ai.Client, tts *tts.Client, rvc *rvc.Cl
 	}
 }
 
-func sleepForAudioLen(wavData []byte) {
-	reader := bytes.NewReader(wavData)
+// func sleepForAudioLen(wavData []byte) {
+// 	reader := bytes.NewReader(wavData)
 
-	d := wav.NewDecoder(reader)
-	if d == nil {
-		slog.Error("error opening wav data")
-	}
+// 	d := wav.NewDecoder(reader)
+// 	if d == nil {
+// 		slog.Error("error opening wav data")
+// 	}
 
-	duration, err := d.Duration()
-	if err != nil {
-		slog.Error("getting duration err", "err", err)
-	}
-	slog.Info(fmt.Sprintf("sleeping for %s", duration.String()))
-	time.Sleep(duration)
-}
+// 	duration, err := d.Duration()
+// 	if err != nil {
+// 		slog.Error("getting duration err", "err", err)
+// 	}
+// 	slog.Info(fmt.Sprintf("sleeping for %s", duration.String()))
+// 	time.Sleep(duration)
+// }
 
 func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, user string) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -218,6 +215,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	luaState.SetGlobal("set_model", p.luaSetModel(ctx, luaState, eventWriter))
 	luaState.SetGlobal("set_image", p.luaSetImage(ctx, luaState, eventWriter))
 	luaState.SetGlobal("filter_text", luaFilter(ctx, luaState, userData))
+	luaState.SetGlobal("tts_text", p.luaTtsWithText(ctx, luaState, eventWriter))
 	// luaState.SetGlobal("get_char_cards", luaGetAllCharCards(ctx, luaState, charNameToCard))
 	// luaState.SetGlobal("get_custom_chars", luaGetCustomChars(ctx, luaState, userData))
 

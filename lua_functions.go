@@ -115,12 +115,12 @@ func (p *Processor) luaTts(ctx context.Context, luaState *lua.LState, eventWrite
 				EventType: conns.EventTypeText,
 				EventData: []byte("failed to tts: " + err.Error()),
 			})
-		} else if ttsResponse, err = p.rvcVoice(ttsResponse, voice); err != nil {
+		} else if ttsResponse.Audio, err = p.rvcVoice(ttsResponse.Audio, voice); err != nil {
 			eventWriter(&conns.DataEvent{
 				EventType: conns.EventTypeText,
 				EventData: []byte("failed to rvc: " + err.Error()),
 			})
-		} else if data, err := json.Marshal(&audioEvent{AudioBase64: base64.StdEncoding.EncodeToString(ttsResponse), MsgID: strconv.Itoa(msgID)}); err != nil {
+		} else if data, err := json.Marshal(&audioEvent{AudioBase64: base64.StdEncoding.EncodeToString(ttsResponse.Audio), MsgID: strconv.Itoa(msgID)}); err != nil {
 			eventWriter(&conns.DataEvent{
 				EventType: conns.EventTypeText,
 				EventData: []byte("failed to marshal json: " + err.Error()),
@@ -129,7 +129,7 @@ func (p *Processor) luaTts(ctx context.Context, luaState *lua.LState, eventWrite
 			EventType: conns.EventTypeAudio,
 			EventData: data,
 		}) {
-			sleepForAudioLen(ttsResponse)
+			time.Sleep(time.Millisecond * time.Duration(ttsResponse.AudioLen))
 		}
 
 		return 0
@@ -339,3 +339,79 @@ func IReplace(s, old, new string) string { // replace all, case insensitive
 // 		return 1
 // 	})
 // }
+
+func (p *Processor) luaTtsWithText(ctx context.Context, luaState *lua.LState, eventWriter conns.EventWriter) *lua.LFunction {
+	return luaState.NewFunction(func(l *lua.LState) int {
+		msgID := int(lua.LVAsNumber(l.Get(1)))
+		voice := l.Get(2).String()
+		request := l.Get(3).String()
+
+		if p.ToSkipMsg(msgID) {
+			return 0
+		}
+
+		if voiceFile, err := db.GetVoice(voice); err != nil {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte("failed to get voice from db: " + err.Error()),
+			})
+		} else if ttsResponse, err := p.tts.TTS(ctx, request, voiceFile); err != nil {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte("failed to tts: " + err.Error()),
+			})
+		} else if ttsResponse.Audio, err = p.rvcVoice(ttsResponse.Audio, voice); err != nil {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte("failed to rvc: " + err.Error()),
+			})
+		} else if data, err := json.Marshal(&audioEvent{AudioBase64: base64.StdEncoding.EncodeToString(ttsResponse.Audio), MsgID: strconv.Itoa(msgID)}); err != nil {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte("failed to marshal json: " + err.Error()),
+			})
+		} else if eventWriter(&conns.DataEvent{
+			EventType: conns.EventTypeAudio,
+			EventData: data,
+		}) {
+			audioLen := time.Millisecond * time.Duration(ttsResponse.AudioLen)
+
+			if len(ttsResponse.Timings) == 0 {
+				eventWriter(&conns.DataEvent{
+					EventType: conns.EventTypeText,
+					EventData: []byte(request),
+				})
+
+				time.Sleep(audioLen)
+
+				return 0
+			}
+
+			fullSentence := ""
+			var slept time.Duration
+
+			for i, timing := range ttsResponse.Timings {
+				word := ttsResponse.Words[i]
+				fullSentence += word + " "
+
+				eventWriter(&conns.DataEvent{
+					EventType: conns.EventTypeText,
+					EventData: []byte(fullSentence),
+				})
+
+				toSleep := time.Duration(timing)*time.Millisecond - slept
+
+				if toSleep+slept <= audioLen+time.Second {
+					time.Sleep(toSleep)
+					slept += toSleep
+				}
+			}
+
+			if slept < audioLen {
+				time.Sleep(audioLen - slept)
+			}
+		}
+
+		return 0
+	})
+}

@@ -46,7 +46,7 @@ func TestTest(t *testing.T) {
 
 	rvcClient := rvc.New(http.DefaultClient, &rvc.Config{URL: "http://localhost:8001/voice2voice"})
 
-	rvcAudio, err := rvcClient.Rvc(context.Background(), "megumin", audio, 5)
+	rvcAudio, err := rvcClient.Rvc(context.Background(), "megumin", audio.Audio, 5)
 	assert.NoError(err)
 
 	err = writeFile("megumin_result.wav", rvcAudio)

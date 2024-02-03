@@ -47,10 +47,20 @@ type ttsReq struct {
 }
 
 type ttsResp struct {
-	Audio string `json:"audio"`
+	Audio    string    `json:"audio"`
+	Timings  []float64 `json:"timings"` // ms
+	Words    []string  `json:"words"`
+	AudioLen float64   `json:"len"` // ms
 }
 
-func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
+type Response struct {
+	Audio    []byte
+	Timings  []float64 // ms
+	Words    []string
+	AudioLen float64 // ms
+}
+
+func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) (*Response, error) {
 	if refAudio == nil {
 		return nil, fmt.Errorf("no audio provided")
 	}
@@ -106,5 +116,10 @@ func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, 
 		return nil, fmt.Errorf("failed to decode tts response: %w", err)
 	}
 
-	return bytesData, nil
+	return &Response{
+		Audio:    bytesData,
+		Timings:  ttsResp.Timings,
+		Words:    ttsResp.Words,
+		AudioLen: ttsResp.AudioLen,
+	}, nil
 }
