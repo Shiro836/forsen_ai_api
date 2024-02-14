@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Config struct {
@@ -78,15 +79,20 @@ func NewRouter(api *API) *chi.Mux {
 	router.Get("/delete_full_card/{char_name}", api.DeleteFullCardHandler)
 	router.Get("/get_full_card_list", api.GetFullCardListHandler)
 	router.Get("/get_full_card/{char_name}", api.GetFullCardHandler)
+	router.Get("/get_all_cards", api.GetAllCards)
 
 	router.Post("/tts", api.TTS)
 
 	router.Get("/get_queue/{state}/{updated}", api.GetQue)
 	router.Delete("/delete_queue_msg/{msg_id}", api.DeleteMsgFromQue)
 
+	router.Get("/favicon.ico", faviconHandler)
+
 	fs := http.FileServer(http.Dir("client/static"))
 
 	router.Handle("/static/*", http.StripPrefix("/static/", fs))
+
+	router.Handle("/metrics", promhttp.Handler())
 
 	return router
 }

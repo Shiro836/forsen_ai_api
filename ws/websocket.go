@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"app/metrics"
 	"fmt"
 	"net/http"
 	"sync"
@@ -35,6 +36,7 @@ func (ws *Client) Close() error {
 		return nil
 	}
 
+	metrics.WebSocketConnections.Dec()
 	ws.closed = true
 	close(ws.writeChan)
 
@@ -48,6 +50,8 @@ func NewWsClient(conn *websocket.Conn) (client *Client, done chan struct{}) {
 		writeChan: make(chan *Message, 5),
 		readChan:  make(chan *Message),
 	}
+
+	metrics.WebSocketConnections.Inc()
 
 	done = make(chan struct{})
 

@@ -410,7 +410,7 @@ html {
   font-family: var(--body-font);
   font-size: 13px;
   color: var(--main-color);
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 body {

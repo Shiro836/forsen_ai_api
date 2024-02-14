@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"app/metrics"
 	"app/tools"
 	"bytes"
 	"context"
@@ -8,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 type aiReq struct {
@@ -37,6 +40,8 @@ func (c *Client) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 		return nil, fmt.Errorf("failed to create ai http request: %w", err)
 	}
 
+	start := time.Now()
+
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to do ai http request: %w", err)
@@ -44,23 +49,28 @@ func (c *Client) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 	defer tools.DrainAndClose(response.Body)
 
 	if response.StatusCode != http.StatusOK {
+		metrics.AIErrors.WithLabelValues(strconv.Itoa(response.StatusCode)).Inc()
 		return nil, fmt.Errorf("unexpected status code: %d", response.StatusCode)
 	}
 
 	responseData, err := io.ReadAll(response.Body)
 	if err != nil {
+		metrics.AIErrors.WithLabelValues("500").Inc()
 		return nil, fmt.Errorf("failed to read ai http response body: %w", err)
 	}
 
 	var resp *aiResp
 
 	if err := json.Unmarshal(responseData, &resp); err != nil {
+		metrics.AIErrors.WithLabelValues("500").Inc()
 		return nil, fmt.Errorf("failed to unmarshal ai http response body: %w", err)
 	}
 
 	for i := range resp.Responses {
 		resp.Responses[i] = resp.Responses[i][len(req.Prompt):]
 	}
+
+	metrics.AIQueryTime.Observe(time.Since(start).Seconds())
 
 	return resp.Responses, nil
 }

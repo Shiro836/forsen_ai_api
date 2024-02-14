@@ -115,6 +115,15 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 						EventType: conns.EventTypeSkip,
 						EventData: []byte(upd.Data),
 					})
+
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeText,
+						EventData: []byte(" "),
+					})
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeImage,
+						EventData: []byte(""),
+					})
 				}
 			case <-ctx.Done():
 				break loop
@@ -208,7 +217,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 	luaState.SetGlobal("broadcaster", lua.LString(user))
 	luaState.SetGlobal("get_char_card", luaGetCharCard(ctx, luaState))
-	luaState.SetGlobal("ai", p.luaAi(ctx, luaState))
+	luaState.SetGlobal("ai", p.luaAi(ctx, luaState, userData.UserLoginData.UserName))
 	luaState.SetGlobal("text", p.luaText(luaState, eventWriter))
 	luaState.SetGlobal("tts", p.luaTts(ctx, luaState, eventWriter))
 	luaState.SetGlobal("get_next_event", p.luaGetNextEvent(ctx, luaState, userData.UserLoginData.UserId))

@@ -34,6 +34,19 @@ func descriptionHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := os.ReadFile("client/forsene_paint.ico")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("failed to read forsene_paint.ico"))
+
+		return
+	}
+
+	w.Header().Add("Content-Type", "image/x-icon")
+	w.Write(data)
+}
+
 func (api *API) betaHtmlHandler(w http.ResponseWriter, r *http.Request) {
 	user := chi.URLParam(r, "user")
 	if !isValidUser(user, w) {
@@ -87,6 +100,6 @@ func (api *API) twitchTokenHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		http.SetCookie(w, &http.Cookie{Name: "session_id", Value: userData.Session})
 
-		http.Redirect(w, r, "https://forsen.fun/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 	}
 }

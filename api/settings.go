@@ -112,6 +112,8 @@ function prep_card(card, user)
     .. prep(card.message_example, card.name, user) 
     .. "<START>"
     .. prep(card.first_message, card.name, user)
+	.. "###" .. user .. ": How is your day?"
+	.. "###" .. card.name .. "It was very good, thx for asking. I did a lot of things today and I feel very good."
 end
 
 function ask(msg_id, voice, card, request, img_link)
@@ -123,6 +125,9 @@ function ask(msg_id, voice, card, request, img_link)
   if img_link ~= nil then
     set_image(msg_id, img_link)
   end
+
+  say1 = filter_text(say1)
+  ai_resp = filter_text(ai_resp)
 
   tts_text(msg_id, voice, say1)
   tts_text(msg_id, voice, ai_resp)

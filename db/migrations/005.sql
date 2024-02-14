@@ -3,7 +3,9 @@ create table if not exists custom_chars (
     user_id integer not null,
     char_name text not null,
 
-    FOREIGN KEY(user_id) REFERENCES user_data(user_id),
+    state integer not null default 0,
+
+    FOREIGN KEY(user_id) REFERENCES user_data(id),
 
     unique(user_id, char_name)
 );

@@ -1,6 +1,7 @@
 package rvc
 
 import (
+	"app/metrics"
 	"app/tools"
 	"bytes"
 	"context"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -55,6 +57,8 @@ func (c *Client) Rvc(ctx context.Context, voice string, audio []byte, pitch int)
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	start := time.Now()
+
 	rvcReq := &rvcRequest{
 		Inputfile:    base64.StdEncoding.EncodeToString(audio),
 		ModelName:    voice,
@@ -92,6 +96,7 @@ func (c *Client) Rvc(ctx context.Context, voice string, audio []byte, pitch int)
 	}
 
 	if resp.StatusCode > 299 {
+		metrics.RVCErrors.WithLabelValues(strconv.Itoa(resp.StatusCode)).Inc()
 		return nil, fmt.Errorf("status code %d, err - %s", resp.StatusCode, string(respData))
 	}
 
@@ -100,6 +105,7 @@ func (c *Client) Rvc(ctx context.Context, voice string, audio []byte, pitch int)
 	rvcResp := &rvcResp{}
 	err = json.Unmarshal(respData, &rvcResp)
 	if err != nil {
+		metrics.RVCErrors.WithLabelValues("500").Inc()
 		return nil, fmt.Errorf("failed to unmarshal tts resp data: %w", err)
 	}
 
@@ -107,8 +113,11 @@ func (c *Client) Rvc(ctx context.Context, voice string, audio []byte, pitch int)
 
 	bytesData, err := base64.StdEncoding.DecodeString(rvcResp.Audio)
 	if err != nil {
+		metrics.RVCErrors.WithLabelValues("500").Inc()
 		return nil, fmt.Errorf("failed to decode tts response: %w", err)
 	}
+
+	metrics.RVCQueryTime.Observe(time.Since(start).Seconds())
 
 	return bytesData, nil
 }

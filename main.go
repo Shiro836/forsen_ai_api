@@ -5,6 +5,7 @@ import (
 	"app/api"
 	"app/conns"
 	"app/db"
+	"app/metrics"
 	"app/rvc"
 	"app/slg"
 	"app/tts"
@@ -151,6 +152,13 @@ func main() {
 				break loop
 			}
 		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		metrics.NvidiaMonitoringLoop(ctx)
 	}()
 
 	select {

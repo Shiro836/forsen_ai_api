@@ -4,6 +4,7 @@ import (
 	"app/char"
 	"app/conns"
 	"app/db"
+	"app/metrics"
 	"app/slg"
 	"app/swearfilter"
 	"app/tools"
@@ -48,7 +49,7 @@ func luaGetCharCard(ctx context.Context, luaState *lua.LState) *lua.LFunction {
 	})
 }
 
-func (p *Processor) luaAi(ctx context.Context, luaState *lua.LState) *lua.LFunction {
+func (p *Processor) luaAi(ctx context.Context, luaState *lua.LState, userName string) *lua.LFunction {
 	return luaState.NewFunction(func(l *lua.LState) int {
 		request := l.Get(1).String()
 
@@ -57,6 +58,8 @@ func (p *Processor) luaAi(ctx context.Context, luaState *lua.LState) *lua.LFunct
 			l.Push(lua.LString("ai request error: " + err.Error()))
 			return 1
 		}
+
+		metrics.AIUserRequests.WithLabelValues(userName).Inc()
 
 		l.Push(lua.LString(aiResponse))
 		return 1
@@ -85,6 +88,10 @@ func (p *Processor) rvcVoice(ttsResponse []byte, voice string) ([]byte, error) {
 	switch voice {
 	case "megumin":
 		return p.rvc.Rvc(context.Background(), "megumin", ttsResponse, 3)
+	case "gura":
+		return p.rvc.Rvc(context.Background(), "gura", ttsResponse, 1)
+	case "adolf2":
+		return p.rvc.Rvc(context.Background(), "adolf", ttsResponse, 2)
 	default:
 		return ttsResponse, nil
 	}
@@ -391,6 +398,10 @@ func (p *Processor) luaTtsWithText(ctx context.Context, luaState *lua.LState, ev
 			var slept time.Duration
 
 			for i, timing := range ttsResponse.Timings {
+				if p.ToSkipMsg(msgID) {
+					break
+				}
+
 				word := ttsResponse.Words[i]
 				fullSentence += word + " "
 
@@ -407,7 +418,7 @@ func (p *Processor) luaTtsWithText(ctx context.Context, luaState *lua.LState, ev
 				}
 			}
 
-			if slept < audioLen {
+			if !p.ToSkipMsg(msgID) && slept < audioLen {
 				time.Sleep(audioLen - slept)
 			}
 		}

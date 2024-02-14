@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
+	"app/metrics"
 	"app/tools"
 
 	_ "embed"
@@ -65,6 +68,8 @@ func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) (*Respons
 		return nil, fmt.Errorf("no audio provided")
 	}
 
+	start := time.Now()
+
 	req := &ttsReq{
 		Text:     msg,
 		RefAudio: base64.StdEncoding.EncodeToString(refAudio),
@@ -98,6 +103,7 @@ func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) (*Respons
 	}
 
 	if resp.StatusCode > 299 {
+		metrics.TTSErrors.WithLabelValues(strconv.Itoa(resp.StatusCode)).Inc()
 		return nil, fmt.Errorf("status code %d, err - %s", resp.StatusCode, string(respData))
 	}
 
@@ -106,6 +112,7 @@ func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) (*Respons
 	ttsResp := &ttsResp{}
 	err = json.Unmarshal(respData, &ttsResp)
 	if err != nil {
+		metrics.TTSErrors.WithLabelValues("500").Inc()
 		return nil, fmt.Errorf("failed to unmarshal tts resp data: %w", err)
 	}
 
@@ -113,8 +120,11 @@ func (c *Client) TTS(ctx context.Context, msg string, refAudio []byte) (*Respons
 
 	bytesData, err := base64.StdEncoding.DecodeString(ttsResp.Audio)
 	if err != nil {
+		metrics.TTSErrors.WithLabelValues("500").Inc()
 		return nil, fmt.Errorf("failed to decode tts response: %w", err)
 	}
+
+	metrics.TTSQueryTime.Observe(time.Since(start).Seconds())
 
 	return &Response{
 		Audio:    bytesData,

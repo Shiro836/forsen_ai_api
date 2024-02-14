@@ -29,6 +29,12 @@ cfg.yaml
 
 _pgadmin
 _postgres
+_prom_data
 
 db/extracted
 playground
+
+*.env
+
+prometheus
+grafana

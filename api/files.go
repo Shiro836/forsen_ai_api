@@ -247,6 +247,36 @@ func (api *API) GetFullCardListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (api *API) GetAllCards(w http.ResponseWriter, r *http.Request) {
+	var userData *db.UserData
+
+	if cookie, err := r.Cookie("session_id"); err != nil || len(cookie.Value) == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("unauthorized"))
+
+		return
+	} else if userData, err = db.GetUserDataBySessionId(cookie.Value); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("user data not found"))
+
+		return
+	}
+
+	if chars, err := db.GetAllCustomChars(userData.ID); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if data, err := json.Marshal(&FullCardList{Chars: chars}); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else {
+		w.Write(data)
+	}
+}
+
 func (api *API) GetFullCardHandler(w http.ResponseWriter, r *http.Request) {
 	charName := chi.URLParam(r, "char_name")
 	if len(charName) == 0 {
@@ -272,25 +302,41 @@ func (api *API) GetFullCardHandler(w http.ResponseWriter, r *http.Request) {
 	var card *char.Card
 	fullCharName := userData.UserLoginData.UserName + "_" + charName
 
-	if dbCard, err := db.GetCharCard(fullCharName); err != nil {
+	dbCard, err := db.GetCharCard(fullCharName)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 
 		return
-	} else if err = json.Unmarshal(dbCard.Card, &card); err != nil {
+	}
+	if err = json.Unmarshal(dbCard.Card, &card); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 
 		return
-	} else if voiceData, err := db.GetVoice(fullCharName); err != nil {
+	}
+
+	voiceData, err := db.GetVoice(fullCharName)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 
 		return
-	} else if b64Voice := base64.StdEncoding.EncodeToString(voiceData); false {
-	} else if fullCardData, err := json.Marshal(&FullCard{
+	}
+	b64Voice := base64.StdEncoding.EncodeToString(voiceData)
+
+	state, err := db.GetCustomCharState(userData.ID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	}
+
+	if fullCardData, err := json.Marshal(&FullCard{
 		Card:           card,
 		ReferenceAudio: b64Voice,
+		State:          state,
 	}); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -351,9 +397,9 @@ func (api *API) DeleteFullCardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type FullCard struct {
-	Card           *char.Card `json:"char_card"`
-	ReferenceAudio string     `json:"ref_audio"`
-	Image          string     `json:"image"`
+	Card           *char.Card         `json:"char_card"`
+	ReferenceAudio string             `json:"ref_audio"`
+	State          db.CustomCharState `json:"state"`
 }
 
 func (api *API) UploadFullCardHandler(w http.ResponseWriter, r *http.Request) {
@@ -413,6 +459,11 @@ func (api *API) UploadFullCardHandler(w http.ResponseWriter, r *http.Request) {
 
 		return
 	} else if err := db.AddCustomChar(userData.ID, fullCard.Card.Name); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+
+		return
+	} else if err := db.UpdateCustomCharState(userData.ID, fullCard.State); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 

@@ -14,6 +14,7 @@ type Card struct {
 	Scenario                string `json:"scenario"`
 	SystemPrompt            string `json:"system_prompt"`
 	PostHistoryInstructions string `json:"post_history_instructions"`
+	ImageURL                string `json:"image_url"`
 }
 
 func FromJson(data []byte) (*Card, error) {

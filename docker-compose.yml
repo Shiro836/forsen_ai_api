@@ -1,43 +1,73 @@
 version: '3.9'
 
 services:
-  postgres:
-    user: root
-    image: postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      PGDATA: /data/postgres
-    volumes:
-       - "./_postgres:/var/lib/postgresql:rw"
+  prometheus:
+    image: prom/prometheus:v2.45.3
     ports:
-      - "5432:5432"
-    expose:
-      - "5432"
-    networks:
-      - forsen
-    restart: unless-stopped
-
-  pgadmin:
-    user: root
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      - 9090:9090
+    command:
+      - --storage.tsdb.retention.time=90d
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/etc/prometheus/data
     volumes:
-       - "./_pgadmin:/var/lib/pgadmin:rw"
+      - ./prometheus:/etc/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    user: "0"
 
+  grafana:
+    image: grafana/grafana:10.3.1
     ports:
-      - "5050:80"
-    expose:
-      - "5050"
-    networks:
-      - forsen
+      - 3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+    volumes:
+      - ./grafana/things:/etc/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/data:/var/lib/grafana
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    user: "0"
+    env_file:
+      - .env
 
-networks:
-  forsen:
+  # postgres:
+  #   user: root
+  #   image: postgres
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #     PGDATA: /data/postgres
+  #   volumes:
+  #      - "./_postgres:/var/lib/postgresql:rw"
+  #   ports:
+  #     - "5432:5432"
+  #   expose:
+  #     - "5432"
+  #   networks:
+  #     - forsen
+  #   restart: unless-stopped
 
-volumes:
-    _postgres:
-    _pgadmin:
+  # pgadmin:
+  #   user: root
+  #   image: dpage/pgadmin4
+  #   environment:
+  #     PGADMIN_DEFAULT_EMAIL: admin@admin.com
+  #     PGADMIN_DEFAULT_PASSWORD: admin
+  #     PGADMIN_CONFIG_SERVER_MODE: 'False'
+  #   volumes:
+  #      - "./_pgadmin:/var/lib/pgadmin:rw"
+
+  #   ports:
+  #     - "5050:80"
+  #   expose:
+  #     - "5050"
+  #   networks:
+  #     - forsen
+
+# networks:
+#   forsen:
+
+# volumes:
+#     _postgres:
+#     _pgadmin:
