@@ -36,7 +36,7 @@ func getWhitelist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) updateWhitelist(w http.ResponseWriter, r *http.Request) {
-	upd := &db.WhitelistUpdate{}
+	var upd *db.WhitelistUpdate
 
 	if sessionId, err := r.Cookie("session_id"); err != nil || len(sessionId.Value) == 0 {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -59,7 +59,7 @@ func (api *API) updateWhitelist(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("internal error or no access"))
 	} else {
 		go api.connManager.NotifyUpdateWhitelist(&db.Human{
-			Login: userData.UserLoginData.UserName,
+			Login: upd.Login,
 		})
 		w.Write([]byte("success"))
 	}

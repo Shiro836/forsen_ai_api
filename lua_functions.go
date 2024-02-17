@@ -85,13 +85,15 @@ func (p *Processor) luaText(luaState *lua.LState, eventWriter conns.EventWriter)
 }
 
 func (p *Processor) rvcVoice(ttsResponse []byte, voice string) ([]byte, error) {
-	switch voice {
+	switch strings.ToLower(voice) {
 	case "megumin":
 		return p.rvc.Rvc(context.Background(), "megumin", ttsResponse, 3)
 	case "gura":
 		return p.rvc.Rvc(context.Background(), "gura", ttsResponse, 1)
 	case "adolf2":
 		return p.rvc.Rvc(context.Background(), "adolf", ttsResponse, 2)
+	case "shiro836__hitori gotoh":
+		return p.rvc.Rvc(context.Background(), "hitori", ttsResponse, 3)
 	default:
 		return ttsResponse, nil
 	}
