@@ -6,7 +6,7 @@ import (
 
 	"app/conns"
 	"app/db"
-	"app/slg"
+	"app/pkg/slg"
 )
 
 func ProcessingLoop(ctx context.Context, cm *conns.Manager) error {

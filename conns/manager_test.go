@@ -4,6 +4,7 @@ import (
 	"app/conns"
 	"app/db"
 	"context"
+	"log/slog"
 	"strconv"
 	"sync"
 	"testing"
@@ -30,7 +31,7 @@ func TestHandleUser(t *testing.T) {
 	processor := &mockProc{}
 	processor.On("Process", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(conns.ErrProcessingEnd)
 
-	connManager := conns.NewConnectionManager(context.Background(), processor)
+	connManager := conns.NewConnectionManager(context.Background(), slog.Default(), processor)
 	connManager.HandleUser(&db.Human{
 		Login: "test",
 	})
@@ -48,7 +49,7 @@ func TestWait(t *testing.T) {
 	processor := &mockProc{}
 	processor.On("Process", mock.Anything, mock.Anything, mock.Anything, mock.Anything).After(100 * time.Millisecond).Return(conns.ErrProcessingEnd)
 
-	connManager := conns.NewConnectionManager(context.Background(), processor)
+	connManager := conns.NewConnectionManager(context.Background(), slog.Default(), processor)
 	for i := 0; i < 50; i++ {
 		connManager.HandleUser(&db.Human{
 			Login: "test" + strconv.Itoa(i),
@@ -87,7 +88,7 @@ func TestDataStream(t *testing.T) {
 		args.Get(2).(conns.EventWriter)(event)
 	}).Return(conns.ErrProcessingEnd)
 
-	connManager := conns.NewConnectionManager(context.Background(), processor)
+	connManager := conns.NewConnectionManager(context.Background(), slog.Default(), processor)
 
 	subCh, unsub := connManager.Subscribe(user)
 	subCh2, unsub2 := connManager.Subscribe(user)
@@ -146,7 +147,7 @@ func TestUnderLoad(t *testing.T) {
 		}
 	}).Return(conns.ErrProcessingEnd)
 
-	connManager := conns.NewConnectionManager(context.Background(), processor)
+	connManager := conns.NewConnectionManager(context.Background(), slog.Default(), processor)
 
 	wg := sync.WaitGroup{}
 

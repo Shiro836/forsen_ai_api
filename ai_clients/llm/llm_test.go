@@ -1,4 +1,4 @@
-package ai_test
+package llm_test
 
 // import (
 // 	"app/ai"

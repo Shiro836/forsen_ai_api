@@ -1,13 +1,13 @@
 package processor
 
 import (
-	"app/ai"
-	"app/char"
+	"app/ai_clients/llm"
+	"app/ai_clients/rvc"
+	"app/ai_clients/tts"
 	"app/db"
+	"app/pkg/char"
+	"app/pkg/swearfilter"
 	"app/processor/scripts"
-	"app/rvc"
-	"app/swearfilter"
-	"app/tts"
 	"context"
 	"fmt"
 	"slices"
@@ -21,7 +21,7 @@ type callLayerImpl struct {
 	broadcaster *db.UserData
 
 	rvc *rvc.Client
-	ai  *ai.Client
+	llm *llm.Client
 	tts *tts.Client
 
 	db DB
@@ -36,7 +36,7 @@ func (p *callLayerImpl) GetCharCard(ctx context.Context, charName string) (*char
 }
 
 func (p *callLayerImpl) CallAI(ctx context.Context, prompt string) (string, error) {
-	return p.ai.Ask(ctx, prompt)
+	return p.llm.Ask(ctx, prompt)
 }
 
 func (p *callLayerImpl) CallTtsText(ctx context.Context, charName string, text string) error {

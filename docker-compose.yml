@@ -2,59 +2,87 @@ version: '3.9'
 
 services:
   app:
-    image: golang:1.22.0-alpine
-    volumes:
-      - ./:/app
-    working_dir: /app
-    command: go run main.go
+    image: app
+    build: .
     ports:
       - 8080:8080
-
-  prometheus:
-    user: root
-    image: prom/prometheus:v2.45.3
-    ports:
-      - 9090:9090
-    command:
-      - --storage.tsdb.retention.time=90d
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/etc/prometheus/data
+    depends_on:
+      - postgres
+      - redis
+      - influxdb
     volumes:
-      - ./prometheus:/etc/prometheus
+      - ./cfg:/app/cfg
+    networks:
+      - forsen
+
+  influxdb:
+    image: influxdb:2.7.5
+    ports:
+      - 8086:8086
+    environment:
+      - INFLUXDB_DB=prometheus
+      - INFLUXDB_ADMIN_USER=admin
+      - INFLUXDB_ADMIN_PASSWORD=password
+      - INFLUXDB_USER=prometheus
+      - INFLUXDB_USER_PASSWORD=password
+      - INFLUXDB_READ_USER=grafana
+      - INFLUXDB_READ_USER_PASSWORD=password
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    networks:
+      - forsen
 
   grafana:
     user: root
-    image: grafana/grafana:10.3.1
+    image: grafana/grafana:10.3.3
     ports:
       - 3000:3000
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
     volumes:
-      - ./grafana/things:/etc/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/data:/var/lib/grafana
+      - grafana-data-1:/etc/grafana
+      - grafana-data-2:/var/lib/grafana
     env_file:
       - .env
+    networks:
+      - forsen
 
   postgres:
     user: root
-    image: postgres
+    image: postgres:16
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       PGDATA: /data/postgres
     volumes:
-       - "./_postgres:/var/lib/postgresql:rw"
+       - pg-data:/data/postgres
     ports:
       - "5432:5432"
-    expose:
-      - "5432"
     restart: unless-stopped
+    networks:
+      - forsen
 
   redis:
     image: redis:7
     ports:
       - 6379:6379
     volumes:
-      - ./_redis:/data
+      - redis-data:/data
     restart: unless-stopped
+    networks:
+      - forsen
+
+volumes:
+  prom-data:
+  pg-data:
+  redis-data:
+  grafana-data-1:
+  grafana-data-2:
+  influxdb-data:
+
+networks:
+  forsen:
+
+
+# sudo docker-compose up --force-recreate -d
+# sudo docker-compose down

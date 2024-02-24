@@ -1,9 +1,9 @@
 package api
 
 import (
-	"app/char"
 	"app/db"
-	"app/slg"
+	"app/pkg/char"
+	"app/pkg/slg"
 	"encoding/base64"
 	"encoding/json"
 	"io"

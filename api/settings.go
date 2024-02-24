@@ -2,7 +2,7 @@ package api
 
 import (
 	"app/db"
-	"app/slg"
+	"app/pkg/slg"
 	"encoding/json"
 	"fmt"
 	"io"

@@ -3,7 +3,7 @@ package memory_test
 import (
 	"testing"
 
-	"app/memory"
+	"app/pkg/memory"
 
 	"github.com/stretchr/testify/assert"
 )

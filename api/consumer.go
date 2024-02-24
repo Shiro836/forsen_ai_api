@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"app/conns"
-	"app/slg"
-	"app/ws"
+	"app/pkg/slg"
+	"app/pkg/ws"
 
 	"log/slog"
 

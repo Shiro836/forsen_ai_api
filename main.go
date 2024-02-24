@@ -1,17 +1,20 @@
 package main
 
 import (
-	"app/ai"
+	"app/ai_clients/llm"
+	"app/ai_clients/rvc"
+	"app/ai_clients/tts"
 	"app/api"
 	"app/conns"
 	"app/db"
 	"app/metrics"
-	"app/rvc"
-	"app/slg"
-	"app/tts"
+	"app/pkg/slg"
+	"app/processor"
 	"app/twitch"
+	"flag"
 	"strconv"
 
+	"app/cfg"
 	"context"
 	_ "embed"
 	"log"
@@ -46,9 +49,13 @@ func main() {
 	db.InitDB()
 	defer db.Close()
 
-	var cfg *Config
-	if cfgFile, err := os.ReadFile("cfg.yaml"); err != nil {
-		log.Fatal("can't open cfg.yaml file", err)
+	var cfgPath string
+	flag.StringVar(&cfgPath, "cfg", "cfg/cfg.yaml", "path to config file")
+	flag.Parse()
+
+	var cfg *cfg.Config
+	if cfgFile, err := os.ReadFile(cfgPath); err != nil {
+		log.Fatalf("can't open %s file: %v", cfgPath, err)
 	} else if err = yaml.Unmarshal(cfgFile, &cfg); err != nil {
 		log.Fatal("can't unmarshal cfg.yaml file", err)
 	}
@@ -72,24 +79,24 @@ func main() {
 		log.Fatal(err)
 	}
 
-	slogLogger := slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{
+	logger := slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
 
-	slog.SetDefault(slogLogger)
+	slog.SetDefault(logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ctx = slg.WithSlog(ctx, slogLogger)
+	ctx = slg.WithSlog(ctx, logger)
 
 	rvc := rvc.New(httpClient, &cfg.Rvc)
-	ai := ai.New(httpClient, &cfg.AI)
+	llm := llm.New(httpClient, &cfg.LLM)
 	tts := tts.New(httpClient, &cfg.TTS)
 
-	processor := NewProcessor(slogLogger.With("processor"), ai, tts, rvc, nil)
+	processor := processor.NewProcessor(logger.WithGroup("processor"), llm, tts, rvc, nil)
 
-	connManager := conns.NewConnectionManager(ctx, processor)
+	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), processor)
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
@@ -113,10 +120,10 @@ func main() {
 		defer wg.Done()
 		defer cancel()
 
-		slog.Info("Starting server")
+		logger.Info("Starting server")
 
 		if err := srv.ListenAndServe(); err != nil {
-			slog.Error("ListenAndServe finished", "err", err)
+			logger.Error("ListenAndServe finished", "err", err)
 		}
 	}()
 
@@ -125,13 +132,13 @@ func main() {
 		defer wg.Done()
 		defer cancel()
 
-		slog.Info("Starting connections loop")
+		logger.Info("Starting connections loop")
 
 		if err := ProcessingLoop(ctx, connManager); err != nil {
-			slog.Error("Processing loop error", "err", err)
+			logger.Error("Processing loop error", "err", err)
 		}
 
-		slog.Info("Connections loop finished")
+		logger.Info("Connections loop finished")
 	}()
 
 	wg.Add(1)
@@ -145,7 +152,7 @@ func main() {
 			select {
 			case <-ticker.C:
 				if err := db.CleanQueue(); err != nil {
-					slogLogger.Error("failed to clean db msg queue", "err", err)
+					logger.Error("failed to clean db msg queue", "err", err)
 				}
 			case <-ctx.Done():
 				ticker.Stop()
@@ -158,13 +165,13 @@ func main() {
 	go func() {
 		defer wg.Done()
 
-		metrics.NvidiaMonitoringLoop(ctx)
+		metrics.NvidiaMonitoringLoop(ctx, logger.WithGroup("nvidia"))
 	}()
 
 	select {
 	case <-ctx.Done():
 	case <-stop:
-		slog.Info("Interrupt triggerred")
+		logger.Info("Interrupt triggerred")
 		cancel()
 	}
 

@@ -1,0 +1,20 @@
+llm:
+  url: llm/generate
+tts:
+  url: tts/tts
+rvc:
+  url: rvc/voice2voice
+whisper:
+  url: whisper/
+twitch:
+  client_id: client_id
+  secret: secret
+api:
+  port: 8080
+db:
+  conn_str: "postgres://localhost/postgres?user=postgres&password=postgres"
+influx:
+  url: influx
+  token: token
+  org: org
+  bucket: bucket

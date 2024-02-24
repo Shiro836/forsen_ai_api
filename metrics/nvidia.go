@@ -1,10 +1,10 @@
 package metrics
 
 import (
-	"app/slg"
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -125,7 +125,7 @@ func monitorNvidia(ctx context.Context) error {
 	return nil
 }
 
-func NvidiaMonitoringLoop(ctx context.Context) {
+func NvidiaMonitoringLoop(ctx context.Context, logger *slog.Logger) {
 	ticker := time.NewTicker(monitorFrequency)
 	defer ticker.Stop()
 
@@ -134,7 +134,7 @@ loop:
 		select {
 		case <-ticker.C:
 			if err := monitorNvidia(ctx); err != nil {
-				slg.GetSlog(ctx).Error("failed to monitor nvidia", "err", err)
+				logger.Error("failed to monitor nvidia", "err", err)
 			}
 		case <-ctx.Done():
 			break loop

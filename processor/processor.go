@@ -3,14 +3,14 @@ package processor
 // use go interpreter
 
 import (
-	"app/ai"
-	"app/char"
+	"app/ai_clients/llm"
+	"app/ai_clients/rvc"
+	"app/ai_clients/tts"
 	"app/conns"
 	"app/db"
+	"app/pkg/char"
+	"app/pkg/slg"
 	"app/processor/scripts"
-	"app/rvc"
-	"app/slg"
-	"app/tts"
 	"context"
 	"fmt"
 	"log/slog"
@@ -27,19 +27,19 @@ type DB interface {
 }
 
 type Processor struct {
-	rvc *rvc.Client
-	ai  *ai.Client
-	tts *tts.Client
-
 	logger *slog.Logger
+
+	rvc *rvc.Client
+	llm *llm.Client
+	tts *tts.Client
 
 	db DB
 }
 
-func NewProcessor(logger *slog.Logger, ai *ai.Client, tts *tts.Client, rvc *rvc.Client, db DB) *Processor {
+func NewProcessor(logger *slog.Logger, llm *llm.Client, tts *tts.Client, rvc *rvc.Client, db DB) *Processor {
 	return &Processor{
 		rvc: rvc,
-		ai:  ai,
+		llm: llm,
 		tts: tts,
 
 		logger: logger,
@@ -61,8 +61,13 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		if r := recover(); r != nil {
 			stack := string(debug.Stack())
 
-			err = fmt.Errorf("paniced in Process: %s", stack)
-			slg.GetSlog(ctx).Error("connection panic", "user", broadcaster, "r", r, "stack", stack)
+			if err != nil {
+				err = fmt.Errorf("%w: %s", err, stack)
+			} else {
+				err = fmt.Errorf("paniced in Process: %s", stack)
+			}
+
+			slg.GetSlog(ctx).Error("connection panic", "user", broadcaster, "r", r, "stack", stack, "err", err)
 		}
 	}()
 
@@ -76,7 +81,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	}
 
 	interpreter := interp.New(interp.Options{})
-	interpreter.Use(stdlib.Symbols)
+	if err := interpreter.Use(stdlib.Symbols); err != nil {
+		return fmt.Errorf("failed to use stdlib: %w", err)
+	}
 
 	_, err = interpreter.Eval(p.db.GetGoScript(ctx, broadcaster))
 	if err != nil {
@@ -109,7 +116,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		broadcaster: broadcasterUserData,
 
 		rvc: p.rvc,
-		ai:  p.ai,
+		llm: p.llm,
 		tts: p.tts,
 	}
 

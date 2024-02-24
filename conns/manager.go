@@ -2,7 +2,6 @@ package conns
 
 import (
 	"app/db"
-	"app/slg"
 	"context"
 	"errors"
 	"fmt"
@@ -25,11 +24,11 @@ type Manager struct {
 	dataStreams    map[string][]chan *DataEvent
 	isClosed       map[string][]bool
 	updateEventsCh map[string]chan *Update
+
+	logger *slog.Logger
 }
 
-func NewConnectionManager(ctx context.Context, processor Processor) *Manager {
-	ctx = slg.WithSlog(ctx, slog.With("source", "connection_manager"))
-
+func NewConnectionManager(ctx context.Context, logger *slog.Logger, processor Processor) *Manager {
 	return &Manager{
 		ctx: ctx,
 
@@ -39,6 +38,8 @@ func NewConnectionManager(ctx context.Context, processor Processor) *Manager {
 		dataStreams:    make(map[string][]chan *DataEvent, 100),
 		isClosed:       make(map[string][]bool, 100),
 		updateEventsCh: make(map[string]chan *Update, 100),
+
+		logger: logger,
 	}
 }
 
@@ -124,13 +125,13 @@ func (m *Manager) Subscribe(user string) (<-chan *DataEvent, func()) {
 	}
 }
 
-func (m *Manager) TryWrite(ctx context.Context, user string, event *DataEvent) bool {
+func (m *Manager) TryWrite(user string, event *DataEvent) bool {
 	wrote := false
 
 loop:
 	for i := 0; i < len(m.dataStreams[user]); i++ {
 		select {
-		case <-ctx.Done():
+		case <-m.ctx.Done():
 			return wrote
 		default:
 		}
@@ -150,7 +151,7 @@ loop:
 				case m.dataStreams[user][i] <- event:
 					wrote = true
 					cont_loop = true
-				case <-ctx.Done():
+				case <-m.ctx.Done():
 					return
 				default:
 				}
@@ -202,15 +203,15 @@ func (m *Manager) SkipMessage(login string, msgID string) {
 func (m *Manager) HandleUser(user *db.Human) {
 	user.Login = strings.ToLower(user.Login)
 
-	ctx := slg.WithSlog(m.ctx, slog.With("user", user.Login))
+	logger := m.logger.With("user", user.Login)
 
-	slg.GetSlog(ctx).Info("trying to unlock mutex for HandleUser")
+	logger.Debug("trying to unlock mutex for HandleUser")
 
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
 
 	if user.BannedBy != nil {
-		slg.GetSlog(ctx).Info("stopping processor")
+		logger.Debug("stopping processor")
 
 		if ch, ok := m.updateEventsCh[user.Login]; ok {
 			close(ch)
@@ -221,11 +222,11 @@ func (m *Manager) HandleUser(user *db.Human) {
 
 		updates := m.updateEventsCh[user.Login]
 
-		slg.GetSlog(ctx).Info("starting processor")
+		logger.Info("starting processor")
 
 		m.wg.Add(1)
 		go func() {
-			defer slg.GetSlog(ctx).Info("stopped processor")
+			defer logger.Info("stopped processor")
 			defer m.wg.Done()
 
 		loop:
@@ -236,15 +237,15 @@ func (m *Manager) HandleUser(user *db.Human) {
 				default:
 				}
 
-				if err := m.processor.Process(ctx, updates, func(event *DataEvent) bool {
-					return m.TryWrite(ctx, user.Login, event)
+				if err := m.processor.Process(m.ctx, updates, func(event *DataEvent) bool {
+					return m.TryWrite(user.Login, event)
 				}, user.Login); err != nil {
 					if errors.Is(err, ErrProcessingEnd) {
 						break loop
 					} else if errors.Is(err, ErrNoUser) {
 						time.Sleep(2 * time.Second)
 					} else {
-						slg.GetSlog(ctx).Error("processor Process error", "err", err)
+						logger.Error("processor Process error", "err", err)
 						time.Sleep(10 * time.Second)
 					}
 				}
@@ -253,7 +254,7 @@ func (m *Manager) HandleUser(user *db.Human) {
 			}
 		}()
 	} else {
-		slg.GetSlog(ctx).Info("starting processor failed, updates already exists")
+		logger.Info("starting processor failed, updates already exists")
 	}
 }
 

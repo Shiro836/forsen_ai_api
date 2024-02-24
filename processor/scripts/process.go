@@ -1,7 +1,7 @@
 package scripts
 
 import (
-	"app/char"
+	"app/pkg/char"
 	"context"
 )
 
