@@ -1,7 +1,17 @@
 version: '3.9'
 
 services:
+  app:
+    image: golang:1.22.0-alpine
+    volumes:
+      - ./:/app
+    working_dir: /app
+    command: go run main.go
+    ports:
+      - 8080:8080
+
   prometheus:
+    user: root
     image: prom/prometheus:v2.45.3
     ports:
       - 9090:9090
@@ -11,11 +21,9 @@ services:
       - --storage.tsdb.path=/etc/prometheus/data
     volumes:
       - ./prometheus:/etc/prometheus
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    user: "0"
 
   grafana:
+    user: root
     image: grafana/grafana:10.3.1
     ports:
       - 3000:3000
@@ -25,49 +33,28 @@ services:
       - ./grafana/things:/etc/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
       - ./grafana/data:/var/lib/grafana
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    user: "0"
     env_file:
       - .env
 
-  # postgres:
-  #   user: root
-  #   image: postgres
-  #   environment:
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #     PGDATA: /data/postgres
-  #   volumes:
-  #      - "./_postgres:/var/lib/postgresql:rw"
-  #   ports:
-  #     - "5432:5432"
-  #   expose:
-  #     - "5432"
-  #   networks:
-  #     - forsen
-  #   restart: unless-stopped
+  postgres:
+    user: root
+    image: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /data/postgres
+    volumes:
+       - "./_postgres:/var/lib/postgresql:rw"
+    ports:
+      - "5432:5432"
+    expose:
+      - "5432"
+    restart: unless-stopped
 
-  # pgadmin:
-  #   user: root
-  #   image: dpage/pgadmin4
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: admin@admin.com
-  #     PGADMIN_DEFAULT_PASSWORD: admin
-  #     PGADMIN_CONFIG_SERVER_MODE: 'False'
-  #   volumes:
-  #      - "./_pgadmin:/var/lib/pgadmin:rw"
-
-  #   ports:
-  #     - "5050:80"
-  #   expose:
-  #     - "5050"
-  #   networks:
-  #     - forsen
-
-# networks:
-#   forsen:
-
-# volumes:
-#     _postgres:
-#     _pgadmin:
+  redis:
+    image: redis:7
+    ports:
+      - 6379:6379
+    volumes:
+      - ./_redis:/data
+    restart: unless-stopped

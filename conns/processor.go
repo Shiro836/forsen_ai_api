@@ -24,3 +24,4 @@ type Processor interface {
 }
 
 var ErrProcessingEnd = errors.New("end of processing")
+var ErrNoUser = errors.New("no user")

@@ -17,6 +17,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+type Database struct {
+	db *sql.DB
+}
+
 var db *sql.DB
 
 func Close() {

@@ -87,7 +87,7 @@ func main() {
 	ai := ai.New(httpClient, &cfg.AI)
 	tts := tts.New(httpClient, &cfg.TTS)
 
-	processor := NewProcessor(&cfg.Lua, ai, tts, rvc)
+	processor := NewProcessor(slogLogger.With("processor"), ai, tts, rvc, nil)
 
 	connManager := conns.NewConnectionManager(ctx, processor)
 

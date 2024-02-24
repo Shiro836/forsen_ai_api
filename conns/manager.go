@@ -241,11 +241,15 @@ func (m *Manager) HandleUser(user *db.Human) {
 				}, user.Login); err != nil {
 					if errors.Is(err, ErrProcessingEnd) {
 						break loop
+					} else if errors.Is(err, ErrNoUser) {
+						time.Sleep(2 * time.Second)
+					} else {
+						slg.GetSlog(ctx).Error("processor Process error", "err", err)
+						time.Sleep(10 * time.Second)
 					}
-					slg.GetSlog(ctx).Error("processor Process error", "err", err)
-					time.Sleep(2 * time.Second)
 				}
-				time.Sleep(500 * time.Millisecond)
+
+				time.Sleep(time.Second)
 			}
 		}()
 	} else {
