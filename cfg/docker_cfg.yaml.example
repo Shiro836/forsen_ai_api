@@ -11,10 +11,12 @@ twitch:
   secret: secret
 api:
   port: 8080
+  domain: forsen.fun
+  page_prefix: BAJ AI
 db:
-  conn_str: "postgres://localhost/postgres?user=postgres&password=postgres"
+  conn_str: "postgres://postgres/postgres?user=postgres&password=postgres"
 influx:
   url: influx
-  token: token
-  org: org
-  bucket: bucket
+  token: forsen-forsen-forsen-forsen
+  org: forsen
+  bucket: forsen

@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"app/metrics"
 	"fmt"
 	"net/http"
 	"sync"

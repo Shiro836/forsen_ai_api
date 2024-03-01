@@ -1,23 +1,31 @@
 package cfg
 
 import (
-	"app/ai_clients/llm"
-	"app/ai_clients/rvc"
-	"app/ai_clients/tts"
 	"app/api"
-	"app/db/postgres"
-	"app/twitch"
+	"app/db"
+	"app/pkg/ai"
+	"app/pkg/twitch"
 )
 
 type Config struct {
-	LLM    llm.Config      `yaml:"llm"`
-	TTS    tts.Config      `yaml:"tts"`
-	Twitch twitch.Config   `yaml:"twitch"`
-	Api    api.Config      `yaml:"api"`
-	Rvc    rvc.Config      `yaml:"rvc"`
-	DB     postgres.Config `yaml:"db"`
+	Api api.Config `yaml:"api"`
+
+	LLM      ai.VLLMConfig     `yaml:"llm"`
+	MetaTTS  ai.MetaTTSConfig  `yaml:"meta_tts"`
+	StyleTTS ai.StyleTTSConfig `yaml:"style_tts"`
+	Rvc      ai.RVCConfig      `yaml:"rvc"`
+	Whisper  ai.WhisperConfig  `yaml:"whisper"`
+
+	Twitch twitch.Config `yaml:"twitch"`
+
+	DB db.Config `yaml:"db"`
+
+	InfluxDB InfluxConfig `yaml:"influx"`
 }
 
-type AiConfig struct {
-	URL string `yaml:"url"`
+type InfluxConfig struct {
+	URL    string `yaml:"url"`
+	Token  string `yaml:"token"`
+	Org    string `yaml:"org"`
+	Bucket string `yaml:"bucket"`
 }

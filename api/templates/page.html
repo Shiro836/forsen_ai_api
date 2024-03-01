@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html class="dark">
+
+<head>
+    <title>{{ .Title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+          darkMode: 'class',
+        }
+      </script>
+</head>
+
+<body class="antialiased text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900">
+    <div id="header">
+        <div
+            class="sticky top-0 z-40 w-full backdrop-blur flex-none transition-colors duration-500 lg:z-50 lg:border-b lg:border-slate-900/10 dark:border-slate-50/[0.06] bg-white/95 supports-backdrop-blur:bg-white/60 dark:bg-transparent">
+            <div class="w-full max-w-screen-xl relative mx-auto px-6">
+                <div class="flex justify-between p-4">
+                    <div class="flex">
+                        <a href="/">
+                            <img src="/static/forsenE.png" alt="BAJ AI" class="w-7 h-7" />
+                        </a>
+                    </div>
+                    <div class="flex flex-col justify-center ml-3">
+                        <input type="checkbox" name="light-switch" class="light-switch sr-only" />
+                        <label class="relative cursor-pointer p-2" for="light-switch">
+                            <svg class="dark:hidden" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                                <path class="fill-slate-300"
+                                    d="M7 0h2v2H7zM12.88 1.637l1.414 1.415-1.415 1.413-1.413-1.414zM14 7h2v2h-2zM12.95 14.433l-1.414-1.413 1.413-1.415 1.415 1.414zM7 14h2v2H7zM2.98 14.364l-1.413-1.415 1.414-1.414 1.414 1.415zM0 7h2v2H0zM3.05 1.706 4.463 3.12 3.05 4.535 1.636 3.12z" />
+                                <path class="fill-slate-400" d="M8 4C5.8 4 4 5.8 4 8s1.8 4 4 4 4-1.8 4-4-1.8-4-4-4Z" />
+                            </svg>
+                            <svg class="hidden dark:block" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                                <path class="fill-slate-400"
+                                    d="M6.2 1C3.2 1.8 1 4.6 1 7.9 1 11.8 4.2 15 8.1 15c3.3 0 6-2.2 6.9-5.2C9.7 11.2 4.8 6.3 6.2 1Z" />
+                                <path class="fill-slate-500"
+                                    d="M12.5 5a.625.625 0 0 1-.625-.625 1.252 1.252 0 0 0-1.25-1.25.625.625 0 1 1 0-1.25 1.252 1.252 0 0 0 1.25-1.25.625.625 0 1 1 1.25 0c.001.69.56 1.249 1.25 1.25a.625.625 0 1 1 0 1.25c-.69.001-1.249.56-1.25 1.25A.625.625 0 0 1 12.5 5Z" />
+                            </svg>
+                            <span class="sr-only">Switch to light / dark version</span>
+                        </label>
+                    </div>
+                    <div class="flex justify-start items-center text-gray-500">
+                        <a class="block flex items-center hover:text-gray-700 mr-5"
+                            href="https://github.com/Shiro836/forsen_ai_api">
+                            <svg class="fill-current w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                <title>GitHub</title>
+                                <path
+                                    d="M10 0a10 10 0 0 0-3.16 19.49c.5.1.68-.22.68-.48l-.01-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.1.39-1.99 1.03-2.69a3.6 3.6 0 0 1 .1-2.64s.84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.4.1 2.64.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85l-.01 2.75c0 .26.18.58.69.48A10 10 0 0 0 10 0">
+                                </path>
+                            </svg>
+                        </a>
+                        <a class="block flex items-center hover:text-gray-700 mr-5" href="https://twitch.tv/shiro836_">
+                            <svg class="fill-current w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+                                <title>Twitch</title>
+                                <path
+                                    d="M3.857 0 1 2.857v10.286h3.429V16l2.857-2.857H9.57L14.714 8V0H3.857zm9.714 7.429-2.285 2.285H9l-2 2v-2H4.429V1.143h9.142v6.286z" />
+                                <path d="M11.857 3.143h-1.143V6.57h1.143V3.143zm-3.143 0H7.571V6.57h1.143V3.143z" />
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div>
+        <div class="max-w-8xl mx-auto px-4 sm:px-6 md:px-8">
+            {{ .Content }}
+        </div>
+    </div>
+
+    <script>
+        const lightSwitches = document.querySelectorAll('.light-switch');
+        if (lightSwitches.length > 0) {
+            lightSwitches.forEach((lightSwitch, i) => {
+                if (localStorage.getItem('dark-mode') === 'true') {
+                    lightSwitch.checked = true;
+                }
+                lightSwitch.addEventListener('change', () => {
+                    const { checked } = lightSwitch;
+                    lightSwitches.forEach((el, n) => {
+                        if (n !== i) {
+                            el.checked = checked;
+                        }
+                    });
+                    if (lightSwitch.checked) {
+                        document.documentElement.classList.add('dark');
+                        localStorage.setItem('dark-mode', true);
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                        localStorage.setItem('dark-mode', false);
+                    }
+                });
+            });
+        }
+    </script>
+</body>
+
+</html>
