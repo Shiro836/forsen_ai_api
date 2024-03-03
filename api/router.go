@@ -23,6 +23,7 @@ type Config struct {
 
 type DB interface {
 	GetUserBySession(ctx context.Context, session string) (*db.User, error)
+	UpsertUser(ctx context.Context, user *db.User) (int, error)
 }
 
 type API struct {
@@ -77,7 +78,9 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Use(api.AuthMiddleware)
 
 	router.Get("/", http.HandlerFunc(index))
-	router.Get("/settings", http.HandlerFunc(settings))
+	router.Get("/settings", http.HandlerFunc(redirectToIndex))
+
+	router.Get("/twitch_redirect_handler", http.HandlerFunc(api.twitchRedirectHandler))
 
 	router.Handle("/static/*", http.FileServer(http.FS(staticFS)))
 

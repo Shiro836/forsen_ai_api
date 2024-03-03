@@ -1,38 +1,5 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>{{.PageTitle}}</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f2f2f2;
-        }
-        .error-container {
-            width: 80%;
-            margin: 0 auto;
-            text-align: center;
-            padding-top: 10%;
-        }
-        .error-title {
-            font-size: 72px;
-            color: #333;
-        }
-        .error-message {
-            font-size: 32px;
-            color: #666;
-        }
-        .report-message {
-            font-size: 24px;
-            color: #999;
-            margin-top: 50px;
-        }
-    </style>
-</head>
-<body>
-    <div class="error-container">
-        <h1 class="error-title">{{.ErrorCode}}</h1>
-        <p class="error-message">{{.ErrorMessage}}</p>
-        <p class="report-message">For further assistance, please report this error to developers. <a href="https://twitch.tv/shiro836_"></a> </p>
-    </div>
-</body>
-</html>
+<div class="flex justify-center flex-col items-center text-5xl">
+    <div>Error Code: {{.ErrorCode}}</div>
+    <div>Error Message: {{.ErrorMessage}}</div>
+    <div>For further assistance, please report this error to developers. <a href="https://twitch.tv/shiro836_"></a> </div>
+</div>

@@ -1,6 +1,7 @@
 package twitch
 
 import (
+	"app/db"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,8 +48,8 @@ type getUsersResp struct {
 }
 
 type TwitchUserData struct {
-	UserID   int
-	Username string
+	UserID int
+	Login  string
 }
 
 func (c *Client) GetUsers(accessToken string) (*TwitchUserData, error) {
@@ -86,8 +87,8 @@ func (c *Client) GetUsers(accessToken string) (*TwitchUserData, error) {
 	}
 
 	return &TwitchUserData{
-		UserID:   intId,
-		Username: respJson.Data[0].Login,
+		UserID: intId,
+		Login:  respJson.Data[0].Login,
 	}, nil
 }
 
@@ -104,7 +105,7 @@ type TwitchUserCredsWithUserData struct {
 	RefreshToken string
 }
 
-func (c *Client) CodeHandler(code string) (*TwitchUserCredsWithUserData, error) {
+func (c *Client) CodeHandler(code string) (*db.User, error) {
 	data := url.Values{}
 	data.Set("client_id", c.cfg.ClientID)
 	data.Set("client_secret", c.cfg.Secret)
@@ -142,11 +143,11 @@ func (c *Client) CodeHandler(code string) (*TwitchUserCredsWithUserData, error) 
 		fmt.Println(userData)
 	}
 
-	return &TwitchUserCredsWithUserData{
-		UserID:       userData.UserID,
-		Username:     userData.Username,
-		RefreshToken: respJson.RefreshToken,
-		AccessToken:  respJson.AccessToken,
+	return &db.User{
+		TwitchUserID:       userData.UserID,
+		TwitchLogin:        userData.Login,
+		TwitchRefreshToken: respJson.RefreshToken,
+		TwitchAccessToken:  respJson.AccessToken,
 	}, nil
 }
 

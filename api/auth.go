@@ -1,15 +1,12 @@
 package api
 
 import (
+	"app/db"
 	"app/pkg/ctxstore"
-	"database/sql"
-	"errors"
 	"net/http"
-
-	"github.com/jritsema/gotoolbox/web"
 )
 
-const sessionID = "session_id"
+const cookieSessionID = "session_id"
 
 type htmlErr struct {
 	ErrorCode    int
@@ -18,16 +15,16 @@ type htmlErr struct {
 
 func (api *API) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(sessionID)
+		cookie, err := r.Cookie(cookieSessionID)
 		if err == nil {
 			session := cookie.Value
 
 			user, err := api.db.GetUserBySession(r.Context(), session)
 			// reset cookie and redirect to login
 			if err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
+				if db.ErrCode(err) == db.ErrCodeNoRows {
 					http.SetCookie(w, &http.Cookie{
-						Name:   sessionID,
+						Name:   cookieSessionID,
 						Value:  "",
 						MaxAge: -1,
 					})
@@ -36,10 +33,8 @@ func (api *API) AuthMiddleware(next http.Handler) http.Handler {
 
 					return
 				} else {
-					web.HTML(http.StatusInternalServerError, html, "error.html", &htmlErr{
-						ErrorCode:    http.StatusInternalServerError,
-						ErrorMessage: err.Error(),
-					}, nil).Write(w)
+					w.WriteHeader(http.StatusInternalServerError)
+					submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
 
 					return
 				}

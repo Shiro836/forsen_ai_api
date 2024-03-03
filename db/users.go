@@ -17,6 +17,38 @@ type User struct {
 	Session string
 }
 
+func (db *DB) UpsertUser(ctx context.Context, user *User) (int, error) {
+	var id int
+
+	err := db.db.QueryRow(ctx, `
+		INSERT INTO users (
+			twitch_login,
+			twitch_user_id,
+			twitch_refresh_token,
+			twitch_access_token,
+			session
+		) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (twitch_user_id) DO UPDATE SET
+			twitch_login = excluded.twitch_login,
+			twitch_refresh_token = excluded.twitch_refresh_token,
+			twitch_access_token = excluded.twitch_access_token,
+			session = excluded.session
+		RETURNING id
+	`,
+		user.TwitchLogin,
+		user.TwitchUserID,
+		user.TwitchRefreshToken,
+		user.TwitchAccessToken,
+		user.Session,
+	).Scan(&id)
+
+	if err != nil {
+		return -1, fmt.Errorf("upsert user: %w", err)
+	}
+
+	return id, nil
+}
+
 func (db *DB) GetUserByID(ctx context.Context, ID int) (*User, error) {
 	var user User
 
@@ -95,7 +127,7 @@ func (db *DB) GetUserBySession(ctx context.Context, session string) (*User, erro
 		&user.Session,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user by session: %w", err)
+		return nil, fmt.Errorf("failed to get user by session: %w", parseErr(err))
 	}
 
 	return &user, nil

@@ -1,4 +1,22 @@
-<div style="text-align: center;">
-    <h1 class="text-4xl font-bold">Welcome to the Index Page</h1>
-    <p class="text-lg">This is the home page of the website.</p>
+<div class="flex justify-center items-center pt-32">
+    <button class="pl-10 pr-10 flex justify-center items-center ring-4 ring-slate-300 dark:ring-0 dark:hover:ring-4 hover:ring-twitch-light rounded-2xl py-6 px-30 dark:bg-slate-800 dark:highlight-white/5 dark:hover:bg-slate-700" onclick="redirect_to_twitch_login()">
+        <svg overflow="visible" width="120px" height="120px" viewBox="0 0 40 40" x="0px" y="0px">
+            <g transform-origin="0 0">
+                <polygon points="13 8 8 13 8 31 14 31 14 36 19 31 23 31 32 22 32 8" class="fill-twitch-light"></polygon>
+                <polygon points="26 25 30 21 30 10 14 10 14 25 18 25 18 29 22 25" class="fill-white"></polygon>
+                <g>
+                    <path d="M20,14 L22,14 L22,20 L20,20 L20,14 Z M27,14 L27,20 L25,20 L25,14 L27,14 Z" class="fill-twitch-light"> </path>
+                </g>
+            </g>
+        </svg>
+        <span class="font-bold text-5xl">
+            Login with Twitch
+        </span>
+    </button>
+
+    <script>
+        function redirect_to_twitch_login() {
+            location.href = '{{ .RedirectUrl }}';
+        }
+    </script>
 </div>
