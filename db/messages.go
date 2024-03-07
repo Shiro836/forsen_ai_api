@@ -5,12 +5,29 @@ import (
 	"fmt"
 )
 
+type MsgStatus int
+
 const (
-	StateDeleted   = "deleted"
-	StateWait      = "wait"
-	StateProcessed = "processed"
-	StateCurrent   = "current"
+	StatusDeleted MsgStatus = iota
+	StatusWait
+	StatusProcessed
+	StatusCurrent
 )
+
+func (s MsgStatus) String() string {
+	switch s {
+	case StatusDeleted:
+		return "Deleted"
+	case StatusWait:
+		return "Wait"
+	case StatusProcessed:
+		return "Processed"
+	case StatusCurrent:
+		return "Current"
+	default:
+		return ""
+	}
+}
 
 type Message struct {
 	ID int
@@ -29,10 +46,10 @@ func (db *DB) GetNextMsg(ctx context.Context, userID int) (*Message, error) {
 func (db *DB) CleanQueue(ctx context.Context) error {
 	_, err := db.db.Exec(ctx, `
 		delete from
-			messages
+			msg_queue
 		where
-			state = $1
-	`, StateDeleted)
+			status = $1
+	`, StatusDeleted)
 
 	if err != nil {
 		return fmt.Errorf("failed to clean queue: %w", err)

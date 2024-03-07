@@ -237,14 +237,22 @@ func (m *Manager) HandleUser(user *db.User) {
 					if errors.Is(err, ErrProcessingEnd) {
 						break loop
 					} else if errors.Is(err, ErrNoUser) {
-						time.Sleep(2 * time.Second)
+						select {
+						case <-time.After(2 * time.Second):
+						case <-m.ctx.Done():
+						}
 					} else {
 						logger.Error("processor Process error", "err", err)
-						time.Sleep(10 * time.Second)
+						select {
+						case <-time.After(10 * time.Second):
+						case <-m.ctx.Done():
+						}
 					}
 				}
-
-				time.Sleep(time.Second)
+				select {
+				case <-time.After(time.Second):
+				case <-m.ctx.Done():
+				}
 			}
 		}()
 	} else {

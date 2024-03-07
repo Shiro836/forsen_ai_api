@@ -1,9 +1,9 @@
 create table if not exists char_cards (
     id bigserial primary key,
 
-    char_name text not null,
-
     owner_user_id bigint not null references users(id),
+
+    char_name text not null,
 
     public boolean not null default false,
 

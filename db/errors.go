@@ -7,6 +7,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var (
+	ErrNoRows        = &dbErr{Code: ErrCodeNoRows}
+	ErrAlreadyExists = &dbErr{Code: ErrCodeAlreadyExists}
+)
+
 type dbErr struct {
 	Code int
 	Err  error
@@ -23,6 +28,7 @@ func (e *dbErr) Unwrap() error {
 const (
 	ErrCodeUnknown = iota
 	ErrCodeNoRows
+	ErrCodeAlreadyExists
 )
 
 func ErrCode(e error) int {

@@ -49,7 +49,7 @@ func (db *DB) UpsertUser(ctx context.Context, user *User) (int, error) {
 	return id, nil
 }
 
-func (db *DB) GetUserByID(ctx context.Context, ID int) (*User, error) {
+func (db *DB) GetUserByID(ctx context.Context, userID int) (*User, error) {
 	var user User
 
 	err := db.db.QueryRow(ctx, `
@@ -62,7 +62,7 @@ func (db *DB) GetUserByID(ctx context.Context, ID int) (*User, error) {
 			session
 		FROM users
 		WHERE id = $1
-	`, ID).Scan(
+	`, userID).Scan(
 		&user.ID,
 		&user.TwitchLogin,
 		&user.TwitchUserID,
@@ -89,7 +89,7 @@ func (db *DB) GetUserByTwitchLogin(ctx context.Context, twitchLogin string) (*Us
 			twitch_access_token,
 			session
 		FROM users
-		WHERE lower(twitch_login) = $1
+		WHERE lower(twitch_login) = lower($1)
 	`, twitchLogin).Scan(
 		&user.ID,
 		&user.TwitchLogin,

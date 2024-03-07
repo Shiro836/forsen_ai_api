@@ -10,8 +10,10 @@ require (
 	github.com/gorilla/websocket v1.5.1
 	github.com/influxdata/influxdb-client-go/v2 v2.13.0
 	github.com/jackc/pgx/v5 v5.5.2
+	github.com/jritsema/gotoolbox v0.8.0
 	github.com/nicklaw5/helix/v2 v2.25.2
 	github.com/prometheus/client_golang v1.18.0
+	github.com/samber/slog-chi v1.9.1
 	github.com/samber/slog-common v0.15.0
 	github.com/stretchr/testify v1.8.4
 	github.com/traefik/yaegi v0.15.1
@@ -30,7 +32,6 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
-	github.com/jritsema/gotoolbox v0.8.0
 	github.com/kr/text v0.2.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/oapi-codegen/runtime v1.0.0 // indirect
@@ -41,6 +42,8 @@ require (
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/samber/lo v1.38.1 // indirect
 	github.com/stretchr/objx v0.5.1 // indirect
+	go.opentelemetry.io/otel v1.19.0 // indirect
+	go.opentelemetry.io/otel/trace v1.19.0 // indirect
 	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/net v0.18.0 // indirect
 	golang.org/x/sync v0.5.0 // indirect

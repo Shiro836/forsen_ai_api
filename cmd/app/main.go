@@ -1,8 +1,8 @@
 package main
 
 import (
-	"app/api"
 	"app/db"
+	"app/internal/app/api"
 	"app/internal/app/conns"
 	"app/internal/app/metrics"
 	"app/internal/app/processor"
@@ -170,14 +170,17 @@ func ProcessingLoop(ctx context.Context, logger *slog.Logger, dbObj *db.DB, cm *
 	var users []*db.User
 	var err error
 	for len(users) == 0 {
-		users, err = dbObj.GetPermittedUsers(ctx, db.PermissionStreamer)
+		users, err = dbObj.GetUsersPermissions(ctx, db.PermissionStreamer, db.StatusGranted)
 		if err != nil {
 			return fmt.Errorf("failed to get whitelist: %w", err)
 		}
 
 		if len(users) == 0 {
 			logger.Info("no users in whitelist, waiting...")
-			time.Sleep(time.Second)
+			select {
+			case <-time.After(time.Second):
+			case <-ctx.Done():
+			}
 		}
 
 		if ctx.Err() != nil {

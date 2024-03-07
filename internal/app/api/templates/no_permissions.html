@@ -1,0 +1,15 @@
+<dev class="flex flex-col">
+    <dev class="text-2xl">
+        You don't have these permission to access the page: {{ range .Permissions }}{{ .PermissionName }} {{ end }}
+    </dev>
+    <dev class="text-2xl pt-2">
+        Click buttons below to request access
+    </dev>
+    <dev class="pl-4 text-xl flex flex-col w-min pt-8">
+        {{ range .Permissions }}
+        <div class="pt-4 w-full">
+            <button class="{{template "button-2"}} font-bold w-full px-10 py-2 inset-0" hx-post="/request_permissions/{{ .PermissionID }}" hx-swap="outerHTML">{{ .PermissionName }}</button>
+        </div>
+        {{ end }}
+    </dev>
+</dev>

@@ -1,0 +1,193 @@
+package api
+
+import (
+	"app/db"
+	"app/pkg/ctxstore"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"github.com/nicklaw5/helix/v2"
+)
+
+type permissionAction int
+
+const (
+	permissionActionAdd permissionAction = iota
+	permissionActionRemove
+)
+
+func (permissionAction permissionAction) String() string {
+	switch permissionAction {
+	case permissionActionAdd:
+		return "add"
+	case permissionActionRemove:
+		return "remove"
+	default:
+		return "unknown"
+	}
+}
+
+func (api *API) managePermission(permissionAction permissionAction, permission db.Permission) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		initiatorUser := ctxstore.GetUser(r.Context())
+		if initiatorUser == nil {
+			w.WriteHeader(http.StatusForbidden)
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusForbidden,
+				ErrorMessage: "No user found, you are not supposed to be here. How did you get here??????",
+			})
+
+			return
+		}
+
+		targetUserIDStr := r.FormValue("user_id")
+		if len(targetUserIDStr) != 0 {
+			targetUserID, err := strconv.Atoi(targetUserIDStr)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+					ErrorCode:    http.StatusBadRequest,
+					ErrorMessage: fmt.Sprintf("invalid user_id: %v", err),
+				})
+
+				return
+			}
+
+			targetUser, err := api.db.GetUserByID(r.Context(), targetUserID)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+					ErrorCode:    http.StatusInternalServerError,
+					ErrorMessage: fmt.Sprintf("get user by id err: %v", err),
+				})
+
+				return
+			}
+
+			switch permissionAction {
+			case permissionActionAdd:
+				if err = api.db.AddPermission(r.Context(), initiatorUser, targetUser.TwitchUserID, targetUser.TwitchLogin, permission); err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+						ErrorCode:    http.StatusInternalServerError,
+						ErrorMessage: fmt.Sprintf("db %s permission err: %v", permissionAction.String(), err),
+					})
+
+					return
+				}
+			case permissionActionRemove:
+				if err = api.db.RemovePermission(r.Context(), initiatorUser, targetUser.TwitchUserID, permission); err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+						ErrorCode:    http.StatusInternalServerError,
+						ErrorMessage: fmt.Sprintf("db add permission err: %v", err),
+					})
+
+					return
+				}
+			default:
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+					ErrorCode:    http.StatusInternalServerError,
+					ErrorMessage: fmt.Sprintf("Invalid permission action: %v", permissionAction),
+				})
+
+				return
+			}
+
+			_, _ = w.Write([]byte("Success"))
+			return
+		}
+
+		targetLogin := r.FormValue("twitch_login")
+		if len(targetLogin) == 0 {
+			targetLogin = r.FormValue("twitch_login_2")
+		}
+		if len(targetLogin) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusBadRequest,
+				ErrorMessage: "No user provided",
+			})
+
+			return
+		}
+
+		twitchAPI, err := api.twitchClient.NewHelixClient(initiatorUser.TwitchAccessToken, initiatorUser.TwitchRefreshToken)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: "twitch client err: " + err.Error(),
+			})
+
+			return
+		}
+
+		resp, err := twitchAPI.GetUsers(&helix.UsersParams{
+			Logins: []string{
+				targetLogin,
+			},
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
+			})
+
+			return
+		}
+		if resp == nil || len(resp.Data.Users) == 0 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("user not found"))
+
+			return
+		}
+
+		targetUserID, err := strconv.Atoi(resp.Data.Users[0].ID)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
+			})
+
+			return
+		}
+
+		switch permissionAction {
+		case permissionActionAdd:
+			if err = api.db.AddPermission(r.Context(), initiatorUser, targetUserID, resp.Data.Users[0].Login, permission); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+					ErrorCode:    http.StatusInternalServerError,
+					ErrorMessage: fmt.Sprintf("db add permission err: %v", err),
+				})
+
+				return
+			}
+		case permissionActionRemove:
+			if err = api.db.RemovePermission(r.Context(), initiatorUser, targetUserID, permission); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+					ErrorCode:    http.StatusInternalServerError,
+					ErrorMessage: fmt.Sprintf("db add permission err: %v", err),
+				})
+
+				return
+			}
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusBadRequest,
+				ErrorMessage: fmt.Sprintf("Invalid permission action: %d", permissionAction),
+			})
+
+			return
+		}
+
+		_, _ = w.Write([]byte("Success"))
+	}
+}

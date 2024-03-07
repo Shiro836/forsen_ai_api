@@ -36,73 +36,10 @@ func New(httpClient HTTPClient, cfg *Config) *Client {
 	}
 }
 
-const getUsersUrl = "https://api.twitch.tv/helix/users"
-
-type getUsersDataEntry struct {
-	Id    string `json:"id"`
-	Login string `json:"login"`
-}
-
-type getUsersResp struct {
-	Data []getUsersDataEntry `json:"data"`
-}
-
-type TwitchUserData struct {
-	UserID int
-	Login  string
-}
-
-func (c *Client) GetUsers(accessToken string) (*TwitchUserData, error) {
-	req, err := http.NewRequest(http.MethodGet, getUsersUrl, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create getUsers request: %w", err)
-	}
-
-	req.Header.Add("Authorization", "Bearer "+accessToken)
-	req.Header.Add("Client-Id", c.cfg.ClientID)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to do getUsers request: %w", err)
-	}
-
-	respData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read getUsers response body: %w", err)
-	}
-
-	respJson := &getUsersResp{}
-
-	if err = json.Unmarshal(respData, &respJson); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal getUsers response body: %w", err)
-	}
-
-	if len(respJson.Data) == 0 {
-		return nil, fmt.Errorf("no users found")
-	}
-
-	intId, err := strconv.Atoi(respJson.Data[0].Id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert userId to int; %w", err)
-	}
-
-	return &TwitchUserData{
-		UserID: intId,
-		Login:  respJson.Data[0].Login,
-	}, nil
-}
-
 type userTokenData struct {
 	AccessToken  string `json:"access_token"`
 	ExpiresIn    int64  `json:"expires_in"`
 	RefreshToken string `json:"refresh_token"`
-}
-
-type TwitchUserCredsWithUserData struct {
-	UserID       int
-	Username     string
-	AccessToken  string
-	RefreshToken string
 }
 
 func (c *Client) CodeHandler(code string) (*db.User, error) {
@@ -136,19 +73,40 @@ func (c *Client) CodeHandler(code string) (*db.User, error) {
 		return nil, fmt.Errorf("failed to unmarshal json: %w", err)
 	}
 
-	userData, err := c.GetUsers(respJson.AccessToken)
+	client, err := c.NewHelixClient(respJson.AccessToken, respJson.RefreshToken)
 	if err != nil {
-		fmt.Println(err)
-	} else {
-		fmt.Println(userData)
+		return nil, fmt.Errorf("failed to create helix client: %w", err)
+	}
+
+	usersResp, err := client.GetUsers(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users: %w", err)
+	}
+
+	if usersResp == nil || len(usersResp.Data.Users) == 0 {
+		return nil, fmt.Errorf("no users found")
+	}
+
+	userID, err := strconv.Atoi(usersResp.Data.Users[0].ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert userId to int: %w", err)
 	}
 
 	return &db.User{
-		TwitchUserID:       userData.UserID,
-		TwitchLogin:        userData.Login,
+		TwitchUserID:       userID,
+		TwitchLogin:        usersResp.Data.Users[0].Login,
 		TwitchRefreshToken: respJson.RefreshToken,
 		TwitchAccessToken:  respJson.AccessToken,
 	}, nil
+}
+
+func (c *Client) NewHelixAppClient() (*helix.Client, error) {
+	return helix.NewClient(&helix.Options{
+		HTTPClient: c.httpClient,
+
+		ClientID:     c.cfg.ClientID,
+		ClientSecret: c.cfg.Secret,
+	})
 }
 
 func (c *Client) NewHelixClient(accessToken, refreshToken string) (*helix.Client, error) {

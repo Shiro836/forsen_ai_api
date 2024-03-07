@@ -15,7 +15,11 @@ func WithUser(ctx context.Context, userData *db.User) context.Context {
 	return context.WithValue(ctx, userDataKey, userData)
 }
 
-func GetUser(ctx context.Context) (*db.User, bool) {
+func GetUser(ctx context.Context) *db.User {
 	val, ok := ctx.Value(userDataKey).(*db.User)
-	return val, ok
+	if !ok {
+		return nil
+	}
+
+	return val
 }

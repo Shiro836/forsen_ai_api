@@ -12,6 +12,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const dropEverythingQuery = `
+	DROP TABLE if exists relations;
+	DROP TABLE if exists reward_buttons;
+	DROP TABLE if exists msg_queue;
+	DROP TABLE if exists permissions;
+	DROP TABLE if exists history;
+	DROP TABLE if exists char_cards;
+	DROP TABLE if exists users;
+`
+
+const drop = false
+
 const migrationsFolder = "db/migrations"
 
 func main() {
@@ -36,6 +48,14 @@ func main() {
 	files, err := os.ReadDir(migrationsFolder)
 	if err != nil {
 		log.Fatalf("can't read migrations folder: %v", err)
+	}
+
+	if drop {
+		_, err := db.RawConn().Exec(context.Background(), dropEverythingQuery)
+		if err != nil {
+			log.Fatalf("can't drop everything: %v", err)
+		}
+		log.Println("dropped all tables")
 	}
 
 	for _, file := range files {

@@ -4,7 +4,7 @@ create table if not exists relations (
     user_id_1 bigint not null references users(id) ON DELETE CASCADE,
     user_id_2 bigint not null references users(id) ON DELETE CASCADE,
 
-    relation_type text not null, -- user_id_1 'relation_type' user_id_2 (e.g. 'moderates') (e.g. 'moderates' means user_id_1 is a moderator of user_id_2)
+    relation_type integer not null,
 
     data jsonb not null default '{}'::jsonb, -- extra data
 
