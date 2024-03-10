@@ -26,8 +26,10 @@ func (api *API) AuthMiddleware(next http.Handler) http.Handler {
 			if err != nil {
 				if db.ErrCode(err) == db.ErrCodeNoRows {
 					http.SetCookie(w, &http.Cookie{
-						Name:   cookieSessionID,
-						Value:  "",
+						Name:  cookieSessionID,
+						Value: "",
+
+						Path:   "/",
 						MaxAge: -1,
 					})
 
@@ -55,11 +57,7 @@ func (api *API) checkPermissions(requiredPermissions ...db.Permission) func(http
 			user := ctxstore.GetUser(r.Context())
 
 			if user == nil {
-				w.WriteHeader(http.StatusForbidden)
-				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-					ErrorCode:    http.StatusForbidden,
-					ErrorMessage: "No user found, you are not supposed to be here. How did you get here??????",
-				})
+				submitPage(w, authPage(r))
 
 				return
 			}

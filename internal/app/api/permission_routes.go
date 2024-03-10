@@ -28,15 +28,20 @@ func (permissionAction permissionAction) String() string {
 	}
 }
 
+func authPage(r *http.Request) *page {
+	page := createPage(r)
+	page.Content = getHtml("index.html", &LoginPage{
+		RedirectUrl: "https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=zi6vy3y3iq38svpmlub5fd26uwsee8&redirect_uri=https://" + r.Host + "/twitch_redirect_handler&scope=channel:read:subscriptions+channel:manage:redemptions+moderator:read:followers",
+	})
+
+	return page
+}
+
 func (api *API) managePermission(permissionAction permissionAction, permission db.Permission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		initiatorUser := ctxstore.GetUser(r.Context())
 		if initiatorUser == nil {
-			w.WriteHeader(http.StatusForbidden)
-			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-				ErrorCode:    http.StatusForbidden,
-				ErrorMessage: "No user found, you are not supposed to be here. How did you get here??????",
-			})
+			submitPage(w, authPage(r))
 
 			return
 		}

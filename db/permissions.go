@@ -75,7 +75,7 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 			u.twitch_refresh_token,
 			u.twitch_access_token
 		FROM permissions as p
-		right join users as u ON p.twitch_user_id = u.twitch_user_id
+		join users as u ON p.twitch_user_id = u.twitch_user_id
 		WHERE
 			p.status = $1
 		AND
@@ -108,7 +108,7 @@ func (db *DB) GetUserPermissions(ctx context.Context, userID int, permissionStat
 		SELECT
 			p.permission
 		FROM permissions p
-		LEFT JOIN users u ON p.twitch_user_id = u.twitch_user_id
+		JOIN users u ON p.twitch_user_id = u.twitch_user_id
 		WHERE
 			u.id = $1
 		and

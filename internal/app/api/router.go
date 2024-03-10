@@ -101,6 +101,9 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/", api.nav(api.home))
 		router.Get("/characters", api.nav(api.characters))
 		router.Get("/filters", api.nav(api.filters))
+
+		router.Get("/characters/{character_id}", api.nav(api.character))
+		router.Post("/characters/{character_id}", api.nav(api.newCharacter))
 	})
 
 	router.Group(func(router chi.Router) {

@@ -20,11 +20,7 @@ func (api *API) nav(getContent func(r *http.Request) template.HTML) http.Handler
 		page := createPage(r)
 
 		if user == nil {
-			page.Content = getHtml("index.html", &LoginPage{
-				RedirectUrl: "https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=zi6vy3y3iq38svpmlub5fd26uwsee8&redirect_uri=https://" + r.Host + "/twitch_redirect_handler&scope=channel:read:subscriptions+channel:manage:redemptions+moderator:read:followers",
-			})
-
-			submitPage(w, page)
+			submitPage(w, authPage(r))
 
 			return
 		}
@@ -54,10 +50,6 @@ func (api *API) nav(getContent func(r *http.Request) template.HTML) http.Handler
 		page.Content = getHtml("navbar.html", navPage)
 		submitPage(w, page)
 	})
-}
-
-func (api *API) home(r *http.Request) template.HTML {
-	return getHtml("home.html", nil)
 }
 
 func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
@@ -100,12 +92,22 @@ func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (api *API) filters(r *http.Request) template.HTML {
-	return getHtml("filters.html", nil)
+func (api *API) home(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "no user found, very unlucky",
+		})
+	}
+
+	return getHtml("home.html", &homePage{
+		URL: r.Host + "/" + user.TwitchLogin,
+	})
 }
 
-func (api *API) characters(r *http.Request) template.HTML {
-	return getHtml("characters.html", nil)
+func (api *API) filters(r *http.Request) template.HTML {
+	return getHtml("filters.html", nil)
 }
 
 func (api *API) requestPermissions(w http.ResponseWriter, r *http.Request) {

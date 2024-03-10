@@ -116,3 +116,7 @@ type modPage struct {
 	Requests  []permissionRequest
 	Streamers []permissionRequest
 }
+
+type homePage struct {
+	URL string
+}

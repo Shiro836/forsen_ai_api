@@ -2,6 +2,7 @@ package twitch
 
 import (
 	"app/db"
+	"app/pkg/tools"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -58,6 +59,7 @@ func (c *Client) CodeHandler(code string) (*db.User, error) {
 
 		return nil, fmt.Errorf("failed to send post request to token url: %w| body: %s", err, string(respData))
 	}
+	defer tools.DrainAndClose(resp.Body)
 
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {

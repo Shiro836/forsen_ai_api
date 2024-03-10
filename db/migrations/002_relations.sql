@@ -17,3 +17,4 @@ create table if not exists relations (
 create index if not exists relations_user_id_1_idx on relations (user_id_1);
 create index if not exists relations_user_id_2_idx on relations (user_id_2);
 create index if not exists relations_relation_type_idx on relations (relation_type);
+create index if not exists relations_data_idx on relations using gin (data);

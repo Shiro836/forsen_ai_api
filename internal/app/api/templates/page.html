@@ -1,27 +1,19 @@
 <!DOCTYPE html>
-<html id="root" {{ if .DarkTheme }} class="dark" {{ end }}>
+<html id="root" class="{{ if .DarkTheme }}dark{{ end }}">
 
 <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>{{ .Title }}</title>
 
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <script src="https://unpkg.com/htmx.org/dist/ext/path-params.js"></script>
     <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        'twitch-dark': '#9146FF',
-                        'twitch-light': '#A970FF',
-                    }
-                }
-            }
-        }
-    </script>
+    <link href="/static/tailwind.css" rel="stylesheet">
+
+    <script src="https://unpkg.com/clipboard@2/dist/clipboard.min.js"></script>
 </head>
 
 <body class="antialiased text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900">
@@ -73,6 +65,18 @@
             {{ .Content }}
         </div>
     </div>
+
+    <style>
+        .tooltip {
+            visibility: hidden;
+            position: absolute;
+        }
+
+        .has-tooltip:hover .tooltip {
+            visibility: visible;
+            z-index: 50;
+        }
+    </style>
 
     <script>
         document.getElementById("light_switch").addEventListener("click", function() {

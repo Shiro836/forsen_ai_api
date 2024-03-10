@@ -1,3 +1,15 @@
 <div>
-    Home
+    <div class="text-xl font-medium">
+        Quickstart
+    </div>
+    <ul class="pt-6 space-y-6 list-inside list-disc">
+        <li>In your obs, choose scene where you want to put output window of AI.</li>
+        <li>Then navigate to Sources window, press "+" button and add new Browser source.</li>
+        <li>Put <button class="copy-button underline has-tooltip w-min" data-clipboard-target="#obs-url"><span class='tooltip rounded -mt-6'>Click To Copy</span><div id="obs-url">{{ .URL }}</div></button> in URL field without quotes. Press "OK" button.</li>
+        <li>Go to <button class="underline" hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Characters</button> page and add your first character.</li>
+        <li>Go to your chat and try to redeem your newly created reward. You should hear sound and see text.</li>
+    </ul>
+    <script>
+        new ClipboardJS('.copy-button');
+    </script>
 </div>
