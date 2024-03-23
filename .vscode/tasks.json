@@ -1,0 +1,11 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "tailwind",
+            "type": "shell",
+            "command": "./tailwindcss -o ./internal/app/api/static/tailwind.css",
+            "problemMatcher": []
+        }
+    ]
+}
