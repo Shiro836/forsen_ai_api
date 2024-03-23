@@ -20,7 +20,7 @@
                                 </svg>
                             </div>
                         </div>
-                        <input type="text" id="char_name" name="char_name" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen" autocomplete="off"></input>
+                        <input type="text" id="char_name" name="char_name" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen" autocomplete="off" value="{{ if .Card }}{{ .Card.CharName }}{{ end }}"></input>
                     </div>
 
                 </div>
@@ -40,15 +40,14 @@
                                 </svg>
                             </div>
                         </div>
-                        <textarea type="text" rows="2" id="char_description" name="char_description" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="God gamer with a towering 140 IQ, captivating the gaming world with unmatched skill and intellect." autocomplete="off"></textarea>
+                        <textarea type="text" rows="2" id="char_description" name="char_description" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="God gamer with a towering 140 IQ, captivating the gaming world with unmatched skill and intellect." autocomplete="off">{{ if .Card }}{{ .Card.CharDescription }}{{ end }}</textarea>
                     </div>
                 </div>
 
             </div>
 
             <div class="flex flex-col pt-10 border-t {{template "ui-border-clr"}}">
-
-                <div class="flex flex-col w-80">
+                <div class="flex flex-col w-max">
                     <div class="flex items-center pb-2">
                         <label for="name">Name</label>
                         <div class="has-tooltip pl-2">
@@ -62,44 +61,76 @@
                             </svg>
                         </div>
                     </div>
-                    <input type="text" id="name" name="name" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen" autocomplete="off"></input>
+                    <input type="text" id="name" name="name" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen" autocomplete="off" value="{{ if .Card }}{{ .Card.Data.Name }}{{ end }}"></input>
                 </div>
-
-                <div class="flex flex-col flex-grow justify-start pt-6">
-                    <div class="flex items-center pb-2">
-                        <label for="description">Description</label>
-                        <div class="has-tooltip pl-2">
-                            <span class='tooltip text-xs -mt-6 -ml-10'>Description sent to AI input.</span>
-                            <svg class="fill-current w-4 h-4" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 29.536 29.536" xml:space="preserve">
-                                <g>
-                                    <path d="M14.768,0C6.611,0,0,6.609,0,14.768c0,8.155,6.611,14.767,14.768,14.767s14.768-6.612,14.768-14.767   C29.535,6.609,22.924,0,14.768,0z M14.768,27.126c-6.828,0-12.361-5.532-12.361-12.359c0-6.828,5.533-12.362,12.361-12.362   c6.826,0,12.359,5.535,12.359,12.362C27.127,21.594,21.594,27.126,14.768,27.126z"/>
-                                    <path d="M14.385,19.337c-1.338,0-2.289,0.951-2.289,2.34c0,1.336,0.926,2.339,2.289,2.339c1.414,0,2.314-1.003,2.314-2.339   C16.672,20.288,15.771,19.337,14.385,19.337z"/>
-                                    <path d="M14.742,6.092c-1.824,0-3.34,0.513-4.293,1.053l0.875,2.804c0.668-0.462,1.697-0.772,2.545-0.772   c1.285,0.027,1.879,0.644,1.879,1.543c0,0.85-0.67,1.697-1.494,2.701c-1.156,1.364-1.594,2.701-1.516,4.012l0.025,0.669h3.42   v-0.463c-0.025-1.158,0.387-2.162,1.311-3.215c0.979-1.08,2.211-2.366,2.211-4.321C19.705,7.968,18.139,6.092,14.742,6.092z"/>
-                                </g>
-                            </svg>
-                        </div>
-                    </div>
-                    <textarea type="text" rows="9" id="description" name="description" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen, real name Sebastian Fors, is the popular Swedish Twitch livestreamer, playing various videogames for his large audience. He is tall and handsome middle-aged man resembling Ryan Gosling. Despite this, his long and messy hair and beard, his very bad slouchy posture and his love for casual baggy clothes make him look like a hobo. Former snus addict. He is competitive, irreverent, authentic, brash, confident, phlegmatic and a loner. He has sarcastic, dry, dark and edgy sense of humor. He is based and ready to share his unpopular and controversial opinions with his audience. He uses puns, wordplay and quotes from various videogames, songs, internet memes, movies etc., as well as his own catchphrases and lines, to create comedy. Especially he likes to quote GachiMuchi and Who Killed Captain Alex?, since these are old memes in his community. He is very skilled in some videogames, while being an absolute clown in others. He calls himself god gamer when he's winning and unlucky when losing." autocomplete="off"></textarea>
-                </div>
-
-                <div class="flex flex-col flex-grow justify-start pt-6">
-                    <div class="flex items-center pb-2">
-                        <label for="personality">Personality</label>
-                        <div class="has-tooltip pl-2">
-                            <span class='tooltip text-xs -mt-6 -ml-6'>Personality sent to AI input.</span>
-                            <svg class="fill-current w-4 h-4" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 29.536 29.536" xml:space="preserve">
-                                <g>
-                                    <path d="M14.768,0C6.611,0,0,6.609,0,14.768c0,8.155,6.611,14.767,14.768,14.767s14.768-6.612,14.768-14.767   C29.535,6.609,22.924,0,14.768,0z M14.768,27.126c-6.828,0-12.361-5.532-12.361-12.359c0-6.828,5.533-12.362,12.361-12.362   c6.826,0,12.359,5.535,12.359,12.362C27.127,21.594,21.594,27.126,14.768,27.126z"/>
-                                    <path d="M14.385,19.337c-1.338,0-2.289,0.951-2.289,2.34c0,1.336,0.926,2.339,2.289,2.339c1.414,0,2.314-1.003,2.314-2.339   C16.672,20.288,15.771,19.337,14.385,19.337z"/>
-                                    <path d="M14.742,6.092c-1.824,0-3.34,0.513-4.293,1.053l0.875,2.804c0.668-0.462,1.697-0.772,2.545-0.772   c1.285,0.027,1.879,0.644,1.879,1.543c0,0.85-0.67,1.697-1.494,2.701c-1.156,1.364-1.594,2.701-1.516,4.012l0.025,0.669h3.42   v-0.463c-0.025-1.158,0.387-2.162,1.311-3.215c0.979-1.08,2.211-2.366,2.211-4.321C19.705,7.968,18.139,6.092,14.742,6.092z"/>
-                                </g>
-                            </svg>
-                        </div>
-                    </div>
-                    <textarea type="text" rows="2" id="personality" name="personality" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Competitive, phlegmatic, confident, sarcastic, based, god gamer." autocomplete="off"></textarea>
-                </div>
-
             </div>
+
+            <div class="flex flex-col flex-grow justify-start pt-6">
+                <div class="flex items-center pb-2">
+                    <label for="description">Description</label>
+                    <div class="has-tooltip pl-2">
+                        <span class='tooltip text-xs -mt-6 -ml-10'>Description sent to AI input.</span>
+                        <svg class="fill-current w-4 h-4" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 29.536 29.536" xml:space="preserve">
+                            <g>
+                                <path d="M14.768,0C6.611,0,0,6.609,0,14.768c0,8.155,6.611,14.767,14.768,14.767s14.768-6.612,14.768-14.767   C29.535,6.609,22.924,0,14.768,0z M14.768,27.126c-6.828,0-12.361-5.532-12.361-12.359c0-6.828,5.533-12.362,12.361-12.362   c6.826,0,12.359,5.535,12.359,12.362C27.127,21.594,21.594,27.126,14.768,27.126z"/>
+                                <path d="M14.385,19.337c-1.338,0-2.289,0.951-2.289,2.34c0,1.336,0.926,2.339,2.289,2.339c1.414,0,2.314-1.003,2.314-2.339   C16.672,20.288,15.771,19.337,14.385,19.337z"/>
+                                <path d="M14.742,6.092c-1.824,0-3.34,0.513-4.293,1.053l0.875,2.804c0.668-0.462,1.697-0.772,2.545-0.772   c1.285,0.027,1.879,0.644,1.879,1.543c0,0.85-0.67,1.697-1.494,2.701c-1.156,1.364-1.594,2.701-1.516,4.012l0.025,0.669h3.42   v-0.463c-0.025-1.158,0.387-2.162,1.311-3.215c0.979-1.08,2.211-2.366,2.211-4.321C19.705,7.968,18.139,6.092,14.742,6.092z"/>
+                            </g>
+                        </svg>
+                    </div>
+                </div>
+                <textarea type="text" rows="9" id="description" name="description" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen, real name Sebastian Fors, is the popular Swedish Twitch livestreamer, playing various videogames for his large audience. He is tall and handsome middle-aged man resembling Ryan Gosling. Despite this, his long and messy hair and beard, his very bad slouchy posture and his love for casual baggy clothes make him look like a hobo. Former snus addict. He is competitive, irreverent, authentic, brash, confident, phlegmatic and a loner. He has sarcastic, dry, dark and edgy sense of humor. He is based and ready to share his unpopular and controversial opinions with his audience. He uses puns, wordplay and quotes from various videogames, songs, internet memes, movies etc., as well as his own catchphrases and lines, to create comedy. Especially he likes to quote GachiMuchi and Who Killed Captain Alex?, since these are old memes in his community. He is very skilled in some videogames, while being an absolute clown in others. He calls himself god gamer when he's winning and unlucky when losing." autocomplete="off">{{ if .Card }}{{ .Card.Data.Description }}{{ end }}</textarea>
+            </div>
+
+            <div class="flex flex-col flex-grow justify-start pt-6">
+                <div class="flex items-center pb-2">
+                    <label for="personality">Personality</label>
+                    <div class="has-tooltip pl-2">
+                        <span class='tooltip text-xs -mt-6 -ml-6'>Personality sent to AI input.</span>
+                        <svg class="fill-current w-4 h-4" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 29.536 29.536" xml:space="preserve">
+                            <g>
+                                <path d="M14.768,0C6.611,0,0,6.609,0,14.768c0,8.155,6.611,14.767,14.768,14.767s14.768-6.612,14.768-14.767   C29.535,6.609,22.924,0,14.768,0z M14.768,27.126c-6.828,0-12.361-5.532-12.361-12.359c0-6.828,5.533-12.362,12.361-12.362   c6.826,0,12.359,5.535,12.359,12.362C27.127,21.594,21.594,27.126,14.768,27.126z"/>
+                                <path d="M14.385,19.337c-1.338,0-2.289,0.951-2.289,2.34c0,1.336,0.926,2.339,2.289,2.339c1.414,0,2.314-1.003,2.314-2.339   C16.672,20.288,15.771,19.337,14.385,19.337z"/>
+                                <path d="M14.742,6.092c-1.824,0-3.34,0.513-4.293,1.053l0.875,2.804c0.668-0.462,1.697-0.772,2.545-0.772   c1.285,0.027,1.879,0.644,1.879,1.543c0,0.85-0.67,1.697-1.494,2.701c-1.156,1.364-1.594,2.701-1.516,4.012l0.025,0.669h3.42   v-0.463c-0.025-1.158,0.387-2.162,1.311-3.215c0.979-1.08,2.211-2.366,2.211-4.321C19.705,7.968,18.139,6.092,14.742,6.092z"/>
+                            </g>
+                        </svg>
+                    </div>
+                </div>
+                <textarea type="text" rows="2" id="personality" name="personality" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Competitive, phlegmatic, confident, sarcastic, based, god gamer." autocomplete="off">{{ if .Card }}{{ .Card.Data.Personality }}{{ end }}</textarea>
+            </div>
+
+            <div class="flex flex-col pt-6">
+                <div class="flex">
+                    Message Examples
+                </div>
+
+                {{ template "message_example" .MessageExamples }}
+            </div>
+
+            <div class="pt-4">
+                <div class="pt-4 border-t {{template "ui-border-clr"}} flex flex-col flex-grow justify-start pt-6">
+                    <div class="flex items-center pb-2">
+                        <label for="first_message">First Message</label>
+                        <div class="has-tooltip pl-2">
+                            <span class='tooltip text-xs -mt-6 -ml-10'>Message of AI before user request.</span>
+                            <svg class="fill-current w-4 h-4" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 29.536 29.536" xml:space="preserve">
+                                <g>
+                                    <path d="M14.768,0C6.611,0,0,6.609,0,14.768c0,8.155,6.611,14.767,14.768,14.767s14.768-6.612,14.768-14.767   C29.535,6.609,22.924,0,14.768,0z M14.768,27.126c-6.828,0-12.361-5.532-12.361-12.359c0-6.828,5.533-12.362,12.361-12.362   c6.826,0,12.359,5.535,12.359,12.362C27.127,21.594,21.594,27.126,14.768,27.126z"/>
+                                    <path d="M14.385,19.337c-1.338,0-2.289,0.951-2.289,2.34c0,1.336,0.926,2.339,2.289,2.339c1.414,0,2.314-1.003,2.314-2.339   C16.672,20.288,15.771,19.337,14.385,19.337z"/>
+                                    <path d="M14.742,6.092c-1.824,0-3.34,0.513-4.293,1.053l0.875,2.804c0.668-0.462,1.697-0.772,2.545-0.772   c1.285,0.027,1.879,0.644,1.879,1.543c0,0.85-0.67,1.697-1.494,2.701c-1.156,1.364-1.594,2.701-1.516,4.012l0.025,0.669h3.42   v-0.463c-0.025-1.158,0.387-2.162,1.311-3.215c0.979-1.08,2.211-2.366,2.211-4.321C19.705,7.968,18.139,6.092,14.742,6.092z"/>
+                                </g>
+                            </svg>
+                        </div>
+                    </div>
+                    <textarea type="text" rows="2" id="first_message" name="first_message" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Ask your stupid question." autocomplete="off">{{ if .Card }}{{ .Card.Data.FirstMessage }}{{ end }}</textarea>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-8">
+                <button hx-post="/characters/{{.CharacterID}}" hx-target="" class="py-2 px-4 border-2 {{template "button-2"}}">{{if .Card}}Update{{else}}Create{{end}}</button>
+            </div>
+
+            <div id="operation_result"></div>
 
         </div>
     </form>

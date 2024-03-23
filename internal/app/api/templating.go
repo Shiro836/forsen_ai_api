@@ -1,6 +1,7 @@
 package api
 
 import (
+	"app/db"
 	"app/pkg/ctxstore"
 	"embed"
 	"html/template"
@@ -119,4 +120,60 @@ type modPage struct {
 
 type homePage struct {
 	URL string
+}
+
+func empty(r *http.Request) template.HTML {
+	return ""
+}
+
+func (api *API) elem(getContent func(r *http.Request) template.HTML) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := ctxstore.GetUser(r.Context())
+
+		if user == nil {
+			_, _ = w.Write([]byte("not authenticated bitch"))
+
+			return
+		}
+
+		_, _ = w.Write([]byte(getContent(r)))
+	})
+}
+
+func (api *API) nav(getContent func(r *http.Request) template.HTML) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := ctxstore.GetUser(r.Context())
+
+		page := createPage(r)
+
+		if user == nil {
+			submitPage(w, authPage(r))
+
+			return
+		}
+
+		userPermissions, err := api.db.GetUserPermissions(r.Context(), user.ID, db.StatusGranted)
+		if err != nil {
+			submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
+
+			return
+		}
+
+		navPage := &navPage{
+			Content: getContent(r),
+		}
+		for _, permission := range userPermissions {
+			switch permission {
+			case db.PermissionStreamer:
+				navPage.IsStreamer = true
+			case db.PermissionMod:
+				navPage.IsMod = true
+			case db.PermissionAdmin:
+				navPage.IsAdmin = true
+			}
+		}
+
+		page.Content = getHtml("navbar.html", navPage)
+		submitPage(w, page)
+	})
 }

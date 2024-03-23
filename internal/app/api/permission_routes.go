@@ -50,7 +50,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 		if len(targetUserIDStr) != 0 {
 			targetUserID, err := strconv.Atoi(targetUserIDStr)
 			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusBadRequest,
 					ErrorMessage: fmt.Sprintf("invalid user_id: %v", err),
@@ -61,7 +60,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 
 			targetUser, err := api.db.GetUserByID(r.Context(), targetUserID)
 			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusInternalServerError,
 					ErrorMessage: fmt.Sprintf("get user by id err: %v", err),
@@ -73,7 +71,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 			switch permissionAction {
 			case permissionActionAdd:
 				if err = api.db.AddPermission(r.Context(), initiatorUser, targetUser.TwitchUserID, targetUser.TwitchLogin, permission); err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
 					_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 						ErrorCode:    http.StatusInternalServerError,
 						ErrorMessage: fmt.Sprintf("db %s permission err: %v", permissionAction.String(), err),
@@ -83,7 +80,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 				}
 			case permissionActionRemove:
 				if err = api.db.RemovePermission(r.Context(), initiatorUser, targetUser.TwitchUserID, permission); err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
 					_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 						ErrorCode:    http.StatusInternalServerError,
 						ErrorMessage: fmt.Sprintf("db add permission err: %v", err),
@@ -92,7 +88,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 					return
 				}
 			default:
-				w.WriteHeader(http.StatusInternalServerError)
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusInternalServerError,
 					ErrorMessage: fmt.Sprintf("Invalid permission action: %v", permissionAction),
@@ -110,7 +105,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 			targetLogin = r.FormValue("twitch_login_2")
 		}
 		if len(targetLogin) == 0 {
-			w.WriteHeader(http.StatusBadRequest)
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 				ErrorCode:    http.StatusBadRequest,
 				ErrorMessage: "No user provided",
@@ -121,7 +115,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 
 		twitchAPI, err := api.twitchClient.NewHelixClient(initiatorUser.TwitchAccessToken, initiatorUser.TwitchRefreshToken)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 				ErrorCode:    http.StatusInternalServerError,
 				ErrorMessage: "twitch client err: " + err.Error(),
@@ -136,7 +129,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 			},
 		})
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 				ErrorCode:    http.StatusInternalServerError,
 				ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
@@ -145,7 +137,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 			return
 		}
 		if resp == nil || len(resp.Data.Users) == 0 {
-			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte("user not found"))
 
 			return
@@ -153,7 +144,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 
 		targetUserID, err := strconv.Atoi(resp.Data.Users[0].ID)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 				ErrorCode:    http.StatusInternalServerError,
 				ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
@@ -165,7 +155,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 		switch permissionAction {
 		case permissionActionAdd:
 			if err = api.db.AddPermission(r.Context(), initiatorUser, targetUserID, resp.Data.Users[0].Login, permission); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusInternalServerError,
 					ErrorMessage: fmt.Sprintf("db add permission err: %v", err),
@@ -175,7 +164,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 			}
 		case permissionActionRemove:
 			if err = api.db.RemovePermission(r.Context(), initiatorUser, targetUserID, permission); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusInternalServerError,
 					ErrorMessage: fmt.Sprintf("db add permission err: %v", err),
@@ -184,7 +172,6 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 				return
 			}
 		default:
-			w.WriteHeader(http.StatusBadRequest)
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 				ErrorCode:    http.StatusBadRequest,
 				ErrorMessage: fmt.Sprintf("Invalid permission action: %d", permissionAction),

@@ -30,7 +30,7 @@ func (api *appApiImpl) GetBroadcasterLogin() string {
 }
 
 func (api *appApiImpl) GetCharCard(ctx context.Context, twitchRewardID string) (*db.CardData, error) {
-	card, err := api.db.GetCharCard(ctx, api.broadcaster.ID, twitchRewardID)
+	card, err := api.db.GetCharCardByTwitchReward(ctx, api.broadcaster.ID, twitchRewardID)
 	if err != nil {
 		return nil, err
 	}

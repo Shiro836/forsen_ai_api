@@ -1,0 +1,42 @@
+{{ block "message_example" . }}
+
+{{ range .MessageExamples }}
+<div id="message_example_{{.ID}}">
+    <div class="flex items-center pt-4">
+        <div class="flex flex-col flex-grow justify-start pt-2 border-t {{template "ui-border-clr"}}">
+            <label for="request_{{.ID}}" class="pb-2">Request</label>
+            <textarea type="text" rows="1" id="request_{{.ID}}" name="request_{{.ID}}" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Should i wash my legs?" autocomplete="off">{{ .Request }}</textarea>
+            <label for="response_{{.ID}}" class="pt-2 pb-1">Response</label>
+            <textarea type="text" rows="3" id="response_{{.ID}}" name="response_{{.ID}}" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Who the fuck washes their legs? what the fuck, youre standing in the shower, youre soaping up the upper body and dick and whatnot, right?... no one scrubs their legs, like what're you bend over scrub your legs... what?" autocomplete="off">{{ .Response }}</textarea>
+        </div>
+        <div>
+            <div class="absolute pl-4">
+                <button hx-get="/empty" hx-target="#message_example_{{.ID}}" hx-swap="outerHTML" class="py-1 px-1 border {{template "button-1"}}">
+                    <svg class="fill-current w-8 h-8" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Capa_1" viewBox="0 0 45.402 45.402" xml:space="preserve">
+                        <g>
+                            <path d="m 41.267 18.557 h -37.126 c -2.283 0.01 -4.139 1.861 -4.138 4.145 c -0.001 1.141 0.46 2.187 1.207 2.934 c 0.748 0.749 1.78 1.222 2.92 1.222 h 37.137 c 2.283 -0.001 4.134 -1.868 4.133 -4.151 c -0.001 -2.282 -1.852 -4.15 -4.133 -4.15 z"/>
+                        </g>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}
+
+<div id="new_message_example" class="flex justify-center pt-6">
+    <button hx-get="/new_message_example/{{.ID}}" hx-target="#new_message_example" hx-swap="outerHTML" class="py-2 px-4 border {{template "button-2"}}">
+        <div class="flex items-center">
+            <svg class="fill-current w-8 h-8" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" id="Capa_1" viewBox="0 0 45.402 45.402" xml:space="preserve">
+                <g>
+                    <path d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141   c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27   c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435   c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"/>
+                </g>
+            </svg>
+            <div class="pl-4">
+                New Message Example
+            </div>
+        </div>
+    </button>
+</div>
+
+{{ end }}

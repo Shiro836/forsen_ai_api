@@ -20,7 +20,7 @@ import (
 
 type DB interface {
 	GetGoScript(ctx context.Context, userID int) string
-	GetCharCard(ctx context.Context, userID int, twitchRewardID string) (*db.Card, error)
+	GetCharCardByTwitchReward(ctx context.Context, userID int, twitchRewardID string) (*db.Card, error)
 	GetNextMsg(ctx context.Context, userID int) (*db.Message, error)
 	GetFilters(ctx context.Context, userID int) (string, error)
 }

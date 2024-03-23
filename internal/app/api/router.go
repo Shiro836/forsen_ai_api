@@ -5,7 +5,6 @@ import (
 	"app/internal/app/conns"
 	"app/pkg/ai"
 	"app/pkg/twitch"
-	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -22,18 +21,6 @@ type Config struct {
 	Timeout time.Duration `yaml:"timeout"`
 }
 
-type DB interface {
-	GetUserByID(ctx context.Context, userID int) (*db.User, error)
-	GetUserBySession(ctx context.Context, session string) (*db.User, error)
-	UpsertUser(ctx context.Context, user *db.User) (int, error)
-
-	GetUsersPermissions(ctx context.Context, permission db.Permission, permissionStatus db.Status) ([]*db.User, error)
-	GetUserPermissions(ctx context.Context, userID int, permissionStatus db.Status) ([]db.Permission, error)
-	RequestAccess(ctx context.Context, user *db.User, permission db.Permission) error
-	AddPermission(ctx context.Context, initiator *db.User, targetTwitchUserID int, targetTwitchLogin string, permission db.Permission) error
-	RemovePermission(ctx context.Context, initiator *db.User, targetTwitchUserID int, permission db.Permission) error
-}
-
 type API struct {
 	logger *slog.Logger
 
@@ -45,12 +32,12 @@ type API struct {
 
 	twitchClient *twitch.Client
 
-	db DB
+	db *db.DB
 
 	cfg *Config
 }
 
-func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, llm *ai.VLLMClient, db DB) *API {
+func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, llm *ai.VLLMClient, db *db.DB) *API {
 	return &API{
 		cfg: cfg,
 
@@ -84,7 +71,6 @@ func (api *API) NewRouter() *chi.Mux {
 	}))
 	router.Use(middleware.StripSlashes)
 
-	// TODO: uncomment after debugging
 	router.Use(middleware.Recoverer)
 
 	router.Use(api.AuthMiddleware)
@@ -103,7 +89,11 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/filters", api.nav(api.filters))
 
 		router.Get("/characters/{character_id}", api.nav(api.character))
-		router.Post("/characters/{character_id}", api.nav(api.newCharacter))
+		router.Post("/characters/{character_id}", api.upsertCharacter)
+
+		router.Get("/new_message_example/{id}", api.elem(api.newMessageExample))
+
+		router.Get("/characters/{character_id}/image", api.charImage)
 	})
 
 	router.Group(func(router chi.Router) {
@@ -127,8 +117,10 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Post("/remove_streamer", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionStreamer)))
 	})
 
-	router.Handle("/static/*", http.FileServer(http.FS(staticFS)))
-	router.Handle("/favicon.ico", http.RedirectHandler("/static/logo.png", http.StatusMovedPermanently))
+	router.Handle("/static/*", http.FileServerFS(staticFS))
+	router.Handle("/favicon.ico", http.RedirectHandler("/static/logo.jpg", http.StatusMovedPermanently))
+
+	router.Get("/empty", api.elem(empty))
 
 	return router
 }

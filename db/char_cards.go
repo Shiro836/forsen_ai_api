@@ -30,12 +30,50 @@ type CardData struct {
 	Name            string           `json:"name"`
 	Description     string           `json:"description"`
 	Personality     string           `json:"personality"`
-	FirstMessage    string           `json:"first_message"`
 	MessageExamples []MessageExample `json:"message_examples"`
+	FirstMessage    string           `json:"first_message"`
 	SystemPrompt    string           `json:"system_prompt"`
+
+	Image          []byte `json:"image"`
+	VoiceReference []byte `json:"voice_reference"`
 }
 
-func (db *DB) GetCharCard(ctx context.Context, userID int, twitchRewardID string) (*Card, error) {
+func (db *DB) GetCharCardByID(ctx context.Context, userID int, cardID int) (*Card, error) {
+	var card Card
+	err := db.db.QueryRow(ctx, `
+		select
+			cc.id,
+			cc.owner_user_id,
+			cc.char_name,
+			cc.char_description,
+			cc.public,
+			cc.redeems,
+			cc.updated_at,
+			cc.created_at,
+			cc.data
+		from char_cards cc
+		where
+			cc.id = $1
+			and cc.owner_user_id = $2
+	`, cardID, userID).Scan(
+		&card.ID,
+		&card.OwnerUserID,
+		&card.CharName,
+		&card.CharDescription,
+		&card.Public,
+		&card.Redeems,
+		&card.UpdatedAt,
+		&card.CreatedAt,
+		&card.Data,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get char card by id: %w", err)
+	}
+
+	return &card, nil
+}
+
+func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID int, twitchRewardID string) (*Card, error) {
 	var card Card
 	err := db.db.QueryRow(ctx, `
 		select
@@ -73,8 +111,10 @@ func (db *DB) GetCharCard(ctx context.Context, userID int, twitchRewardID string
 	return &card, nil
 }
 
-func (db *DB) InsertCharCard(ctx context.Context, card *Card) error {
-	_, err := db.db.Exec(ctx, `
+func (db *DB) InsertCharCard(ctx context.Context, card *Card) (int, error) {
+	var cardID int
+
+	if err := db.db.QueryRow(ctx, `
 		insert into char_cards (
 			owner_user_id,
 			char_name,
@@ -85,27 +125,30 @@ func (db *DB) InsertCharCard(ctx context.Context, card *Card) error {
 			$1,
 			$2,
 			$3,
-			$4
+			$4,
+			$5
 		)
-	`, card.OwnerUserID, card.CharName, card.CharDescription, card.Public, card.Data)
-	if err != nil {
-		return fmt.Errorf("failed to insert char card: %w", err)
+		RETURNING id
+	`, card.OwnerUserID, card.CharName, card.CharDescription, card.Public, card.Data).Scan(&cardID); err != nil {
+		return 0, fmt.Errorf("failed to insert char card: %w", err)
 	}
 
-	return nil
+	return cardID, nil
 }
 
-func (db *DB) UpdateCharCard(ctx context.Context, card *Card) error {
+func (db *DB) UpdateCharCard(ctx context.Context, userID int, card *Card) error {
 	_, err := db.db.Exec(ctx, `
 		update char_cards set
-			owner_user_id = $1,
 			char_name = $2,
 			char_description = $3,
 			public = $4,
 			data = $5,
 			updated_at = now()
-		where id = $6
-	`, card.OwnerUserID, card.CharName, card.CharDescription, card.Public, card.Data, card.ID)
+		where
+			id = $6
+		and
+			owner_user_id = $1
+	`, userID, card.CharName, card.CharDescription, card.Public, card.Data, card.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update char card: %w", err)
 	}
