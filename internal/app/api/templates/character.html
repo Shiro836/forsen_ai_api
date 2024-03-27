@@ -46,7 +46,7 @@
 
             </div>
 
-            <div class="flex flex-col pt-10 border-t {{template "ui-border-clr"}}">
+            <div class="flex pt-10 border-t {{template "ui-border-clr"}}">
                 <div class="flex flex-col w-max">
                     <div class="flex items-center pb-2">
                         <label for="name">Name</label>
@@ -62,6 +62,14 @@
                         </div>
                     </div>
                     <input type="text" id="name" name="name" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen" autocomplete="off" value="{{ if .Card }}{{ .Card.Data.Name }}{{ end }}"></input>
+                </div>
+
+                <div class="ml-auto">
+                    <div id="recordedAudio"></div>
+                    <button class="button-66" id="button_setup_mic" onclick="setup_mic()">Record Using Mic</button>
+                    <div>
+                        <input type="file" accept="audio"></input>
+                    </div>
                 </div>
             </div>
 
@@ -136,3 +144,33 @@
     </form>
 
 </div>
+
+<script>
+    function setup_mic() {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+            URL = window.URL;
+
+            var AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioContext = new AudioContext;
+
+            document.getElementById("recordButton").addEventListener("click", startRecording);
+            document.getElementById("stopButton").addEventListener("click", stopRecording);
+            document.getElementById("pauseButton").addEventListener("click", pauseRecording);
+
+            console.log("getUserMedia() success, stream created, initializing Recorder.js ...");
+            /* assign to gumStream for later use */
+            gumStream = stream;
+            /* use the stream */
+            input = audioContext.createMediaStreamSource(stream);
+            /* Create the Recorder object and configure to record mono sound (1 channel) Recording 2 channels will double the file size */
+            rec = new Recorder(input, {
+                numChannels: 1
+            })
+
+            document.getElementById("controls").style.display = ""
+            document.getElementById("button_setup_mic").style.display = "none"
+        })
+        // .then(stream => {handlerFunction(stream)})
+    }
+</script>
