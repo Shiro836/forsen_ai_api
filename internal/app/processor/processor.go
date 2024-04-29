@@ -5,25 +5,20 @@ package processor
 import (
 	"app/db"
 	"app/internal/app/conns"
-	"app/internal/app/processor/scripts"
 	"app/pkg/ai"
+	"app/pkg/swearfilter"
+	"app/pkg/tools"
+	"app/pkg/twitch"
 	"context"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
-
-	"github.com/traefik/yaegi/interp"
-	"github.com/traefik/yaegi/stdlib"
+	"time"
 )
-
-type DB interface {
-	GetGoScript(ctx context.Context, userID int) string
-	GetCharCardByTwitchReward(ctx context.Context, userID int, twitchRewardID string) (*db.Card, error)
-	GetNextMsg(ctx context.Context, userID int) (*db.Message, error)
-	GetFilters(ctx context.Context, userID int) (string, error)
-}
 
 type Processor struct {
 	logger *slog.Logger
@@ -34,13 +29,13 @@ type Processor struct {
 	rvc      *ai.RVCClient
 	whisper  *ai.WhisperClient
 
-	db DB
+	db *db.DB
 
 	skippedMsgs     map[int]struct{}
 	skippedMsgsLock sync.RWMutex
 }
 
-func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, rvc *ai.RVCClient, whisper *ai.WhisperClient, db DB) *Processor {
+func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, rvc *ai.RVCClient, whisper *ai.WhisperClient, db *db.DB) *Processor {
 	return &Processor{
 		llm:      llm,
 		styleTts: styleTts,
@@ -54,14 +49,14 @@ func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTS
 	}
 }
 
-func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User) (err error) {
+func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User) (globalErr error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	logger := p.logger.With("user", broadcaster.TwitchLogin)
 
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeText,
-		EventData: []byte("start"),
+		EventData: []byte("processor started"),
 	})
 
 	defer func() {
@@ -69,13 +64,13 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		if r := recover(); r != nil {
 			stack := string(debug.Stack())
 
-			if err != nil {
-				err = fmt.Errorf("%w: %s", err, stack)
+			if globalErr != nil {
+				globalErr = fmt.Errorf("%w: %s", globalErr, stack)
 			} else {
-				err = fmt.Errorf("paniced in Process: %s", stack)
+				globalErr = fmt.Errorf("paniced in Process: %s", stack)
 			}
 
-			logger.Error("connection panic", "user", broadcaster, "r", r, "stack", stack, "err", err)
+			logger.Error("connection panic", "user", broadcaster, "r", r, "stack", stack, "err", globalErr)
 		}
 	}()
 
@@ -112,15 +107,6 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 						EventType: conns.EventTypeSkip,
 						EventData: []byte(upd.Data),
 					})
-
-					eventWriter(&conns.DataEvent{
-						EventType: conns.EventTypeText,
-						EventData: []byte(" "),
-					})
-					eventWriter(&conns.DataEvent{
-						EventType: conns.EventTypeImage,
-						EventData: []byte(""),
-					})
 				}
 			case <-ctx.Done():
 				break loop
@@ -128,52 +114,194 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		}
 	}()
 
-	interpreter := interp.New(interp.Options{})
-	if err := interpreter.Use(stdlib.Symbols); err != nil {
-		return fmt.Errorf("failed to use stdlib: %w", err)
-	}
+	wg := sync.WaitGroup{}
 
-	_, err = interpreter.Eval(p.db.GetGoScript(ctx, broadcaster.ID))
-	if err != nil {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer cancel()
+
+		twitchChatCh := twitch.MessagesFetcher(ctx, broadcaster.TwitchLogin, true)
+
+		for msg := range twitchChatCh {
+			if len(msg.Message) == 0 || len(msg.TwitchLogin) == 0 {
+				continue
+			}
+
+			if err := p.db.PushMsg(ctx, broadcaster.ID, db.TwitchMessage{
+				TwitchLogin: msg.TwitchLogin,
+				Message:     msg.Message,
+				RewardID:    msg.RewardID,
+			}); err != nil {
+				logger.Error("error pushing message to db", "err", err)
+			}
+		}
+	}()
+
+	for {
+		var msg *db.Message
+		msg, globalErr = p.db.GetNextMsg(ctx, broadcaster.ID)
+		if globalErr != nil {
+			return
+		}
+
+		if len(msg.TwitchMessage.RewardID) == 0 {
+			continue
+		}
+
+		charCard, err := p.db.GetCharCardByTwitchReward(ctx, broadcaster.ID, msg.TwitchMessage.RewardID)
+		if err != nil {
+			logger.Error("error getting card by twitch reward", "err", globalErr)
+			continue
+		}
+
+		requester := msg.TwitchMessage.TwitchLogin
+
+		prompt, err := p.craftPrompt(ctx, charCard, requester, msg.TwitchMessage.Message)
+		if err != nil {
+			logger.Error("error crafting prompt", "err", globalErr)
+			continue
+		}
+
+		var llmResult string
+		var llmResultErr error
+
+		llmResultDone := make(chan struct{})
+		go func() {
+			defer close(llmResultDone)
+
+			llmResult, llmResultErr = p.llm.Ask(ctx, prompt)
+		}()
+
+		requestText := requester + " asked me: " + msg.TwitchMessage.Message
+
+		requestAudio, err := p.TTS(ctx, requestText, charCard.Data.VoiceReference)
+		if err != nil {
+			logger.Error("error tts", "err", err)
+			return
+		}
+
+		requestTtsDone := p.playTTS(ctx, eventWriter, requestText, requestAudio)
+
+		select {
+		case <-llmResultDone:
+			if llmResultErr != nil {
+				logger.Error("error asking llm", "err", llmResultErr)
+				continue
+			}
+		case <-ctx.Done():
+			return
+		}
+
+		responseTtsAudio, err := p.TTS(ctx, llmResult, charCard.Data.VoiceReference)
+		if err != nil {
+			logger.Error("error tts", "err", err)
+			continue
+		}
+
+		select {
+		case <-requestTtsDone:
+		case <-ctx.Done():
+			return
+		}
+
+		responseTtsDone := p.playTTS(ctx, eventWriter, llmResult, responseTtsAudio)
+
+		select {
+		case <-responseTtsDone:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, audio []byte) <-chan struct{} {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
 		eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeError,
-			EventData: []byte(err.Error()),
+			EventType: conns.EventTypeAudio,
+			EventData: audio,
 		})
-		return fmt.Errorf("failed to eval script: %w", err)
-	}
 
-	v, err := interpreter.Eval("Process")
+		startTS := time.Now()
+
+		textTimings := alignTextToAudio(msg, audio)
+
+		fullText := ""
+
+		for _, timing := range textTimings {
+			fullText += timing.Text
+
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte(fullText),
+			})
+
+			select {
+			case <-time.After(time.Until(startTS.Add(timing.End))):
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return done
+}
+
+func (p *Processor) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
+	ttsResult, err := p.styleTts.TTS(ctx, msg, refAudio)
 	if err != nil {
-		eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeError,
-			EventData: []byte(err.Error()),
-		})
-		return fmt.Errorf("failed to eval main: %w", err)
+		return nil, err
 	}
 
-	process, ok := v.Interface().(func(context.Context, scripts.AppAPI) error)
-	if !ok {
-		eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeError,
-			EventData: []byte(err.Error()),
-		})
-		return fmt.Errorf("failed to cast Process: %w", err)
+	return ttsResult, nil
+}
+
+func (p *Processor) FilterText(ctx context.Context, broadcaster *db.User, text string) string {
+	var swears []string
+
+	filters, err := p.db.GetFilters(ctx, broadcaster.ID)
+	if err == nil {
+		slices.Concat(swears, strings.Split(filters, ","))
 	}
 
-	callLayer := &appApiImpl{
-		broadcaster: broadcaster,
+	slices.Concat(swears, swearfilter.Swears)
 
-		llm:      p.llm,
-		styleTts: p.styleTts,
-		metaTts:  p.metaTts,
-		rvc:      p.rvc,
-		whisper:  p.whisper,
+	swearFilterObj := swearfilter.NewSwearFilter(false, swears...)
+
+	filtered := text
+
+	tripped, _ := swearFilterObj.Check(text)
+	for _, word := range tripped {
+		filtered = tools.IReplace(filtered, word, strings.Repeat("*", len(word)))
 	}
 
-	err = process(ctx, callLayer)
-	if err != nil {
-		return fmt.Errorf("process err: %w", err)
-	}
+	return filtered
+}
 
-	return nil
+func (p *Processor) craftPrompt(ctx context.Context, char *db.Card, requester string, message string) (prompt string, err error) {
+	panic("implement me")
+}
+
+func getAudioLength(data []byte) time.Duration {
+	panic("implement me")
+}
+
+type timing struct {
+	Text  string
+	Start time.Duration
+	End   time.Duration
+}
+
+func alignTextToAudio(text string, audio []byte) []timing {
+	return []timing{ // TODO: use https://github.com/Shiro836/whisperX-api to align text to audio
+		{
+			Text:  text,
+			Start: 0,
+			End:   getAudioLength(audio),
+		},
+	}
 }

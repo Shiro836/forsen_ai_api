@@ -8,12 +8,12 @@ import (
 )
 
 type ChatMessage struct {
-	UserName       string
-	Message        string
-	CustomRewardID string
+	TwitchLogin string
+	Message     string
+	RewardID    string
 }
 
-func MessagesFetcher(ctx context.Context, user string) chan *ChatMessage {
+func MessagesFetcher(ctx context.Context, twitchLogin string, skipNonRewards bool) chan *ChatMessage {
 	ch := make(chan *ChatMessage, 1000)
 
 	go func() {
@@ -29,18 +29,22 @@ func MessagesFetcher(ctx context.Context, user string) chan *ChatMessage {
 			default:
 			}
 
+			if skipNonRewards && len(message.CustomRewardID) == 0 {
+				return
+			}
+
 			select {
 			case ch <- &ChatMessage{
-				UserName:       message.User.Name,
-				Message:        message.Message,
-				CustomRewardID: message.CustomRewardID,
+				TwitchLogin: message.User.Name,
+				Message:     message.Message,
+				RewardID:    message.CustomRewardID,
 			}:
 			default:
 				// queue is full
 			}
 		})
 
-		client.Join(user)
+		client.Join(twitchLogin)
 
 		client.SendPings = true
 		client.IdlePingInterval = 10 * time.Second

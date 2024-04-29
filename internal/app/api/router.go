@@ -81,6 +81,9 @@ func (api *API) NewRouter() *chi.Mux {
 
 	router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))
 
+	router.Get("/{twitch_login}", api.elem(api.obsOverlay))
+	router.Get("/ws/{twitch_login}", api.wsHandler) // permission is checked based on param cuz there is no auth cookie in obs
+
 	router.Group(func(router chi.Router) {
 		router.Use(api.checkPermissions(db.PermissionStreamer))
 

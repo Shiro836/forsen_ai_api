@@ -4,7 +4,7 @@ import (
 	"app/db"
 	"app/internal/app/api"
 	"app/internal/app/conns"
-	"app/internal/app/metrics"
+	"app/internal/app/nvidia"
 	"app/internal/app/processor"
 	"app/pkg/ai"
 	"app/pkg/slg"
@@ -149,7 +149,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 
-		metrics.NvidiaMonitoringLoop(ctx, logger.WithGroup("nvidia"))
+		nvidia.MonitoringLoop(ctx, logger.WithGroup("nvidia"))
 	}()
 
 	select {
@@ -169,6 +169,7 @@ func main() {
 func ProcessingLoop(ctx context.Context, logger *slog.Logger, dbObj *db.DB, cm *conns.Manager) error {
 	var users []*db.User
 	var err error
+
 	for len(users) == 0 {
 		users, err = dbObj.GetUsersPermissions(ctx, db.PermissionStreamer, db.StatusGranted)
 		if err != nil {
@@ -180,11 +181,8 @@ func ProcessingLoop(ctx context.Context, logger *slog.Logger, dbObj *db.DB, cm *
 			select {
 			case <-time.After(time.Second):
 			case <-ctx.Done():
+				return nil
 			}
-		}
-
-		if ctx.Err() != nil {
-			return nil
 		}
 	}
 

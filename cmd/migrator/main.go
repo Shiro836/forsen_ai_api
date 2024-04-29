@@ -51,7 +51,7 @@ func main() {
 	}
 
 	if drop {
-		_, err := db.RawConn().Exec(context.Background(), dropEverythingQuery)
+		_, err := db.Exec(context.Background(), dropEverythingQuery)
 		if err != nil {
 			log.Fatalf("can't drop everything: %v", err)
 		}
@@ -69,7 +69,7 @@ func main() {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, err = db.RawConn().Exec(ctx, string(file))
+		_, err = db.Exec(ctx, string(file))
 		if err != nil {
 			log.Fatalf("can't execute migration %s: %v", filePath, err)
 			return

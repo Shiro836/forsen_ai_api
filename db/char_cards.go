@@ -40,7 +40,7 @@ type CardData struct {
 
 func (db *DB) GetCharCardByID(ctx context.Context, userID int, cardID int) (*Card, error) {
 	var card Card
-	err := db.db.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		select
 			cc.id,
 			cc.owner_user_id,
@@ -75,7 +75,7 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID int, cardID int) (*Car
 
 func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID int, twitchRewardID string) (*Card, error) {
 	var card Card
-	err := db.db.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		select
 			cc.id,
 			cc.owner_user_id,
@@ -114,7 +114,7 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID int, twitchR
 func (db *DB) InsertCharCard(ctx context.Context, card *Card) (int, error) {
 	var cardID int
 
-	if err := db.db.QueryRow(ctx, `
+	if err := db.QueryRow(ctx, `
 		insert into char_cards (
 			owner_user_id,
 			char_name,
@@ -137,7 +137,7 @@ func (db *DB) InsertCharCard(ctx context.Context, card *Card) (int, error) {
 }
 
 func (db *DB) UpdateCharCard(ctx context.Context, userID int, card *Card) error {
-	_, err := db.db.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		update char_cards set
 			char_name = $2,
 			char_description = $3,
@@ -157,7 +157,7 @@ func (db *DB) UpdateCharCard(ctx context.Context, userID int, card *Card) error 
 }
 
 func (db *DB) DeleteCharCard(ctx context.Context, cardID int) error {
-	_, err := db.db.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		delete from char_cards where id = $1
 	`, cardID)
 	if err != nil {
@@ -182,7 +182,7 @@ type GetChatCardsParams struct {
 }
 
 func (db *DB) GetCharCards(ctx context.Context, userID int, params GetChatCardsParams) ([]*Card, error) {
-	rows, err := db.db.Query(ctx, `
+	rows, err := db.Query(ctx, `
 		select
 			id,
 			owner_user_id,

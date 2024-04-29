@@ -46,11 +46,7 @@ type ttsResp struct {
 	Audio string `json:"audio"`
 }
 
-type Response struct {
-	Audio []byte
-}
-
-func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) (*Response, error) {
+func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
 	if refAudio == nil {
 		return nil, fmt.Errorf("no audio provided")
 	}
@@ -113,7 +109,5 @@ func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) (
 
 	metrics.TTSQueryTime.Observe(time.Since(start).Seconds())
 
-	return &Response{
-		Audio: bytesData,
-	}, nil
+	return bytesData, nil
 }

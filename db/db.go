@@ -8,11 +8,7 @@ import (
 )
 
 type DB struct {
-	db *pgxpool.Pool
-}
-
-func (db *DB) RawConn() *pgxpool.Pool {
-	return db.db
+	*pgxpool.Pool
 }
 
 type Config struct {
@@ -30,7 +26,7 @@ func New(ctx context.Context, cfg *Config) (*DB, error) {
 	}
 
 	db := &DB{
-		db: pool,
+		Pool: pool,
 	}
 
 	return db, nil

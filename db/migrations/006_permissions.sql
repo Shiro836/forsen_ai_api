@@ -1,6 +1,7 @@
 create table if not exists permissions (
     id bigserial primary key,
 
+    -- we don't use user_id from users table, because we need to be able to add permissions for users who don't have an account yet
     twitch_login   text     not null,
     twitch_user_id integer  not null,
 

@@ -20,7 +20,7 @@ type User struct {
 func (db *DB) UpsertUser(ctx context.Context, user *User) (int, error) {
 	var id int
 
-	err := db.db.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		INSERT INTO users (
 			twitch_login,
 			twitch_user_id,
@@ -52,7 +52,7 @@ func (db *DB) UpsertUser(ctx context.Context, user *User) (int, error) {
 func (db *DB) GetUserByID(ctx context.Context, userID int) (*User, error) {
 	var user User
 
-	err := db.db.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		SELECT
 			id,
 			twitch_login,
@@ -80,7 +80,7 @@ func (db *DB) GetUserByID(ctx context.Context, userID int) (*User, error) {
 func (db *DB) GetUserByTwitchLogin(ctx context.Context, twitchLogin string) (*User, error) {
 	var user User
 
-	err := db.db.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		SELECT
 			id,
 			twitch_login,
@@ -108,7 +108,7 @@ func (db *DB) GetUserByTwitchLogin(ctx context.Context, twitchLogin string) (*Us
 func (db *DB) GetUserBySession(ctx context.Context, session string) (*User, error) {
 	var user User
 
-	err := db.db.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		SELECT
 			id,
 			twitch_login,

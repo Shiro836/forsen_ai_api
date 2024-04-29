@@ -88,7 +88,7 @@ func TestDataStream(t *testing.T) {
 		TwitchLogin: "forsen",
 	}
 	event := &conns.DataEvent{
-		EventType: conns.EventTypeInfo,
+		EventType: conns.EventTypeText,
 		EventData: []byte("sheeeesh"),
 	}
 
@@ -141,7 +141,7 @@ func TestUnderLoad(t *testing.T) {
 			TwitchLogin: "user_" + strconv.Itoa(i),
 		})
 		events = append(events, &conns.DataEvent{
-			EventType: conns.EventTypeInfo,
+			EventType: conns.EventTypeText,
 			EventData: []byte(users[i].TwitchLogin),
 		})
 		userToEvent[users[i].TwitchLogin] = events[i]

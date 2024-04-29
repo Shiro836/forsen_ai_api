@@ -1,6 +1,6 @@
 module app
 
-go 1.22.0
+go 1.22.2
 
 require (
 	github.com/gempir/go-twitch-irc/v4 v4.0.0
@@ -16,7 +16,6 @@ require (
 	github.com/samber/slog-chi v1.9.1
 	github.com/samber/slog-common v0.15.0
 	github.com/stretchr/testify v1.9.0
-	github.com/traefik/yaegi v0.16.0
 	golang.org/x/exp v0.0.0-20240318143956-a85f2c67cd81
 	golang.org/x/text v0.14.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -52,14 +52,11 @@ type Text struct {
 
 const (
 	EventTypeAudio EventType = iota + 1
+	EventTypeVideo
 	EventTypeText
 	EventTypeImage
-	EventTypeSetModel
-	EventTypeSetMotion
-	EventTypeInfo
-	EventTypeError
-	EventTypePing
 	EventTypeSkip
+	EventTypePing
 )
 
 type EventType int
@@ -67,23 +64,19 @@ type EventType int
 func (et EventType) String() string {
 	switch et {
 	case EventTypeAudio:
-		return "event_type_audio"
+		return "audio"
+	case EventTypeVideo:
+		return "video"
 	case EventTypeText:
-		return "event_type_text"
+		return "text"
 	case EventTypeImage:
-		return "event_type_image"
-	case EventTypeSetModel:
-		return "event_type_model"
-	case EventTypeSetMotion:
-		return "event_type_motion"
-	case EventTypeInfo:
-		return "event_type_info"
-	case EventTypeError:
-		return "event_type_error"
+		return "image"
 	case EventTypeSkip:
-		return "event_type_skip"
+		return "skip"
+	case EventTypePing:
+		return "ping"
 	default:
-		return "event_type_unknown"
+		return "unknown"
 	}
 }
 
@@ -238,7 +231,7 @@ func (m *Manager) HandleUser(user *db.User) {
 						break loop
 					} else if errors.Is(err, ErrNoUser) {
 						select {
-						case <-time.After(2 * time.Second):
+						case <-time.After(time.Second):
 						case <-m.ctx.Done():
 						}
 					} else {
@@ -249,6 +242,7 @@ func (m *Manager) HandleUser(user *db.User) {
 						}
 					}
 				}
+
 				select {
 				case <-time.After(time.Second):
 				case <-m.ctx.Done():

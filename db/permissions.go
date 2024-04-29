@@ -67,7 +67,7 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 		return nil, fmt.Errorf("invalid permission: %d", permission)
 	}
 
-	rows, err := db.db.Query(ctx, `
+	rows, err := db.Query(ctx, `
 		SELECT
 			u.id,
 			u.twitch_login,
@@ -104,7 +104,7 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 }
 
 func (db *DB) GetUserPermissions(ctx context.Context, userID int, permissionStatus Status) ([]Permission, error) {
-	rows, err := db.db.Query(ctx, `
+	rows, err := db.Query(ctx, `
 		SELECT
 			p.permission
 		FROM permissions p
@@ -142,7 +142,7 @@ func (db *DB) RequestAccess(ctx context.Context, user *User, permission Permissi
 		return fmt.Errorf("invalid permission: %d", permission)
 	}
 
-	tag, err := db.db.Exec(ctx, `
+	tag, err := db.Exec(ctx, `
 		INSERT INTO permissions (
 			twitch_login,
 			twitch_user_id,
@@ -166,7 +166,7 @@ func (db *DB) RequestAccess(ctx context.Context, user *User, permission Permissi
 func (db *DB) HasPermission(ctx context.Context, twitchUserID int, permission Permission) (bool, error) {
 	var tmp int
 
-	err := db.db.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		SELECT
 			1
 		FROM permissions
@@ -216,7 +216,7 @@ func (db *DB) AddPermission(ctx context.Context, initiator *User, targetTwitchUs
 		return fmt.Errorf("unknown permission: %d", permission)
 	}
 
-	_, err := db.db.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		INSERT INTO permissions (twitch_login, twitch_user_id, permission, status)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (twitch_user_id, permission)
@@ -255,7 +255,7 @@ func (db *DB) RemovePermission(ctx context.Context, initiator *User, targetTwitc
 		return fmt.Errorf("unknown permission: %d", permission)
 	}
 
-	_, err := db.db.Exec(ctx, `
+	_, err := db.Exec(ctx, `
 		UPDATE
 			permissions
 		SET
