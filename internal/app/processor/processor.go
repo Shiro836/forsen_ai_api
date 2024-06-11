@@ -10,6 +10,7 @@ import (
 	"app/pkg/tools"
 	"app/pkg/twitch"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -140,6 +141,17 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		var msg *db.Message
 		msg, err := p.db.GetNextMsg(ctx, broadcaster.ID)
 		if err != nil {
+			if errors.Is(err, db.ErrNoRows) {
+				// TODO: metrics
+
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(time.Second):
+					continue
+				}
+			}
+
 			return fmt.Errorf("error getting next message from db: %w", err)
 		}
 
@@ -147,9 +159,32 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			continue
 		}
 
-		charCard, err := p.db.GetCharCardByTwitchReward(ctx, broadcaster.ID, msg.TwitchMessage.RewardID)
+		charCard, rewardType, err := p.db.GetCharCardByTwitchReward(ctx, broadcaster.ID, msg.TwitchMessage.RewardID)
 		if err != nil {
 			logger.Error("error getting card by twitch reward", "err", err)
+			continue
+		}
+
+		if rewardType == db.TwitchRewardTTS {
+			requestAudio, err := p.TTS(ctx, msg.TwitchMessage.Message, charCard.Data.VoiceReference)
+			if err != nil {
+				logger.Error("error tts", "err", err)
+				return err
+			}
+
+			requestTtsDone := p.playTTS(ctx, eventWriter, msg.TwitchMessage.Message, requestAudio)
+
+			select {
+			case <-requestTtsDone:
+			case <-ctx.Done():
+				return nil
+			}
+
+			continue
+		}
+
+		if rewardType != db.TwitchRewardAI {
+			logger.Error("unexpected reward type", "reward_type", rewardType)
 			continue
 		}
 

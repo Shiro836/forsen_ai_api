@@ -86,7 +86,7 @@ func (db *DB) GetUserByTwitchLogin(ctx context.Context, twitchLogin string) (*Us
 		SELECT
 			id,
 			twitch_login,
-			twitch,
+			twitch_user_id,
 			twitch_refresh_token,
 			twitch_access_token,
 			session

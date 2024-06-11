@@ -78,7 +78,8 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 	return &card, nil
 }
 
-func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) (*Card, error) {
+func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) (*Card, TwitchRewardType, error) {
+	var rewardType TwitchRewardType
 	var card Card
 	err := db.QueryRow(ctx, `
 		select
@@ -89,7 +90,8 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, t
 			cc.public,
 			cc.redeems,
 			cc.updated_at,
-			cc.data
+			cc.data,
+			rb.reward_type
 		from char_cards cc join reward_buttons rb on cc.id = rb.card_id
 		where
 			rb.twitch_reward_id = $1
@@ -106,14 +108,15 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, t
 		&card.Redeems,
 		&card.UpdatedAt,
 		&card.Data,
+		&rewardType,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get char card: %w", err)
+		return nil, 0, fmt.Errorf("failed to get char card: %w", err)
 	}
 
 	card.CreatedAt = tools.UUIDToTime(card.ID)
 
-	return &card, nil
+	return &card, rewardType, nil
 }
 
 func (db *DB) InsertCharCard(ctx context.Context, card *Card) (uuid.UUID, error) {

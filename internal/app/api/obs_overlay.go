@@ -27,7 +27,7 @@ func (api *API) obsOverlay(r *http.Request) template.HTML {
 	if err != nil {
 		return getHtml("error.html", &htmlErr{
 			ErrorCode:    http.StatusNotFound,
-			ErrorMessage: "user not found",
+			ErrorMessage: "user not found" + err.Error(),
 		})
 	}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type MsgStatus int
@@ -60,8 +61,6 @@ func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage) 
 	return nil
 }
 
-var ErrMsgNotFound = errors.New("msg not found")
-
 func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error) {
 	msg := Message{}
 
@@ -77,10 +76,10 @@ func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error
 		and
 			status = $2
 		limit 1
-	`).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage)
+	`, userID, StatusWait).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage)
 	if err != nil {
-		if err == ErrNoRows {
-			return nil, ErrMsgNotFound
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNoRows
 		}
 
 		return nil, fmt.Errorf("failed to get next message: %w", err)
