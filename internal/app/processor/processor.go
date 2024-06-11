@@ -12,12 +12,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"runtime/debug"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Processor struct {
@@ -30,9 +30,6 @@ type Processor struct {
 	whisper  *ai.WhisperClient
 
 	db *db.DB
-
-	skippedMsgs     map[int]struct{}
-	skippedMsgsLock sync.RWMutex
 }
 
 func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, rvc *ai.RVCClient, whisper *ai.WhisperClient, db *db.DB) *Processor {
@@ -49,7 +46,7 @@ func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTS
 	}
 }
 
-func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User) (globalErr error) {
+func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User) error {
 	ctx, cancel := context.WithCancel(ctx)
 
 	logger := p.logger.With("user", broadcaster.TwitchLogin)
@@ -62,17 +59,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	defer func() {
 		cancel()
 		if r := recover(); r != nil {
-			stack := string(debug.Stack())
-
-			if globalErr != nil {
-				globalErr = fmt.Errorf("%w: %s", globalErr, stack)
-			} else {
-				globalErr = fmt.Errorf("paniced in Process: %s", stack)
-			}
-
-			logger.Error("connection panic", "user", broadcaster, "r", r, "stack", stack, "err", globalErr)
+			logger.Error("connection panic")
 		}
 	}()
+
+	skippedMsgIDs := make(map[uuid.UUID]struct{})
+	skippedMsgIDsLock := sync.Mutex{}
 
 	go func() {
 
@@ -83,6 +75,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				if !ok {
 					updates = nil
 					cancel()
+					break loop
 				}
 
 				logger.Info("processor signal recieved", "upd_signal", upd)
@@ -91,16 +84,17 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 					cancel()
 					break loop
 				case conns.SkipMessage:
-					msgID, err := strconv.Atoi(upd.Data)
+					msgID, err := uuid.Parse(upd.Data)
 					if err != nil {
-						logger.Error("msg id is not integer", "err", err)
+						logger.Error("msg id is not valid uuid", "err", err)
+						continue
 					}
 
 					func() {
-						p.skippedMsgsLock.Lock()
-						defer p.skippedMsgsLock.Unlock()
+						skippedMsgIDsLock.Lock()
+						defer skippedMsgIDsLock.Unlock()
 
-						p.skippedMsgs[msgID] = struct{}{}
+						skippedMsgIDs[msgID] = struct{}{}
 					}()
 
 					eventWriter(&conns.DataEvent{
@@ -128,6 +122,10 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				continue
 			}
 
+			if len(msg.RewardID) == 0 {
+				continue
+			}
+
 			if err := p.db.PushMsg(ctx, broadcaster.ID, db.TwitchMessage{
 				TwitchLogin: msg.TwitchLogin,
 				Message:     msg.Message,
@@ -140,9 +138,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 	for {
 		var msg *db.Message
-		msg, globalErr = p.db.GetNextMsg(ctx, broadcaster.ID)
-		if globalErr != nil {
-			return
+		msg, err := p.db.GetNextMsg(ctx, broadcaster.ID)
+		if err != nil {
+			return fmt.Errorf("error getting next message from db: %w", err)
 		}
 
 		if len(msg.TwitchMessage.RewardID) == 0 {
@@ -151,7 +149,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		charCard, err := p.db.GetCharCardByTwitchReward(ctx, broadcaster.ID, msg.TwitchMessage.RewardID)
 		if err != nil {
-			logger.Error("error getting card by twitch reward", "err", globalErr)
+			logger.Error("error getting card by twitch reward", "err", err)
 			continue
 		}
 
@@ -159,7 +157,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		prompt, err := p.craftPrompt(ctx, charCard, requester, msg.TwitchMessage.Message)
 		if err != nil {
-			logger.Error("error crafting prompt", "err", globalErr)
+			logger.Error("error crafting prompt", "err", err)
 			continue
 		}
 
@@ -178,7 +176,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		requestAudio, err := p.TTS(ctx, requestText, charCard.Data.VoiceReference)
 		if err != nil {
 			logger.Error("error tts", "err", err)
-			return
+			return err
 		}
 
 		requestTtsDone := p.playTTS(ctx, eventWriter, requestText, requestAudio)
@@ -190,7 +188,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				continue
 			}
 		case <-ctx.Done():
-			return
+			return nil
 		}
 
 		responseTtsAudio, err := p.TTS(ctx, llmResult, charCard.Data.VoiceReference)
@@ -202,7 +200,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		select {
 		case <-requestTtsDone:
 		case <-ctx.Done():
-			return
+			return nil
 		}
 
 		responseTtsDone := p.playTTS(ctx, eventWriter, llmResult, responseTtsAudio)
@@ -210,8 +208,10 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		select {
 		case <-responseTtsDone:
 		case <-ctx.Done():
-			return
+			return nil
 		}
+
+		cancel()
 	}
 }
 
@@ -226,7 +226,7 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 			EventData: audio,
 		})
 
-		startTS := time.Now()
+		startTS := time.Now() // linter, are you drunk, or am I drunk???
 
 		textTimings := alignTextToAudio(msg, audio)
 

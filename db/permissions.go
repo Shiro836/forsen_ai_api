@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -103,7 +104,7 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 	return users, nil
 }
 
-func (db *DB) GetUserPermissions(ctx context.Context, userID int, permissionStatus Status) ([]Permission, error) {
+func (db *DB) GetUserPermissions(ctx context.Context, userID uuid.UUID, permissionStatus Status) ([]Permission, error) {
 	rows, err := db.Query(ctx, `
 		SELECT
 			p.permission

@@ -27,7 +27,7 @@
                         <div class="flex items-center pt-3">
                             <div class="w-36">{{ .Login }}</div>
                             <div class="flex flex-grow justify-end" id="user_id_{{ .UserID }}">
-                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/remove_streamer" hx-vals='{"user_id": {{ .UserID }}}' hx-target="#user_id_{{ .UserID }}">Revoke</button>
+                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/remove_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Revoke</button>
                             </div>
                         </div>
                         {{ else }}
@@ -46,10 +46,10 @@
                         <div class="w-36">{{ .Login }}</div>
                         <div class="flex" id="user_id_{{ .UserID }}">
                             <div>
-                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/add_streamer" hx-vals='{"user_id": {{ .UserID }}}' hx-target="#user_id_{{ .UserID }}">Approve</button>
+                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/add_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Approve</button>
                             </div>
                             <div class="pl-4">
-                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/remove_streamer" hx-vals='{"user_id": {{ .UserID }}}' hx-target="#user_id_{{ .UserID }}">Deny</button>
+                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/remove_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Deny</button>
                             </div>
                         </div>
                     </div>

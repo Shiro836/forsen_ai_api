@@ -1,8 +1,8 @@
 create table if not exists relations (
-    id bigserial primary key,
+    id uuid default uuid_generate_v7() primary key,
 
-    user_id_1 bigint not null references users(id) ON DELETE CASCADE,
-    user_id_2 bigint not null references users(id) ON DELETE CASCADE,
+    user_id_1 uuid not null references users(id) ON DELETE CASCADE,
+    user_id_2 uuid not null references users(id) ON DELETE CASCADE,
 
     relation_type integer not null,
 

@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Manager struct {
@@ -19,10 +21,10 @@ type Manager struct {
 
 	rwMutex sync.RWMutex
 
-	subCount       map[int]int
-	dataStreams    map[int][]chan *DataEvent
-	isClosed       map[int][]bool
-	updateEventsCh map[int]chan *Update
+	subCount       map[uuid.UUID]int
+	dataStreams    map[uuid.UUID][]chan *DataEvent
+	isClosed       map[uuid.UUID][]bool
+	updateEventsCh map[uuid.UUID]chan *Update
 
 	logger *slog.Logger
 }
@@ -33,10 +35,10 @@ func NewConnectionManager(ctx context.Context, logger *slog.Logger, processor Pr
 
 		processor: processor,
 
-		subCount:       make(map[int]int, 100),
-		dataStreams:    make(map[int][]chan *DataEvent, 100),
-		isClosed:       make(map[int][]bool, 100),
-		updateEventsCh: make(map[int]chan *Update, 100),
+		subCount:       make(map[uuid.UUID]int, 100),
+		dataStreams:    make(map[uuid.UUID][]chan *DataEvent, 100),
+		isClosed:       make(map[uuid.UUID][]bool, 100),
+		updateEventsCh: make(map[uuid.UUID]chan *Update, 100),
 
 		logger: logger,
 	}
@@ -89,7 +91,7 @@ func (d *DataEvent) String() string {
 	return fmt.Sprintf("%s:%s", d.EventType.String(), string(d.EventData))
 }
 
-func (m *Manager) Subscribe(userID int) (<-chan *DataEvent, func()) {
+func (m *Manager) Subscribe(userID uuid.UUID) (<-chan *DataEvent, func()) {
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
 
@@ -115,7 +117,7 @@ func (m *Manager) Subscribe(userID int) (<-chan *DataEvent, func()) {
 	}
 }
 
-func (m *Manager) TryWrite(userID int, event *DataEvent) bool {
+func (m *Manager) TryWrite(userID uuid.UUID, event *DataEvent) bool {
 	wrote := false
 
 loop:
@@ -157,7 +159,7 @@ loop:
 	return wrote
 }
 
-func (m *Manager) NotifyUpdateSettings(userID int) {
+func (m *Manager) NotifyUpdateSettings(userID uuid.UUID) {
 	m.rwMutex.RLock()
 	defer m.rwMutex.RUnlock()
 
@@ -171,7 +173,7 @@ func (m *Manager) NotifyUpdateSettings(userID int) {
 	}
 }
 
-func (m *Manager) SkipMessage(userID int, msgID string) {
+func (m *Manager) SkipMessage(userID uuid.UUID, msgID string) {
 	m.rwMutex.RLock()
 	defer m.rwMutex.RUnlock()
 
@@ -186,7 +188,7 @@ func (m *Manager) SkipMessage(userID int, msgID string) {
 	}
 }
 
-func (m *Manager) DisableUser(userID int) {
+func (m *Manager) DisableUser(userID uuid.UUID) {
 	m.rwMutex.Lock()
 	defer m.rwMutex.Unlock()
 

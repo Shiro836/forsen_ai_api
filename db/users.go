@@ -3,10 +3,12 @@ package db
 import (
 	"context"
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 type User struct {
-	ID int
+	ID uuid.UUID
 
 	TwitchLogin  string
 	TwitchUserID int
@@ -17,8 +19,8 @@ type User struct {
 	Session string
 }
 
-func (db *DB) UpsertUser(ctx context.Context, user *User) (int, error) {
-	var id int
+func (db *DB) UpsertUser(ctx context.Context, user *User) (uuid.UUID, error) {
+	var id uuid.UUID
 
 	err := db.QueryRow(ctx, `
 		INSERT INTO users (
@@ -43,13 +45,13 @@ func (db *DB) UpsertUser(ctx context.Context, user *User) (int, error) {
 	).Scan(&id)
 
 	if err != nil {
-		return -1, fmt.Errorf("upsert user: %w", err)
+		return uuid.Nil, fmt.Errorf("upsert user: %w", err)
 	}
 
 	return id, nil
 }
 
-func (db *DB) GetUserByID(ctx context.Context, userID int) (*User, error) {
+func (db *DB) GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error) {
 	var user User
 
 	err := db.QueryRow(ctx, `
@@ -133,10 +135,6 @@ func (db *DB) GetUserBySession(ctx context.Context, session string) (*User, erro
 	return &user, nil
 }
 
-func (db *DB) GetGoScript(ctx context.Context, userID int) string {
-	panic("not implemented")
-}
-
-func (db *DB) GetFilters(ctx context.Context, userID int) (string, error) {
+func (db *DB) GetFilters(ctx context.Context, userID uuid.UUID) (string, error) {
 	panic("not implemented")
 }

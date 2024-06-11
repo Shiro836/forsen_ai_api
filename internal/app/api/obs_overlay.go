@@ -54,7 +54,7 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 	twitchLogin := chi.URLParam(r, "twitch_login")
 	if len(twitchLogin) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("missing twitch login"))
+		_, _ = w.Write([]byte("missing twitch login"))
 
 		return
 	}
@@ -66,7 +66,7 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Error("failed to get user", "err", err)
 
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("user not found"))
+		_, _ = w.Write([]byte("user not found"))
 
 		return
 	}
@@ -75,14 +75,14 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Error("failed to check permission", "err", err)
 
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("failed to check permission"))
+		_, _ = w.Write([]byte("failed to check permission"))
 
 		return
 	} else if !hasPerm {
 		logger.Info("no permission")
 
 		w.WriteHeader(http.StatusForbidden)
-		w.Write([]byte("you don't have permission"))
+		_, _ = w.Write([]byte("you don't have permission"))
 
 		return
 	}

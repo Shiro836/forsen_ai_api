@@ -22,7 +22,7 @@ const dropEverythingQuery = `
 	DROP TABLE if exists users;
 `
 
-const drop = false
+const drop = true
 
 const migrationsFolder = "db/migrations"
 

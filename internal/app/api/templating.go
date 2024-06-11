@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jritsema/gotoolbox/web"
 )
 
@@ -110,7 +111,7 @@ type navPage struct {
 
 type permissionRequest struct {
 	Login  string
-	UserID int
+	UserID uuid.UUID
 }
 
 type modPage struct {

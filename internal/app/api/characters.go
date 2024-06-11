@@ -5,6 +5,7 @@ import (
 	"app/pkg/ctxstore"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type charsElem struct {
@@ -19,8 +21,12 @@ type charsElem struct {
 }
 
 type charElem struct {
-	Card    *db.Card
+	Card *db.Card
+
 	CanEdit bool
+
+	TTSRewardCreated bool
+	AIRewardCreated  bool
 }
 
 func (api *API) characters(r *http.Request) template.HTML {
@@ -34,7 +40,7 @@ func (api *API) characters(r *http.Request) template.HTML {
 
 	charCards, err := api.db.GetCharCards(r.Context(), user.ID, db.GetChatCardsParams{
 		ShowPublic: true,
-		SortBy:     db.SortByRedeems,
+		SortBy:     db.SortByNewest,
 	})
 	if err != nil {
 		return getHtml("error.html", &htmlErr{
@@ -43,11 +49,33 @@ func (api *API) characters(r *http.Request) template.HTML {
 		})
 	}
 
+	// existingRewards := make(map[string]struct{}, len(charCards)) // TODO: cache this
+	// twitchClient, err := api.twitchClient.NewHelixClient(user.TwitchAccessToken, user.TwitchRefreshToken)
+	// if err != nil {
+	// 	return getHtml("error.html", &htmlErr{
+	// 		ErrorCode:    http.StatusInternalServerError,
+	// 		ErrorMessage: "NewHelixClient: " + err.Error(),
+	// 	})
+	// }
+
+	// resp, err := twitchClient.GetCustomRewards(&helix.GetCustomRewardsParams{
+	// 	BroadcasterID:         strconv.Itoa(user.TwitchUserID),
+	// 	OnlyManageableRewards: true,
+	// })
+	// if err == nil {
+	// 	for _, reward := range resp.Data.ChannelCustomRewards {
+	// 		existingRewards[reward.ID] = struct{}{}
+	// 	}
+	// } else {
+	// 	fmt.Println(err) // TODO: log
+	// }
+
 	chars := make([]*charElem, 0, len(charCards))
 	for _, charCard := range charCards {
 		chars = append(chars, &charElem{
-			Card:    charCard,
-			CanEdit: user.ID == charCard.OwnerUserID,
+			Card:             charCard,
+			CanEdit:          user.ID == charCard.OwnerUserID,
+			TTSRewardCreated: false,
 		})
 	}
 
@@ -57,7 +85,7 @@ func (api *API) characters(r *http.Request) template.HTML {
 }
 
 type characterPage struct {
-	CharacterID     int
+	CharacterID     uuid.UUID
 	Card            *db.Card
 	MessageExamples *msgExamples
 }
@@ -72,19 +100,28 @@ func (api *API) character(r *http.Request) template.HTML {
 	}
 
 	characterIDStr := chi.URLParam(r, "character_id")
-	characterID, err := strconv.Atoi(characterIDStr)
-	if err != nil {
-		return getHtml("error.html", &htmlErr{
-			ErrorCode:    http.StatusBadRequest,
-			ErrorMessage: "character_id is not a number",
-		})
-	}
 
 	var card *db.Card
 	msgExamples := &msgExamples{
 		ID: 0,
 	}
-	if characterID != 0 {
+
+	var characterID uuid.UUID = uuid.Nil
+
+	if characterIDStr == "new" {
+		msgExamples.MessageExamples = append(msgExamples.MessageExamples, msgExample{
+			ID: 0,
+		})
+	} else {
+		var err error
+		characterID, err = uuid.Parse(characterIDStr)
+		if err != nil {
+			return getHtml("error.html", &htmlErr{
+				ErrorCode:    http.StatusBadRequest,
+				ErrorMessage: "character_id is not a valid uuid",
+			})
+		}
+
 		card, err = api.db.GetCharCardByID(r.Context(), user.ID, characterID)
 		if err != nil {
 			return getHtml("error.html", &htmlErr{
@@ -101,10 +138,6 @@ func (api *API) character(r *http.Request) template.HTML {
 			})
 			msgExamples.ID = i
 		}
-	} else {
-		msgExamples.MessageExamples = append(msgExamples.MessageExamples, msgExample{
-			ID: 0,
-		})
 	}
 
 	return getHtml("character.html", &characterPage{
@@ -139,8 +172,8 @@ func formToCard(form url.Values) (*db.Card, error) {
 		Data: &db.CardData{},
 	}
 
-	card.CharName = form.Get("char_name")
-	card.CharDescription = form.Get("char_description")
+	card.Name = form.Get("char_name")
+	card.Description = form.Get("char_description")
 
 	card.Data.Name = form.Get("name")
 	card.Data.Description = form.Get("description")
@@ -188,15 +221,96 @@ func formToCard(form url.Values) (*db.Card, error) {
 	return card, nil
 }
 
-func (api *API) upsertCharacter(w http.ResponseWriter, r *http.Request) {
-	characterIDStr := chi.URLParam(r, "character_id")
-	characterID, err := strconv.Atoi(characterIDStr)
+func (api *API) extractVoiceRef(r *http.Request) ([]byte, error) {
+	file, _, err := r.FormFile("voice_ref")
+	if err != nil {
+		return nil, fmt.Errorf("r.FormFile(): %w", err)
+	}
+	defer file.Close()
+
+	voiceRef, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("io.ReadAll(): %w", err)
+	}
+
+	return voiceRef, nil
+}
+
+func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWriter, r *http.Request) {
+	var voiceRef []byte
+	if _, ok := r.MultipartForm.File["voice_ref"]; !ok {
+		oldCard, err := api.db.GetCharCardByID(r.Context(), user.ID, card.ID)
+		if err != nil {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: err.Error(),
+			})
+			return
+		}
+
+		voiceRef = oldCard.Data.VoiceReference
+	} else {
+		var err error
+		voiceRef, err = api.extractVoiceRef(r)
+		if err != nil {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: err.Error(),
+			})
+			return
+		}
+	}
+	card.Data.VoiceReference = voiceRef
+
+	if err := api.db.UpdateCharCard(r.Context(), user.ID, card); err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "UpdateCharCard: " + err.Error(),
+		})
+		return
+	}
+
+	// w.Header().Add("hx-redirect", "/characters/"+card.ID.String())
+	_, _ = w.Write([]byte("Success"))
+}
+
+func (api *API) insertCharacter(user *db.User, card *db.Card, w http.ResponseWriter, r *http.Request) {
+	voiceRef, err := api.extractVoiceRef(r)
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "{character_id} is not integer: " + err.Error(),
+			ErrorMessage: "extractVoiceRef: " + err.Error(),
 		})
+		return
 	}
+
+	if len(voiceRef) == 0 {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "No Voice Reference Provided",
+		})
+		return
+	}
+
+	card.OwnerUserID = user.ID
+	card.Data.VoiceReference = voiceRef
+
+	cardID, err := api.db.InsertCharCard(r.Context(), card)
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "InsertCharCard: " + err.Error(),
+		})
+		return
+	}
+
+	w.Header().Add("hx-redirect", "/characters/"+cardID.String())
+	_, _ = w.Write([]byte("Success"))
+	// w.WriteHeader(http.StatusOK)
+}
+
+func (api *API) upsertCharacter(w http.ResponseWriter, r *http.Request) {
+	characterIDStr := chi.URLParam(r, "character_id")
 
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
@@ -204,15 +318,18 @@ func (api *API) upsertCharacter(w http.ResponseWriter, r *http.Request) {
 			ErrorCode:    http.StatusUnauthorized,
 			ErrorMessage: "not authorized",
 		})
+		return
 	}
 
-	if err := r.ParseForm(); err != nil {
+	if err := r.ParseMultipartForm(20 * 1024 * 1024); err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "r.ParseForm(): " + err.Error(),
+			ErrorMessage: "r.ParseMultipartForm(): " + err.Error(),
 		})
 		return
 	}
+
+	_ = r.ParseForm()
 
 	card, err := formToCard(r.Form)
 	if err != nil {
@@ -223,31 +340,22 @@ func (api *API) upsertCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	card.ID = characterID
-	card.OwnerUserID = user.ID
-
-	if card.ID == 0 {
-		cardID, err := api.db.InsertCharCard(r.Context(), card)
-		if err != nil {
-			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-				ErrorCode:    http.StatusInternalServerError,
-				ErrorMessage: "InsertCharCard: " + err.Error(),
-			})
-			return
-		}
-
-		w.Header().Add("hx-redirect", "/characters/"+strconv.Itoa(cardID))
-		w.WriteHeader(http.StatusOK)
-
+	characterID, err := uuid.Parse(characterIDStr)
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "{character_id} is not valid uuid: " + err.Error(),
+		})
 		return
 	}
 
-	if err = api.db.UpdateCharCard(r.Context(), user.ID, card); err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "UpdateCharCard: " + err.Error(),
-		})
-		return
+	card.ID = characterID
+	card.OwnerUserID = user.ID
+
+	if characterID == uuid.Nil {
+		api.insertCharacter(user, card, w, r)
+	} else {
+		api.updateCharacter(user, card, w, r)
 	}
 }
 
@@ -293,11 +401,11 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	characterIDStr := chi.URLParam(r, "character_id")
-	characterID, err := strconv.Atoi(characterIDStr)
+	characterID, err := uuid.Parse(characterIDStr)
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusBadRequest,
-			ErrorMessage: "{character_id} is not integer: " + err.Error(),
+			ErrorMessage: "{character_id} is not valid uuid: " + err.Error(),
 		})
 		return
 	}

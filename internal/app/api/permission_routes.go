@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/nicklaw5/helix/v2"
 )
 
@@ -48,11 +49,11 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 
 		targetUserIDStr := r.FormValue("user_id")
 		if len(targetUserIDStr) != 0 {
-			targetUserID, err := strconv.Atoi(targetUserIDStr)
+			targetUserID, err := uuid.Parse(targetUserIDStr)
 			if err != nil {
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusBadRequest,
-					ErrorMessage: fmt.Sprintf("invalid user_id: %v", err),
+					ErrorMessage: fmt.Sprintf("user_id is not valid uuid: %v", err),
 				})
 
 				return

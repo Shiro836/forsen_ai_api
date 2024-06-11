@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -33,8 +34,9 @@ func TestHandleUser(t *testing.T) {
 
 	connManager := conns.NewConnectionManager(context.Background(), slog.Default(), processor)
 
+	id, _ := uuid.NewV7()
 	dbUser := &db.User{
-		ID:          11,
+		ID:          id,
 		TwitchLogin: "test",
 	}
 
@@ -57,8 +59,9 @@ func TestWait(t *testing.T) {
 
 	connManager := conns.NewConnectionManager(context.Background(), slog.Default(), processor)
 	for i := 0; i < 50; i++ {
+		id, _ := uuid.NewV7()
 		connManager.HandleUser(&db.User{
-			ID: i,
+			ID: id,
 		})
 	}
 
@@ -83,8 +86,9 @@ func TestWait(t *testing.T) {
 func TestDataStream(t *testing.T) {
 	assert := assert.New(t)
 
+	id, _ := uuid.NewV7()
 	user := &db.User{
-		ID:          5,
+		ID:          id,
 		TwitchLogin: "forsen",
 	}
 	event := &conns.DataEvent{
@@ -136,8 +140,9 @@ func TestUnderLoad(t *testing.T) {
 	eventsRepeated := 2
 
 	for i := 0; i < cnt; i++ {
+		id, _ := uuid.NewV7()
 		users = append(users, &db.User{
-			ID:          i,
+			ID:          id,
 			TwitchLogin: "user_" + strconv.Itoa(i),
 		})
 		events = append(events, &conns.DataEvent{

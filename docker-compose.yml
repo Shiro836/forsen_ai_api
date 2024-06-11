@@ -49,7 +49,7 @@ services:
 
   postgres:
     user: root
-    image: postgres:16
+    image: ghcr.io/fboulnois/pg_uuidv7:1.5.0
     ports:
       - 5432:5432
     command: postgres -c 'shared_buffers=4GB' -c 'effective_cache_size=12GB' -c 'work_mem=41MB' -c 'maintenance_work_mem=819MB' -c 'min_wal_size=2GB' -c 'max_wal_size=3GB' -c 'random_page_cost=1.1' -c 'effective_io_concurrency=200' -c 'max_parallel_workers=2'

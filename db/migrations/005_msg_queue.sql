@@ -1,7 +1,7 @@
 create table if not exists msg_queue (
-    id bigserial primary key,
+    id uuid default uuid_generate_v7() primary key,
 
-    user_id bigint not null references users(id),
+    user_id uuid not null references users(id),
 
     msg_type integer not null,
 

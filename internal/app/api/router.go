@@ -98,6 +98,9 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/characters/{character_id}/image", api.charImage)
 		// router.Get("/characters/{character_id}/audio", api.charAudio)
+
+		router.Post("/characters/{character_id}/reward_tts", api.rewardTTS)
+		//router.Post("/characters/{character_id}/reward_ai", api.rewardAI)
 	})
 
 	router.Group(func(router chi.Router) {

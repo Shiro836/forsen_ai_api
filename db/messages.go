@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 type MsgStatus int
@@ -37,14 +39,14 @@ type TwitchMessage struct {
 }
 
 type Message struct {
-	ID int
+	ID uuid.UUID
 
 	UserID int
 
 	TwitchMessage TwitchMessage
 }
 
-func (db *DB) PushMsg(ctx context.Context, userID int, msg TwitchMessage) error {
+func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage) error {
 	_, err := db.Exec(ctx, `
 		insert into
 			msg_queue (user_id, msg, status)
@@ -60,7 +62,7 @@ func (db *DB) PushMsg(ctx context.Context, userID int, msg TwitchMessage) error 
 
 var ErrMsgNotFound = errors.New("msg not found")
 
-func (db *DB) GetNextMsg(ctx context.Context, userID int) (*Message, error) {
+func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error) {
 	msg := Message{}
 
 	err := db.QueryRow(ctx, `

@@ -3,7 +3,10 @@ package tools
 import (
 	"io"
 	"strings"
+	"time"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 )
 
 func DrainAndClose(body io.ReadCloser) {
@@ -43,4 +46,9 @@ func IReplace(s, old, new string) string { // replace all, case insensitive
 	}
 	b.WriteString(s[start:])
 	return b.String()
+}
+
+func UUIDToTime(uuid uuid.UUID) time.Time {
+	sec, nsec := uuid.Time().UnixTime()
+	return time.Unix(sec, nsec)
 }

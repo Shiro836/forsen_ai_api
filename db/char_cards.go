@@ -1,19 +1,24 @@
 package db
 
 import (
+	"app/pkg/tools"
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type Card struct {
-	ID int
+	ID uuid.UUID
 
-	OwnerUserID     int
-	CharName        string
-	CharDescription string
-	Public          bool
-	Redeems         int
+	OwnerUserID uuid.UUID
+
+	Name        string
+	Description string
+
+	Public  bool
+	Redeems int
 
 	UpdatedAt time.Time
 	CreatedAt time.Time
@@ -38,18 +43,17 @@ type CardData struct {
 	VoiceReference []byte `json:"voice_reference"`
 }
 
-func (db *DB) GetCharCardByID(ctx context.Context, userID int, cardID int) (*Card, error) {
+func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid.UUID) (*Card, error) {
 	var card Card
 	err := db.QueryRow(ctx, `
 		select
 			cc.id,
 			cc.owner_user_id,
-			cc.char_name,
-			cc.char_description,
+			cc.name,
+			cc.description,
 			cc.public,
 			cc.redeems,
 			cc.updated_at,
-			cc.created_at,
 			cc.data
 		from char_cards cc
 		where
@@ -58,33 +62,33 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID int, cardID int) (*Car
 	`, cardID, userID).Scan(
 		&card.ID,
 		&card.OwnerUserID,
-		&card.CharName,
-		&card.CharDescription,
+		&card.Name,
+		&card.Description,
 		&card.Public,
 		&card.Redeems,
 		&card.UpdatedAt,
-		&card.CreatedAt,
 		&card.Data,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get char card by id: %w", err)
 	}
 
+	card.CreatedAt = tools.UUIDToTime(card.ID)
+
 	return &card, nil
 }
 
-func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID int, twitchRewardID string) (*Card, error) {
+func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) (*Card, error) {
 	var card Card
 	err := db.QueryRow(ctx, `
 		select
 			cc.id,
 			cc.owner_user_id,
-			cc.char_name,
-			cc.char_description,
+			cc.name,
+			cc.description,
 			cc.public,
 			cc.redeems,
 			cc.updated_at,
-			cc.created_at,
 			cc.data
 		from char_cards cc join reward_buttons rb on cc.id = rb.card_id
 		where
@@ -96,29 +100,30 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID int, twitchR
 	`, twitchRewardID, userID).Scan(
 		&card.ID,
 		&card.OwnerUserID,
-		&card.CharDescription,
-		&card.CharName,
+		&card.Description,
+		&card.Name,
 		&card.Public,
 		&card.Redeems,
 		&card.UpdatedAt,
-		&card.CreatedAt,
 		&card.Data,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get char card: %w", err)
 	}
 
+	card.CreatedAt = tools.UUIDToTime(card.ID)
+
 	return &card, nil
 }
 
-func (db *DB) InsertCharCard(ctx context.Context, card *Card) (int, error) {
-	var cardID int
+func (db *DB) InsertCharCard(ctx context.Context, card *Card) (uuid.UUID, error) {
+	var cardID uuid.UUID
 
 	if err := db.QueryRow(ctx, `
 		insert into char_cards (
 			owner_user_id,
-			char_name,
-			char_description,
+			name,
+			description,
 			public,
 			data
 		) values (
@@ -129,18 +134,18 @@ func (db *DB) InsertCharCard(ctx context.Context, card *Card) (int, error) {
 			$5
 		)
 		RETURNING id
-	`, card.OwnerUserID, card.CharName, card.CharDescription, card.Public, card.Data).Scan(&cardID); err != nil {
-		return 0, fmt.Errorf("failed to insert char card: %w", err)
+	`, card.OwnerUserID, card.Name, card.Description, card.Public, card.Data).Scan(&cardID); err != nil {
+		return uuid.Nil, fmt.Errorf("failed to insert char card: %w", err)
 	}
 
 	return cardID, nil
 }
 
-func (db *DB) UpdateCharCard(ctx context.Context, userID int, card *Card) error {
+func (db *DB) UpdateCharCard(ctx context.Context, userID uuid.UUID, card *Card) error {
 	_, err := db.Exec(ctx, `
 		update char_cards set
-			char_name = $2,
-			char_description = $3,
+			name = $2,
+			description = $3,
 			public = $4,
 			data = $5,
 			updated_at = now()
@@ -148,7 +153,7 @@ func (db *DB) UpdateCharCard(ctx context.Context, userID int, card *Card) error 
 			id = $6
 		and
 			owner_user_id = $1
-	`, userID, card.CharName, card.CharDescription, card.Public, card.Data, card.ID)
+	`, userID, card.Name, card.Description, card.Public, card.Data, card.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update char card: %w", err)
 	}
@@ -170,7 +175,8 @@ func (db *DB) DeleteCharCard(ctx context.Context, cardID int) error {
 type CharCardSortBy int
 
 const (
-	SortByCharName CharCardSortBy = iota
+	SortByDefault CharCardSortBy = iota
+	SortByName
 	SortByRedeems
 	SortByNewest
 	SortByOldest
@@ -181,18 +187,17 @@ type GetChatCardsParams struct {
 	SortBy     CharCardSortBy
 }
 
-func (db *DB) GetCharCards(ctx context.Context, userID int, params GetChatCardsParams) ([]*Card, error) {
+func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChatCardsParams) ([]*Card, error) {
 	rows, err := db.Query(ctx, `
 		select
 			id,
 			owner_user_id,
-			char_name,
-			char_description,
+			name,
+			description,
 			redeems,
 			public,
-			updated_at,
-			created_at,
-			data
+			updated_at
+			-- data -- very heavy
 		from char_cards
 		where (
 			owner_user_id = $1
@@ -200,7 +205,7 @@ func (db *DB) GetCharCards(ctx context.Context, userID int, params GetChatCardsP
 		)
 		order by
 			case when $3 = 0 then id end asc,
-			case when $3 = 1 then char_name end asc,
+			case when $3 = 1 then name end asc,
 			case when $3 = 2 then redeems end desc,
 			case when $3 = 3 then id end desc,
 			case when $3 = 4 then id end asc
@@ -217,17 +222,19 @@ func (db *DB) GetCharCards(ctx context.Context, userID int, params GetChatCardsP
 		err := rows.Scan(
 			&card.ID,
 			&card.OwnerUserID,
-			&card.CharName,
-			&card.CharDescription,
+			&card.Name,
+			&card.Description,
 			&card.Redeems,
 			&card.Public,
 			&card.UpdatedAt,
-			&card.CreatedAt,
-			&card.Data,
+			// &card.Data,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan char card: %w", err)
 		}
+
+		card.CreatedAt = tools.UUIDToTime(card.ID)
+
 		cards = append(cards, &card)
 	}
 	if err := rows.Err(); err != nil {

@@ -1,5 +1,5 @@
 create table if not exists users (
-    id bigserial primary key,
+    id uuid default uuid_generate_v7() primary key,
 
     twitch_login   text     not null,
     twitch_user_id integer  not null,
@@ -11,7 +11,6 @@ create table if not exists users (
 
     data jsonb not null default '{}'::jsonb, -- settings, etc
 
-    created_at timestamp not null default now(),
     updated_at timestamp not null default now(),
 
     unique(twitch_user_id)

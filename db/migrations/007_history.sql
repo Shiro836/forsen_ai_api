@@ -1,7 +1,7 @@
 create table if not exists history (
-    id bigserial primary key,
+    id uuid default uuid_generate_v7() primary key,
 
-    user_id_initiator bigint not null references users(id),
+    initiator_user_id uuid not null references users(id),
     target_twitch_username text not null,
     target_user_id bigint,
 
@@ -9,9 +9,5 @@ create table if not exists history (
 
     permission integer not null,
 
-    data jsonb not null default '{}'::jsonb,
-
-    created_at timestamp not null default now()
+    data jsonb not null default '{}'::jsonb
 );
-
-create index if not exists history_created_at_idx on history (created_at);
