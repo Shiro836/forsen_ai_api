@@ -4,3 +4,6 @@ cfg/docker_cfg.yaml
 playground
 
 *.env
+
+pkg/ai/refs/*
+pkg/ai/res/*

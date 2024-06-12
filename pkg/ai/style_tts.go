@@ -5,7 +5,6 @@ import (
 
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,7 +33,7 @@ func NewStyleTTSClient(httpClient HTTPClient, cfg *StyleTTSConfig) *StyleTTSClie
 
 type ttsReq struct {
 	Text     string `json:"text"`
-	RefAudio string `json:"ref_audio"`
+	RefAudio []byte `json:"ref_audio"`
 
 	Alpha float64 `json:"alpha"`
 	Beta  float64 `json:"beta"`
@@ -43,11 +42,11 @@ type ttsReq struct {
 }
 
 type ttsResp struct {
-	Audio string `json:"audio"`
+	Audio []byte `json:"audio"`
 }
 
 func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
-	if refAudio == nil {
+	if len(refAudio) == 0 {
 		return nil, fmt.Errorf("no audio provided")
 	}
 
@@ -55,7 +54,7 @@ func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) (
 
 	req := &ttsReq{
 		Text:     msg,
-		RefAudio: base64.StdEncoding.EncodeToString(refAudio),
+		RefAudio: refAudio,
 
 		Alpha: 0.3,
 		Beta:  0.7,
@@ -90,8 +89,6 @@ func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) (
 		return nil, fmt.Errorf("status code %d, err - %s", resp.StatusCode, string(respData))
 	}
 
-	// fmt.Println(string(respData))
-
 	ttsResp := &ttsResp{}
 	err = json.Unmarshal(respData, &ttsResp)
 	if err != nil {
@@ -99,15 +96,7 @@ func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) (
 		return nil, fmt.Errorf("failed to unmarshal tts resp data: %w", err)
 	}
 
-	// fmt.Println(respData)
-
-	bytesData, err := base64.StdEncoding.DecodeString(ttsResp.Audio)
-	if err != nil {
-		metrics.TTSErrors.WithLabelValues("500").Inc()
-		return nil, fmt.Errorf("failed to decode tts response: %w", err)
-	}
-
 	metrics.TTSQueryTime.Observe(time.Since(start).Seconds())
 
-	return bytesData, nil
+	return ttsResp.Audio, nil
 }

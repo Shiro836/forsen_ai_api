@@ -42,17 +42,21 @@ type TwitchMessage struct {
 type Message struct {
 	ID uuid.UUID
 
-	UserID int
+	UserID uuid.UUID
 
 	TwitchMessage TwitchMessage
 }
 
 func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage) error {
 	_, err := db.Exec(ctx, `
-		insert into
-			msg_queue (user_id, msg, status)
-		values
-			($1, $2, $3)
+		INSERT INTO
+			msg_queue (
+				user_id,
+				msg,
+				status,
+				updated
+			)
+		VALUES ($1, $2, $3, (select coalesce(max(updated) + 1, 1) from msg_queue))
 	`, userID, msg, StatusWait)
 	if err != nil {
 		return fmt.Errorf("failed to push message: %w", err)

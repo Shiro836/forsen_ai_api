@@ -245,8 +245,6 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		case <-ctx.Done():
 			return nil
 		}
-
-		cancel()
 	}
 }
 
