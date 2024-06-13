@@ -4,6 +4,7 @@ import (
 	"app/db"
 	"app/internal/app/api"
 	"app/pkg/ai"
+	"app/pkg/ffmpeg"
 	"app/pkg/twitch"
 )
 
@@ -21,6 +22,8 @@ type Config struct {
 	DB db.Config `yaml:"db"`
 
 	InfluxDB InfluxConfig `yaml:"influx"`
+
+	Ffmpeg ffmpeg.Config `yaml:"ffmpeg"`
 }
 
 type InfluxConfig struct {

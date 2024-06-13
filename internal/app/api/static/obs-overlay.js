@@ -135,7 +135,7 @@ async function pageReady() {
                     updateText(dataStr);
                     break
                 case 'audio':
-                    playWavFile(rawAudio, json['msg_id'])
+                    playWavFile(data, msg['msg_id'])
                     break
                 case 'image':
                     set_image(dataStr)

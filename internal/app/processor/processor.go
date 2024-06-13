@@ -6,6 +6,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/ai"
+	"app/pkg/ffmpeg"
 	"app/pkg/swearfilter"
 	"app/pkg/tools"
 	"app/pkg/twitch"
@@ -31,9 +32,11 @@ type Processor struct {
 	whisper  *ai.WhisperClient
 
 	db *db.DB
+
+	ffmpeg *ffmpeg.Client
 }
 
-func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, rvc *ai.RVCClient, whisper *ai.WhisperClient, db *db.DB) *Processor {
+func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, rvc *ai.RVCClient, whisper *ai.WhisperClient, db *db.DB, ffmpeg *ffmpeg.Client) *Processor {
 	return &Processor{
 		llm:      llm,
 		styleTts: styleTts,
@@ -44,6 +47,8 @@ func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTS
 		logger: logger,
 
 		db: db,
+
+		ffmpeg: ffmpeg,
 	}
 }
 
@@ -172,7 +177,11 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				return err
 			}
 
-			requestTtsDone := p.playTTS(ctx, eventWriter, msg.TwitchMessage.Message, requestAudio)
+			requestTtsDone, err := p.playTTS(ctx, eventWriter, msg.TwitchMessage.Message, requestAudio)
+			if err != nil {
+				logger.Error("error playing tts", "err", err)
+				return err
+			}
 
 			select {
 			case <-requestTtsDone:
@@ -214,7 +223,11 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return err
 		}
 
-		requestTtsDone := p.playTTS(ctx, eventWriter, requestText, requestAudio)
+		requestTtsDone, err := p.playTTS(ctx, eventWriter, requestText, requestAudio)
+		if err != nil {
+			logger.Error("error playing tts", "err", err)
+			return err
+		}
 
 		select {
 		case <-llmResultDone:
@@ -238,7 +251,11 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return nil
 		}
 
-		responseTtsDone := p.playTTS(ctx, eventWriter, llmResult, responseTtsAudio)
+		responseTtsDone, err := p.playTTS(ctx, eventWriter, llmResult, responseTtsAudio)
+		if err != nil {
+			logger.Error("error playing tts", "err", err)
+			continue
+		}
 
 		select {
 		case <-responseTtsDone:
@@ -248,7 +265,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	}
 }
 
-func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, audio []byte) <-chan struct{} {
+func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, audio []byte) (<-chan struct{}, error) {
+	textTimings, err := p.alignTextToAudio(ctx, msg, audio)
+	if err != nil {
+		return nil, fmt.Errorf("error aligning text to audio: %w", err)
+	}
+
 	done := make(chan struct{})
 
 	go func() {
@@ -260,8 +282,6 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 		})
 
 		startTS := time.Now() // linter, are you drunk, or am I drunk???
-
-		textTimings := alignTextToAudio(msg, audio)
 
 		fullText := ""
 
@@ -281,7 +301,7 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 		}
 	}()
 
-	return done
+	return done, nil
 }
 
 func (p *Processor) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
@@ -319,8 +339,13 @@ func (p *Processor) craftPrompt(ctx context.Context, char *db.Card, requester st
 	panic("implement me")
 }
 
-func getAudioLength(data []byte) time.Duration {
-	panic("implement me")
+func (p *Processor) getAudioLength(ctx context.Context, data []byte) (time.Duration, error) {
+	res, err := p.ffmpeg.Ffprobe(ctx, data)
+	if err != nil {
+		return 0, fmt.Errorf("error getting audio length: %w", err)
+	}
+
+	return res.Duration, nil
 }
 
 type timing struct {
@@ -329,12 +354,17 @@ type timing struct {
 	End   time.Duration
 }
 
-func alignTextToAudio(text string, audio []byte) []timing {
+func (p *Processor) alignTextToAudio(ctx context.Context, text string, audio []byte) ([]timing, error) {
+	audioData, err := p.getAudioLength(ctx, audio)
+	if err != nil {
+		return nil, err
+	}
+
 	return []timing{ // TODO: use https://github.com/Shiro836/whisperX-api to align text to audio
 		{
 			Text:  text,
 			Start: 0,
-			End:   getAudioLength(audio),
+			End:   audioData,
 		},
-	}
+	}, nil
 }

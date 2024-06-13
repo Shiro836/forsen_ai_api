@@ -7,3 +7,5 @@ playground
 
 pkg/ai/refs/*
 pkg/ai/res/*
+pkg/ffmpeg/refs/*
+pkg/ffmpeg/tmp/*

@@ -7,6 +7,7 @@ import (
 	"app/internal/app/nvidia"
 	"app/internal/app/processor"
 	"app/pkg/ai"
+	"app/pkg/ffmpeg"
 	"app/pkg/slg"
 	"app/pkg/twitch"
 	"flag"
@@ -77,8 +78,9 @@ func main() {
 	metaTts := ai.NewMetaTTSClient(httpClient, &cfg.MetaTTS)
 	rvc := ai.NewRVCClient(httpClient, &cfg.Rvc)
 	whisper := ai.NewWhisperClient(httpClient, &cfg.Whisper)
+	ffmpeg := ffmpeg.New(&cfg.Ffmpeg)
 
-	processor := processor.NewProcessor(logger.WithGroup("processor"), llm, styleTts, metaTts, rvc, whisper, db)
+	processor := processor.NewProcessor(logger.WithGroup("processor"), llm, styleTts, metaTts, rvc, whisper, db, ffmpeg)
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), processor)
 

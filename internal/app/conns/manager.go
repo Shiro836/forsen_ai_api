@@ -134,6 +134,11 @@ loop:
 				m.rwMutex.RLock()
 				defer m.rwMutex.RUnlock()
 
+				if len(m.isClosed[userID]) <= i {
+					cont_loop = true
+					return
+				}
+
 				if m.isClosed[userID][i] {
 					cont_loop = true
 					return
