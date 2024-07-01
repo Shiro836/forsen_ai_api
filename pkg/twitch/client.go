@@ -49,7 +49,7 @@ func (c *Client) CodeHandler(code string) (*db.User, error) {
 	data.Set("client_secret", c.cfg.Secret)
 	data.Set("code", code)
 	data.Set("grant_type", "authorization_code")
-	data.Set("redirect_uri", "https://forsen.fun/twitch_token_handler")
+	data.Set("redirect_uri", "https://forsen.fun/twitch_redirect_handler")
 
 	encodedData := data.Encode()
 

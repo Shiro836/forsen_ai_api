@@ -785,6 +785,10 @@ video {
   width: min-content;
 }
 
+.w-8\/12 {
+  width: 66.666667%;
+}
+
 .max-w-screen-xl {
   max-width: 1280px;
 }

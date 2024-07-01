@@ -1,7 +1,14 @@
 <div class="flex flex-col">
-    <div class="pl-4 text-6xl flex flex-col w-min pt-8">
+    <div class="pl-4 flex flex-col w-full pt-2">
+        <div>
+            If you are here to moderate for streamer, go to control panel tab on the left side of the page.
+        </div>
+        <br>
+        <div>
+            If you are affiliated or partnered twitch streamer, press button below to request access to features.
+        </div>
         {{ range .Permissions }}
-        <div class="pt-4 w-full">
+        <div class="pt-4 text-center text-6xl w-full">
             <button class="{{template "button-2"}} font-bold w-full px-40 py-2" hx-post="/request_permissions/{{ .PermissionID }}" hx-swap="outerHTML">Request Access</button>
         </div>
         {{ end }}

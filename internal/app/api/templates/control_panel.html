@@ -1,0 +1,11 @@
+<div>
+    {{ if not .Panels }}
+        You don't have anything to moderate, ask streamer to give you permissions
+    {{ else }}
+        {{ range .Panels }}
+        <div>
+            {{ .TwitchLogin }} and {{ .TwitchUserID }} LULE
+        </div>
+        {{ end }}
+    {{ end }}
+</div>
