@@ -1,0 +1,63 @@
+<div>
+    <div class="flex">
+        <div class="flex flex-col pl-4">
+            <div class="flex flex-col">
+                <div class="pb-1 font-medium">Manage Streamer Permissions</div>
+                <div class="border py-3 px-3 {{template "ui-border-clr"}}">
+                    <div class="flex flex-col w-72">
+                        <label for="twitch_login" class="pb-2">Twitch Username</label>
+                        <input type="text" id="twitch_login" name="twitch_login" class="w-full {{template "input-class"}} py-2 px-4 items-center w-full" placeholder="forsen" autocomplete="off"></input>
+                        <div class="flex pt-4 justify-start font-bold">
+                            <div>
+                                <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/add_streamer" hx-include="[name='twitch_login']" hx-target="#permission_result">Grant</button>
+                            </div>
+                            <div class="flex-grow pl-8">
+                                <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/remove_streamer" hx-include="[name='twitch_login']" hx-target="#permission_result">Revoke</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pt-4" id="permission_result"></div>
+            </div>
+            <div class="flex flex-col pt-16">
+                <div class="pb-1 font-medium">Streamers</div>
+                <div class="border py-3 px-3 {{template "ui-border-clr"}}">
+                    <div class="flex flex-col">
+                        {{ range .Streamers }}
+                        <div class="flex items-center pt-3">
+                            <div class="w-36">{{ .Login }}</div>
+                            <div class="flex flex-grow justify-end" id="user_id_{{ .UserID }}">
+                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/remove_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Revoke</button>
+                            </div>
+                        </div>
+                        {{ else }}
+                        <div class="flex flex-col items-center w-72">Empty</div>
+                        {{ end }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="pl-32">
+            <div class="pb-1 font-medium">Manage Access Requests</div>
+            <div class="border py-3 px-3 {{template "ui-border-clr"}}">
+                <div class="flex flex-col">
+                    {{ range .Requests }}
+                    <div class="flex items-center pt-3">
+                        <div class="w-36">{{ .Login }}</div>
+                        <div class="flex" id="user_id_{{ .UserID }}">
+                            <div>
+                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/add_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Approve</button>
+                            </div>
+                            <div class="pl-4">
+                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/remove_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Deny</button>
+                            </div>
+                        </div>
+                    </div>
+                    {{ else }}
+                    <div class="flex flex-col items-center w-72">Empty</div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

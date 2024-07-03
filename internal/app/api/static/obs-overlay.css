@@ -1,0 +1,69 @@
+body {
+    color: #fff;
+    background: transparent;
+    font-family: "Noto Sans", sans-serif, "Roboto", "Arial";
+    margin: 0;
+    min-width: 100vh;
+    min-height: 100vh;
+}
+
+main {
+    display: flex;
+    flex-direction: column;
+    max-width: 800px;
+    max-height: 100vh;
+    filter: drop-shadow(4px 4px 4px #000);
+}
+
+#response_box {
+    height: 0;
+    overflow: hidden;
+    transition: height 0.5s linear;
+    max-height: fit-content;
+    padding: 5px;
+}
+
+#text_box {
+    text-align: center;
+    overflow: hidden;
+    scrollbar-width: none;
+    font-size: 28pt;
+    font-weight: bold;
+    white-space: normal;
+    word-break: break-word;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: .4em;
+}
+
+#text_box span {
+    animation: wordFadeIn 0.2s linear;
+    animation-fill-mode: forwards;
+}
+
+#text-box::-webkit-scrollbar {
+    display: none;
+}
+
+.character {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0;
+}
+
+#char_image {
+    opacity: 0;
+    transition: opacity 0.5s linear;
+    max-height: 500px;
+}
+
+@keyframes wordFadeIn {
+    0% {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    100% {
+        transform: translateY(0%);
+        opacity: 1;
+    }
+}

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html id="root" class="{{ if .DarkTheme }}dark{{ end }}" lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="BAJ AI for forsen bajs(no juicers). AI TTS for your twitch channel" />
+
+    <title>{{ .Title }}</title>
+
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/path-params.js"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+
+    <link href="/static/tailwind.css" rel="stylesheet">
+
+    <script src="https://unpkg.com/clipboard@2/dist/clipboard.min.js"></script>
+
+    <script src="https://cdn.rawgit.com/mattdiamond/Recorderjs/08e7abd9/dist/recorder.js"></script>
+</head>
+
+<body class="antialiased text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 pb-16">
+    <div id="header">
+        <div class="fixed top-0 left-0 right-0 w-full backdrop-blur flex-none z-50 border-b {{template "ui-border-clr"}} bg-white/95 supports-backdrop-blur:bg-white/60 dark:bg-transparent">
+            <div class="w-full max-w-screen-xl relative mx-auto px-6">
+                <div class="flex justify-between p-4 items-center">
+                    <a class="flex justify-start items-center" href="/">
+                        <img src="/static/logo.jpg" width="32" height="32" />
+                        <div class="pl-3 text-2xl font-bold">BAJ AI</div>
+                    </a>
+                    <div class="flex justify-end items-center">
+                        <div class="flex justify-end items-center">
+                            <div class="flex justify-end items-center pr-2">
+                                <button title="Switch Theme" id="light_switch" class="flex flex-col {{template "button-1"}} justify-center py-2 px-4">
+                                    <svg class="dark:hidden" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                                        <path class="fill-current" d="M7 0h2v2H7zM12.88 1.637l1.414 1.415-1.415 1.413-1.413-1.414zM14 7h2v2h-2zM12.95 14.433l-1.414-1.413 1.413-1.415 1.415 1.414zM7 14h2v2H7zM2.98 14.364l-1.413-1.415 1.414-1.414 1.414 1.415zM0 7h2v2H0zM3.05 1.706 4.463 3.12 3.05 4.535 1.636 3.12z" />
+                                        <path class="fill-current" d="M8 4C5.8 4 4 5.8 4 8s1.8 4 4 4 4-1.8 4-4-1.8-4-4-4Z" />
+                                    </svg>
+                                    <svg class="hidden dark:block" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                                        <path class="fill-current" d="M6.2 1C3.2 1.8 1 4.6 1 7.9 1 11.8 4.2 15 8.1 15c3.3 0 6-2.2 6.9-5.2C9.7 11.2 4.8 6.3 6.2 1Z" />
+                                        <path class="fill-current" d="M12.5 5a.625.625 0 0 1-.625-.625 1.252 1.252 0 0 0-1.25-1.25.625.625 0 1 1 0-1.25 1.252 1.252 0 0 0 1.25-1.25.625.625 0 1 1 1.25 0c.001.69.56 1.249 1.25 1.25a.625.625 0 1 1 0 1.25c-.69.001-1.249.56-1.25 1.25A.625.625 0 0 1 12.5 5Z" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <a title="GitHub" class="flex {{template "button-1"}} items-center py-2 px-4" target="_blank" href="https://github.com/Shiro836/forsen_ai_api">
+                                <svg class="fill-current" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                    <path
+                                        d="M10 0a10 10 0 0 0-3.16 19.49c.5.1.68-.22.68-.48l-.01-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.1.39-1.99 1.03-2.69a3.6 3.6 0 0 1 .1-2.64s.84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.4.1 2.64.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85l-.01 2.75c0 .26.18.58.69.48A10 10 0 0 0 10 0">
+                                    </path>
+                                </svg>
+                            </a>
+                        </div>
+                        {{ if .LogoutButton }}
+                        <button id="logout" class="flex justify-start {{template "button-1"}} font-bold py-2 px-4 rounded inline-flex items-center ml-6 pl-6">
+                            <svg class="" width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 18 16">
+                                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1 8h11m0 0L8 4m4 4-4 4m4-11h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-3"></path>
+                            </svg>
+                            <span class="flex pl-2.5 pr-3">Logout</span>
+                        </button>
+                        {{ end }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="content" class="mt-9">
+        <div class="w-full max-w-screen-xl mx-auto px-6 pt-10">
+            {{ .Content }}
+        </div>
+    </div>
+
+    <style>
+        .tooltip {
+            visibility: hidden;
+            position: absolute;
+        }
+
+        .has-tooltip:hover .tooltip {
+            visibility: visible;
+            z-index: 50;
+        }
+
+        .dark ::selection {
+            background: #A970FF;
+        }
+
+        html {
+            overflow-y: scroll;
+            /* scrollbar-gutter: stable; */ /* fix your shit, stupid browsers */
+            scrollbar-width: thin;
+
+            scrollbar-color: #8d8d8d transparent;
+        }
+
+        .dark {
+            scrollbar-color: #A970FF transparent;
+        }
+
+    </style>
+
+    <script>
+        document.getElementById("light_switch").addEventListener("click", function() {
+            document.documentElement.classList.toggle("dark");
+            document.cookie = "theme=" + (document.documentElement.classList.contains("dark") ? "dark" : "light") + " ; expires=Fri, 31 Dec 9999 23:59:59 GMT ; path=/ ;" ;
+        });
+    </script>
+
+    {{ if .LogoutButton }}
+    <script>
+        document.getElementById("logout").addEventListener("click", function() {
+            document.cookie = "session_id= ;path=/ ;" ;
+            window.location.href = "/";
+        });
+    </script>
+    {{ end }}
+
+</body>
+
+</html>

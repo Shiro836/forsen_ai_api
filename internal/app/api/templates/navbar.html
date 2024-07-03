@@ -1,0 +1,48 @@
+<div class="flex">
+    <div id="tabs" class="flex flex-col justify-start border-r {{template "ui-border-clr"}} tab-list pr-2 pb-6 pt-2">
+        <div class="pt-1 pb-1 w-full">
+            <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4" hx-get="/"
+                hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Home</button>
+        </div>
+        {{ if .IsStreamer }}
+        <div class="pt-1 pb-1 w-full">
+            <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
+                hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                hx-push-url="true">Characters</button>
+        </div>
+        <div class="pt-1 pb-1 w-full">
+            <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
+                hx-get="/filters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                hx-push-url="true">Filters</button>
+        </div>
+        {{ end }}
+        {{ if .IsMod }}
+        <div class="border-t {{template "ui-border-clr"}} pt-1 pb-1">
+            <div class="pt-1 pb-1 w-full">
+                <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
+                    hx-get="/mod" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true">Mod Page</button>
+            </div>
+        </div>
+        {{ end }}
+        {{ if .IsAdmin }}
+        <div class="border-t {{template "ui-border-clr"}} pt-1 pb-1">
+            <div class="pt-1 pb-1 w-full">
+                <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
+                    hx-get="/admin" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true">Admin Page</button>
+            </div>
+        </div>
+        {{ end }}
+        <div class="border-t {{template "ui-border-clr"}} pt-1 pb-1">
+            <div class="pt-1 pb-1 w-full">
+                <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
+                    hx-get="/control" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true">Control Panel</button>
+            </div>
+        </div>
+    </div>
+    <div id="tab-content" class="flex flex-grow pl-10 pt-6">
+        {{ .Content }}
+    </div>
+</div>

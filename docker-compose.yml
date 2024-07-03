@@ -1,73 +1,90 @@
 version: '3.9'
 
 services:
-  prometheus:
-    image: prom/prometheus:v2.45.3
+  app:
+    image: app
+    build: .
     ports:
-      - 9090:9090
-    command:
-      - --storage.tsdb.retention.time=90d
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/etc/prometheus/data
+      - 8070:8080
+    depends_on:
+      - postgres
+      - redis
+      - influxdb
     volumes:
-      - ./prometheus:/etc/prometheus
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    user: "0"
+      - ./cfg:/app/cfg
+    networks:
+      - forsen
+
+  influxdb:
+    image: influxdb:2.7.5
+    ports:
+      - 8086:8086
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=forsen
+      - DOCKER_INFLUXDB_INIT_PASSWORD=forsenxd
+      - DOCKER_INFLUXDB_INIT_ORG=forsen
+      - DOCKER_INFLUXDB_INIT_BUCKET=forsen
+      - DOCKER_INFLUXDB_INIT_RETENTION=1w
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=forsen-forsen-forsen-forsen
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    restart: unless-stopped
+    networks:
+      - forsen
 
   grafana:
-    image: grafana/grafana:10.3.1
+    user: root
+    image: grafana/grafana:10.3.3
     ports:
-      - 3000:3000
+      - 2999:3000
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
     volumes:
-      - ./grafana/things:/etc/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/data:/var/lib/grafana
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    user: "0"
+      - grafana-data-1:/etc/grafana
+      - grafana-data-2:/var/lib/grafana
     env_file:
       - .env
+    networks:
+      - forsen
 
-  # postgres:
-  #   user: root
-  #   image: postgres
-  #   environment:
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: postgres
-  #     PGDATA: /data/postgres
-  #   volumes:
-  #      - "./_postgres:/var/lib/postgresql:rw"
-  #   ports:
-  #     - "5432:5432"
-  #   expose:
-  #     - "5432"
-  #   networks:
-  #     - forsen
-  #   restart: unless-stopped
+  postgres:
+    user: root
+    image: ghcr.io/fboulnois/pg_uuidv7:1.5.0
+    ports:
+      - 5432:5432
+    command: postgres -c 'shared_buffers=4GB' -c 'effective_cache_size=12GB' -c 'work_mem=41MB' -c 'maintenance_work_mem=819MB' -c 'min_wal_size=2GB' -c 'max_wal_size=3GB' -c 'random_page_cost=1.1' -c 'effective_io_concurrency=200' -c 'max_parallel_workers=12'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /data/postgres
+    volumes:
+       - pg-data:/data/postgres
+    restart: unless-stopped
+    networks:
+      - forsen
 
-  # pgadmin:
-  #   user: root
-  #   image: dpage/pgadmin4
-  #   environment:
-  #     PGADMIN_DEFAULT_EMAIL: admin@admin.com
-  #     PGADMIN_DEFAULT_PASSWORD: admin
-  #     PGADMIN_CONFIG_SERVER_MODE: 'False'
-  #   volumes:
-  #      - "./_pgadmin:/var/lib/pgadmin:rw"
+  redis:
+    image: redis:7
+    ports:
+      - 6379:6379
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - forsen
 
-  #   ports:
-  #     - "5050:80"
-  #   expose:
-  #     - "5050"
-  #   networks:
-  #     - forsen
+volumes:
+  prom-data:
+  pg-data:
+  redis-data:
+  grafana-data-1:
+  grafana-data-2:
+  influxdb-data:
 
-# networks:
-#   forsen:
+networks:
+  forsen:
 
-# volumes:
-#     _postgres:
-#     _pgadmin:
+
+# sudo docker-compose up --force-recreate -d
+# sudo docker-compose down

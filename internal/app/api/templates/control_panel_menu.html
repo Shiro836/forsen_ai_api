@@ -1,0 +1,16 @@
+<div>
+    {{ if not .Panels }}
+        You don't have anything to moderate, ask streamer to give you permissions
+    {{ else }}
+    <div class="flex flex-col">
+        {{ range .Panels }}
+        <div class="flex pt-2">
+            <div class="flex flex-col items-center pr-6">
+                <div class="font-bold">{{ .TwitchLogin }}</div>
+            </div>
+            <button class="{{template "button-2"}} font-bold w-full px-8 py-1" hx-get="/control/{{.TwitchUserID}}" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Open</button>
+        </div>
+        {{ end }}
+    </div>
+    {{ end }}
+</div>
