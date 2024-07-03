@@ -8,8 +8,7 @@
 - Forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen.
 
 ## Plans:
-- [ ] Use postgres instead of sqlite
-- [ ] Use go interpreter instead of lua scripts
-- [ ] Add AI hub where users can push their custom characters
-- [ ] Switch TTS to metavoice when it's ready
-- [ ] Better config - max response/request duration, enable/disable AI memory
+- [ ] Security features
+- [ ] Tune LLM
+- [ ] Separate NixOS full setup repo
+- [ ] Switch to metavoice TTS or Mars5 TTS or something better
