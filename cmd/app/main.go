@@ -4,6 +4,7 @@ import (
 	"app/db"
 	"app/internal/app/api"
 	"app/internal/app/conns"
+	"app/internal/app/notifications"
 	"app/internal/app/nvidia"
 	"app/internal/app/processor"
 	"app/pkg/ai"
@@ -80,13 +81,15 @@ func main() {
 	whisper := ai.NewWhisperClient(httpClient, &cfg.Whisper)
 	ffmpeg := ffmpeg.New(&cfg.Ffmpeg)
 
-	processor := processor.NewProcessor(logger.WithGroup("processor"), llm, styleTts, metaTts, rvc, whisper, db, ffmpeg)
+	controlPanelNotifications := notifications.New()
+
+	processor := processor.NewProcessor(logger.WithGroup("processor"), llm, styleTts, metaTts, rvc, whisper, db, ffmpeg, controlPanelNotifications)
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), processor)
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, twitchClient, styleTts, metaTts, llm, db)
+	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, controlPanelNotifications, twitchClient, styleTts, metaTts, llm, db)
 
 	router := api.NewRouter()
 

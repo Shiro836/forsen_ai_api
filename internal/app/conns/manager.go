@@ -243,6 +243,7 @@ func (m *Manager) HandleUser(user *db.User) {
 						}
 					} else {
 						logger.Error("processor Process error", "err", err)
+
 						select {
 						case <-time.After(10 * time.Second):
 						case <-m.ctx.Done():

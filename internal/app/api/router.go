@@ -1,13 +1,15 @@
 package api
 
 import (
-	"app/db"
-	"app/internal/app/conns"
-	"app/pkg/ai"
-	"app/pkg/twitch"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"app/db"
+	"app/internal/app/conns"
+	"app/internal/app/notifications"
+	"app/pkg/ai"
+	"app/pkg/twitch"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -26,6 +28,8 @@ type API struct {
 
 	connManager *conns.Manager
 
+	controlPanelNotifications *notifications.Client
+
 	styleTts *ai.StyleTTSClient
 	metaTts  *ai.MetaTTSClient
 	llm      *ai.VLLMClient
@@ -37,13 +41,16 @@ type API struct {
 	cfg *Config
 }
 
-func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, llm *ai.VLLMClient, db *db.DB) *API {
+func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, controlPanelNotifications *notifications.Client,
+	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, llm *ai.VLLMClient, db *db.DB) *API {
 	return &API{
 		cfg: cfg,
 
 		logger: logger,
 
 		connManager: connManager,
+
+		controlPanelNotifications: controlPanelNotifications,
 
 		twitchClient: twitchClient,
 
@@ -84,7 +91,9 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Get("/{twitch_login}", api.elem(api.obsOverlay))
 	router.Get("/ws/{twitch_login}", api.wsHandler) // permission is checked based on param cuz there is no auth cookie in obs
 
-	router.Get("/control", api.nav(api.controlPanel))
+	router.Get("/control", api.nav(api.controlPanelMenu))
+	router.Get("/control/ws/{twitch_user_id}", api.controlPanelWSConn)
+	router.Get("/control/{twitch_user_id}", api.nav(api.controlPanel))
 
 	router.Group(func(router chi.Router) {
 		router.Use(api.checkPermissions(db.PermissionStreamer))

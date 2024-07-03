@@ -8,7 +8,7 @@ create table if not exists char_cards (
 
     public boolean not null default false,
 
-    redeems int not null default 0,
+    redeems bigint not null default 0,
 
     data jsonb not null default '{}'::jsonb,
 

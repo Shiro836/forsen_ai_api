@@ -44,6 +44,8 @@ type Message struct {
 
 	UserID uuid.UUID
 
+	Status MsgStatus
+
 	TwitchMessage TwitchMessage
 }
 
@@ -53,10 +55,9 @@ func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage) 
 			msg_queue (
 				user_id,
 				msg,
-				status,
-				updated
+				status
 			)
-		VALUES ($1, $2, $3, (select coalesce(max(updated) + 1, 1) from msg_queue))
+		VALUES ($1, $2, $3)
 	`, userID, msg, StatusWait)
 	if err != nil {
 		return fmt.Errorf("failed to push message: %w", err)
@@ -105,4 +106,76 @@ func (db *DB) CleanQueue(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (db *DB) UpdateMessageStatus(ctx context.Context, msgID uuid.UUID, status MsgStatus) error {
+	_, err := db.Exec(ctx, `
+		update
+			msg_queue
+		set
+			status = $1,
+			updated = nextval('updated_seq')
+		where
+			id = $2
+	`, status, msgID)
+	if err != nil {
+		return fmt.Errorf("failed to update message status: %w", err)
+	}
+
+	return nil
+}
+
+func (db *DB) UpdateCurrentMessage(ctx context.Context, userID uuid.UUID) error {
+	_, err := db.Exec(ctx, `
+		update
+			msg_queue
+		set
+			status = $1,
+			updated = nextval('updated_seq')
+		where
+			user_id = $2
+		and
+			status = $3
+	`, StatusProcessed, userID, StatusCurrent)
+	if err != nil {
+		return fmt.Errorf("failed to update current message: %w", err)
+	}
+
+	return nil
+}
+
+func (db *DB) GetMessageUpdates(ctx context.Context, userID uuid.UUID, updated int) ([]*Message, error) {
+	rows, err := db.Query(ctx, `
+		select
+			id,
+			user_id,
+			status,
+			msg
+		from
+			msg_queue
+		where
+			user_id = $1
+		and
+			updated > $2
+	`, userID, updated)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all messages: %w", err)
+	}
+
+	messages := make([]*Message, 0, 20)
+	for rows.Next() {
+		var msg Message
+		err := rows.Scan(&msg.ID, &msg.UserID, &msg.Status, &msg.TwitchMessage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan message: %w", err)
+		}
+
+		messages = append(messages, &msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan message: %w", err)
+	}
+
+	return messages, nil
 }

@@ -785,10 +785,6 @@ video {
   width: min-content;
 }
 
-.w-8\/12 {
-  width: 66.666667%;
-}
-
 .max-w-screen-xl {
   max-width: 1280px;
 }
@@ -981,6 +977,11 @@ video {
   padding-right: 1.5rem;
 }
 
+.px-8 {
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
 .py-1 {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
@@ -1099,6 +1100,14 @@ video {
 
 .pt-8 {
   padding-top: 2rem;
+}
+
+.pl-12 {
+  padding-left: 3rem;
+}
+
+.pr-6 {
+  padding-right: 1.5rem;
 }
 
 .text-center {

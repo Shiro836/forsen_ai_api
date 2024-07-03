@@ -107,6 +107,34 @@ func (db *DB) GetUserByTwitchLogin(ctx context.Context, twitchLogin string) (*Us
 	return &user, nil
 }
 
+func (db *DB) GetUserByTwitchUserID(ctx context.Context, twitchUserID int) (*User, error) {
+	var user User
+
+	err := db.QueryRow(ctx, `
+		SELECT
+			id,
+			twitch_login,
+			twitch_user_id,
+			twitch_refresh_token,
+			twitch_access_token,
+			session
+		FROM users
+		WHERE twitch_user_id = $1
+	`, twitchUserID).Scan(
+		&user.ID,
+		&user.TwitchLogin,
+		&user.TwitchUserID,
+		&user.TwitchRefreshToken,
+		&user.TwitchAccessToken,
+		&user.Session,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user by twitch user id: %w", err)
+	}
+
+	return &user, nil
+}
+
 func (db *DB) GetUserBySession(ctx context.Context, session string) (*User, error) {
 	var user User
 

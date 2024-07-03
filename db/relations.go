@@ -11,7 +11,7 @@ type RelationType int
 
 const (
 	RelationTypeAny        = iota
-	RelationTypeModerating // user 1 is moderated by user 2
+	RelationTypeModerating // user 1 moderates user 2
 )
 
 func (r RelationType) String() string {

@@ -3,13 +3,6 @@ package processor
 // use go interpreter
 
 import (
-	"app/db"
-	"app/internal/app/conns"
-	"app/pkg/ai"
-	"app/pkg/ffmpeg"
-	"app/pkg/swearfilter"
-	"app/pkg/tools"
-	"app/pkg/twitch"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +11,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"app/db"
+	"app/internal/app/conns"
+	"app/internal/app/notifications"
+	"app/pkg/ai"
+	"app/pkg/ffmpeg"
+	"app/pkg/swearfilter"
+	"app/pkg/tools"
+	"app/pkg/twitch"
 
 	"github.com/google/uuid"
 )
@@ -34,9 +36,12 @@ type Processor struct {
 	db *db.DB
 
 	ffmpeg *ffmpeg.Client
+
+	controlPanelNotifications *notifications.Client
 }
 
-func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, rvc *ai.RVCClient, whisper *ai.WhisperClient, db *db.DB, ffmpeg *ffmpeg.Client) *Processor {
+func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient,
+	rvc *ai.RVCClient, whisper *ai.WhisperClient, db *db.DB, ffmpeg *ffmpeg.Client, controlPanelNotifications *notifications.Client) *Processor {
 	return &Processor{
 		llm:      llm,
 		styleTts: styleTts,
@@ -49,6 +54,8 @@ func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTS
 		db: db,
 
 		ffmpeg: ffmpeg,
+
+		controlPanelNotifications: controlPanelNotifications,
 	}
 }
 
@@ -139,10 +146,20 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			}); err != nil {
 				logger.Error("error pushing message to db", "err", err)
 			}
+
+			p.controlPanelNotifications.Notify(broadcaster.ID)
 		}
 	}()
 
 	for {
+		if err := p.db.UpdateCurrentMessage(ctx, broadcaster.ID); err != nil {
+			logger.Error("error updating current message", "err", err)
+
+			return fmt.Errorf("error updating current message: %w", err)
+		}
+
+		p.controlPanelNotifications.Notify(broadcaster.ID)
+
 		var msg *db.Message
 		msg, err := p.db.GetNextMsg(ctx, broadcaster.ID)
 		if err != nil {
@@ -157,8 +174,18 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				}
 			}
 
+			logger.Error("error getting next message from db", "err", err)
+
 			return fmt.Errorf("error getting next message from db: %w", err)
 		}
+
+		if err := p.db.UpdateMessageStatus(ctx, msg.ID, db.StatusCurrent); err != nil {
+			logger.Error("error updating message status", "err", err)
+
+			return fmt.Errorf("error updating message status: %w", err)
+		}
+
+		p.controlPanelNotifications.Notify(broadcaster.ID)
 
 		if len(msg.TwitchMessage.RewardID) == 0 {
 			continue
@@ -299,6 +326,11 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 				return
 			}
 		}
+
+		eventWriter(&conns.DataEvent{
+			EventType: conns.EventTypeText,
+			EventData: []byte(" "),
+		})
 	}()
 
 	return done, nil

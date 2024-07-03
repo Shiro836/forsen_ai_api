@@ -1,3 +1,5 @@
+create sequence if not exists updated_seq start 1;
+
 create table if not exists msg_queue (
     id uuid default uuid_generate_v7() primary key,
 
@@ -7,7 +9,7 @@ create table if not exists msg_queue (
 
     status integer not null,
 
-    updated integer not null, -- used to send updated rows to user
+    updated bigint not null default nextval('updated_seq'), -- used to send updated rows to user
 
     data jsonb not null default '{}'::jsonb
 );
