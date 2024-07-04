@@ -153,7 +153,7 @@ func (api *API) nav(getContent func(r *http.Request) template.HTML) http.Handler
 			return
 		}
 
-		userPermissions, err := api.db.GetUserPermissions(r.Context(), user.ID, db.StatusGranted)
+		userPermissions, err := api.db.GetUserPermissions(r.Context(), user.ID, db.PermissionStatusGranted)
 		if err != nil {
 			submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
 

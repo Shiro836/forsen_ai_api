@@ -176,7 +176,7 @@ func ProcessingLoop(ctx context.Context, logger *slog.Logger, dbObj *db.DB, cm *
 	var err error
 
 	for len(users) == 0 {
-		users, err = dbObj.GetUsersPermissions(ctx, db.PermissionStreamer, db.StatusGranted)
+		users, err = dbObj.GetUsersPermissions(ctx, db.PermissionStreamer, db.PermissionStatusGranted)
 		if err != nil {
 			return fmt.Errorf("failed to get whitelist: %w", err)
 		}

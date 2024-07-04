@@ -103,6 +103,15 @@ func (api *API) hasControlPanelPermissions(user *db.User, targetTwitchUserID int
 	return true, nil
 }
 
+type controlPanelUser struct {
+	TwitchLogin  string
+	TwitchUserID int
+}
+
+type controlPanel struct {
+	User *controlPanelUser
+}
+
 func (api *API) controlPanel(r *http.Request) template.HTML {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
@@ -132,7 +141,12 @@ func (api *API) controlPanel(r *http.Request) template.HTML {
 		})
 	}
 
-	return getHtml("control_panel.html", nil)
+	return getHtml("control_panel.html", &controlPanel{
+		User: &controlPanelUser{
+			TwitchLogin:  user.TwitchLogin,
+			TwitchUserID: user.TwitchUserID,
+		},
+	})
 }
 
 func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +166,17 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger := api.logger.With("user", user.TwitchLogin, "target_twitch_user_id", targetTwitchUserID)
+	targetUser, err := api.db.GetUserByTwitchUserID(r.Context(), targetTwitchUserID)
+	if err != nil {
+		api.logger.Error("failed to get target user", "err", err, "user", user.TwitchLogin, "target_twitch_user_id", targetTwitchUserID)
+
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("failed to get target user: " + err.Error()))
+
+		return
+	}
+
+	logger := api.logger.With("user", user.TwitchLogin, "target_user", targetUser.TwitchLogin)
 
 	if hasPerm, err := api.hasControlPanelPermissions(user, targetTwitchUserID, r); err != nil {
 		logger.Error("failed to check permission", "err", err)
@@ -170,16 +194,6 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetUser, err := api.db.GetUserByTwitchUserID(r.Context(), targetTwitchUserID)
-	if err != nil {
-		logger.Error("failed to get target user", "err", err)
-
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("failed to get target user: " + err.Error()))
-
-		return
-	}
-
 	wsConn, err := ws.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Error("failed to upgrade control panel websocket connection", "err", err)
@@ -190,45 +204,21 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 
 	wsClient, done := ws.NewWsClient(wsConn)
 
+	go wsClient.DrainRead()
+
 	defer func() {
 		logger.Info("closing control panel websocket connection")
 		wsClient.Close()
 	}()
 
-	messages, err := json.Marshal(&Updates{
-		Updates: []Update{
-			{
-				Action:  ActionUpsert,
-				Message: fmt.Sprintf("Test: %s, %s", user.TwitchLogin, targetUser.TwitchLogin),
-			},
-		},
-	})
-	if err != nil {
-		logger.Error("failed to marshal messages", "err", err)
-
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("failed to marshal messages: " + err.Error()))
-
-		return
-	}
-
-	err = wsClient.Send(&ws.Message{
-		MsgType: websocket.BinaryMessage,
-		Message: messages,
-	})
-	if err != nil {
-		logger.Error("failed to send message", "err", err)
-
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("failed to send message: " + err.Error()))
-
-		return
-	}
-
 	events := api.controlPanelNotifications.SubscribeForNotification(r.Context(), targetUser.ID)
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+
+	lastUpdated := 0
+
+	lastActive := time.Now()
 
 loop:
 	for {
@@ -242,13 +232,111 @@ loop:
 		case <-ticker.C:
 		}
 
-		if err := wsClient.Send(&ws.Message{
-			MsgType: websocket.BinaryMessage,
-			Message: nil,
-		}); err != nil {
-			logger.Error("failed to send message", "err", err)
+		dbMessages, err := api.db.GetMessageUpdates(r.Context(), targetUser.ID, lastUpdated)
+		if err != nil {
+			logger.Error("failed to get message updates", "err", err)
+			break loop
 		}
+
+		if len(dbMessages) == 0 {
+			if time.Since(lastActive) > 20*time.Second {
+				err = wsClient.Send(&ws.Message{
+					MsgType: websocket.BinaryMessage,
+					Message: []byte("ping"),
+				})
+				if err != nil {
+					logger.Error("failed to ping", "err", err)
+					break loop
+				}
+				lastActive = time.Now()
+			}
+
+			continue
+		}
+
+		updates := make([]Update, 0, len(dbMessages))
+		for _, dbMessage := range dbMessages {
+			lastUpdated = max(lastUpdated, dbMessage.Updated)
+			var data []byte
+
+			var action Action
+
+			switch dbMessage.Status {
+			case db.MsgStatusProcessed:
+				action = ActionDelete
+				data, err = json.Marshal(&msgDelete{
+					ID: dbMessage.ID.String(),
+				})
+				if err != nil {
+					logger.Error("failed to marshal message", "err", err)
+					break loop
+				}
+			case db.MsgStatusDeleted, db.MsgStatusCurrent, db.MsgStatusWait:
+				action = ActionUpsert
+				data, err = json.Marshal(&msgUpsert{
+					ID: dbMessage.ID.String(),
+
+					Request: dbMessage.TwitchMessage.Message,
+
+					Status: dbMessage.Status,
+				})
+				if err != nil {
+					logger.Error("failed to marshal message", "err", err)
+					break loop
+				}
+			}
+
+			updates = append(updates, Update{
+				Action: action,
+				Data:   data,
+			})
+		}
+
+		messages, err := json.Marshal(&Updates{
+			Updates: updates,
+		})
+		if err != nil {
+			logger.Error("failed to marshal messages", "err", err)
+
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("failed to marshal messages: " + err.Error()))
+
+			return
+		}
+
+		err = wsClient.Send(&ws.Message{
+			MsgType: websocket.BinaryMessage,
+			Message: messages,
+		})
+		if err != nil {
+			logger.Error("failed to send message", "err", err)
+
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("failed to send message: " + err.Error()))
+
+			return
+		}
+		lastActive = time.Now()
 	}
+}
+
+type msgDelete struct {
+	ID string `json:"id"`
+}
+
+type msgUpsert struct {
+	ID string `json:"id"`
+
+	RequestedBy string `json:"requested_by"`
+
+	Request          string `json:"request"`
+	FilteredRequest  string `json:"filtered_request"`
+	Response         string `json:"response"`
+	FilteredResponse string `json:"filtered_response"`
+
+	SkippedBy string `json:"skipped_by"`
+
+	Status db.MsgStatus `json:"status"`
 }
 
 type Action int
@@ -259,8 +347,8 @@ const (
 )
 
 type Update struct {
-	Action  Action `json:"action"`
-	Message string `json:"message"`
+	Action Action `json:"action"`
+	Data   []byte `json:"data"`
 }
 
 type Updates struct {

@@ -9,31 +9,31 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type Status int
+type PermissionStatus int
 
 const (
-	StatusWaiting Status = iota
-	StatusGranted
-	StatusDenied
+	PermissionStatusWaiting PermissionStatus = iota
+	PermissionStatusGranted
+	PermissionStatusDenied
 
-	statusLast
+	permissionStatusLast
 )
 
-func (s Status) String() string {
+func (s PermissionStatus) String() string {
 	switch s {
-	case StatusWaiting:
+	case PermissionStatusWaiting:
 		return "Waiting"
-	case StatusGranted:
+	case PermissionStatusGranted:
 		return "Granted"
-	case StatusDenied:
+	case PermissionStatusDenied:
 		return "Denied"
 	default:
 		return "invalid"
 	}
 }
 
-func IsValidStatus(status Status) bool {
-	return status < statusLast
+func IsValidStatus(status PermissionStatus) bool {
+	return status < permissionStatusLast
 }
 
 type Permission int
@@ -63,7 +63,7 @@ func IsValidPermission(permission Permission) bool {
 	return permission < permissionLast
 }
 
-func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, permissionStatus Status) ([]*User, error) {
+func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, permissionStatus PermissionStatus) ([]*User, error) {
 	if !IsValidPermission(permission) {
 		return nil, fmt.Errorf("invalid permission: %d", permission)
 	}
@@ -104,7 +104,7 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 	return users, nil
 }
 
-func (db *DB) GetUserPermissions(ctx context.Context, userID uuid.UUID, permissionStatus Status) ([]Permission, error) {
+func (db *DB) GetUserPermissions(ctx context.Context, userID uuid.UUID, permissionStatus PermissionStatus) ([]Permission, error) {
 	rows, err := db.Query(ctx, `
 		SELECT
 			p.permission
@@ -152,7 +152,7 @@ func (db *DB) RequestAccess(ctx context.Context, user *User, permission Permissi
 		)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (twitch_user_id, permission) DO NOTHING
-	`, user.TwitchLogin, user.TwitchUserID, StatusWaiting, permission)
+	`, user.TwitchLogin, user.TwitchUserID, PermissionStatusWaiting, permission)
 	if err != nil {
 		return fmt.Errorf("failed to insert permission: %w", err)
 	}
@@ -177,7 +177,7 @@ func (db *DB) HasPermission(ctx context.Context, twitchUserID int, permission Pe
 			permission = $2
 		AND
 			status = $3
-	`, twitchUserID, permission, StatusGranted).Scan(&tmp)
+	`, twitchUserID, permission, PermissionStatusGranted).Scan(&tmp)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
@@ -224,7 +224,7 @@ func (db *DB) AddPermission(ctx context.Context, initiator *User, targetTwitchUs
 		DO UPDATE SET
 			status = excluded.status
 			, updated_at = NOW()
-	`, targetTwitchLogin, targetTwitchUserID, permission, StatusGranted)
+	`, targetTwitchLogin, targetTwitchUserID, permission, PermissionStatusGranted)
 	if err != nil {
 		return fmt.Errorf("failed to insert permission: %w", err)
 	}
@@ -266,7 +266,7 @@ func (db *DB) RemovePermission(ctx context.Context, initiator *User, targetTwitc
 			twitch_user_id = $2
 		AND
 			permission = $3
-	`, StatusDenied, targetTwitchUserID, permission)
+	`, PermissionStatusDenied, targetTwitchUserID, permission)
 	if err != nil {
 		return fmt.Errorf("failed to delete permission: %w", err)
 	}

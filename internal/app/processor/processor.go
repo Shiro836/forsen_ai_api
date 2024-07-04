@@ -179,7 +179,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return fmt.Errorf("error getting next message from db: %w", err)
 		}
 
-		if err := p.db.UpdateMessageStatus(ctx, msg.ID, db.StatusCurrent); err != nil {
+		if err := p.db.UpdateMessageStatus(ctx, msg.ID, db.MsgStatusCurrent); err != nil {
 			logger.Error("error updating message status", "err", err)
 
 			return fmt.Errorf("error updating message status: %w", err)

@@ -67,7 +67,7 @@ func (api *API) checkPermissions(requiredPermissions ...db.Permission) func(http
 				return
 			}
 
-			userPermissions, err := api.db.GetUserPermissions(r.Context(), user.ID, db.StatusGranted)
+			userPermissions, err := api.db.GetUserPermissions(r.Context(), user.ID, db.PermissionStatusGranted)
 			if err != nil {
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusInternalServerError,
@@ -188,7 +188,7 @@ func (api *API) admin(r *http.Request) template.HTML {
 }
 
 func (api *API) mod(r *http.Request) template.HTML {
-	requestUsers, err := api.db.GetUsersPermissions(r.Context(), db.PermissionStreamer, db.StatusWaiting)
+	requestUsers, err := api.db.GetUsersPermissions(r.Context(), db.PermissionStreamer, db.PermissionStatusWaiting)
 	if err != nil {
 		return getHtml("error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
@@ -204,7 +204,7 @@ func (api *API) mod(r *http.Request) template.HTML {
 		})
 	}
 
-	approvedUsers, err := api.db.GetUsersPermissions(r.Context(), db.PermissionStreamer, db.StatusGranted)
+	approvedUsers, err := api.db.GetUsersPermissions(r.Context(), db.PermissionStreamer, db.PermissionStatusGranted)
 	if err != nil {
 		return getHtml("error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,

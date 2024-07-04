@@ -1,1 +1,189 @@
-<div>LULE</div>
+<div class="flex flex-col">
+    <div class="flex">
+        <div class="pr-16">Control panel of {{ .User.TwitchLogin }}</div>
+        <div class="flex hidden" id="connected_indicator">
+            <svg class="items-center" xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
+                <path d="M4 12.6111L8.92308 17.5L20 6.5" stroke="#32CD32" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div class="pl-2">Connected</div>
+        </div>
+        <div class="flex" id="disconnected_indicator">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
+                <path d="M6.99486 7.00636C6.60433 7.39689 6.60433 8.03005 6.99486 8.42058L10.58 12.0057L6.99486 15.5909C6.60433 15.9814 6.60433 16.6146 6.99486 17.0051C7.38538 17.3956 8.01855 17.3956 8.40907 17.0051L11.9942 13.4199L15.5794 17.0051C15.9699 17.3956 16.6031 17.3956 16.9936 17.0051C17.3841 16.6146 17.3841 15.9814 16.9936 15.5909L13.4084 12.0057L16.9936 8.42059C17.3841 8.03007 17.3841 7.3969 16.9936 7.00638C16.603 6.61585 15.9699 6.61585 15.5794 7.00638L11.9942 10.5915L8.40907 7.00636C8.01855 6.61584 7.38538 6.61584 6.99486 7.00636Z" fill="#DE3163"/>
+            </svg>
+            <div class="pl-2">Disconnected</div>
+        </div>
+    </div>
+    <div class="pt-6">
+        <table class="table-auto w-full text-left">
+            <thead>
+                <tr>
+                    <th scope="col" class="px-10">
+                        Requested By
+                    </th>
+                    <th scope="col" class="px-32">
+                        Request
+                    </th>
+                    <th scope="col" class="">
+                        Skipped By
+                    </th>
+                    <th scope="col" class="">
+                        Status
+                    </th>
+                    <th scope="col" class="">
+                        Actions
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="messages_box">
+                <tr>
+                    <td>No messages yet</td>
+                    <td>a</td>
+                    <td>b</td>
+                    <td>c</td>
+                    <td><button>lula</button></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div>
+        <div id="control_panel_activity_checker"></div>
+    </div>
+</div>
+
+<script>
+    function set_connected_true() {
+        document.getElementById('connected_indicator').classList.remove('hidden');
+        document.getElementById('disconnected_indicator').classList.add('hidden');
+    }
+    function set_connected_false() {
+        document.getElementById('connected_indicator').classList.add('hidden');
+        document.getElementById('disconnected_indicator').classList.remove('hidden');
+    }
+
+    function base64ToArrayBuffer(base64) {
+        var binaryString = window.atob(base64);
+        var len = binaryString.length;
+        var bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        return bytes.buffer;
+    }
+
+    function connect() {
+        ws = new WebSocket(`wss://${window.location.host + "/control/ws/{{ .User.TwitchUserID }}"}`);
+        ws.binaryType = 'arraybuffer'
+
+        ws.onopen = function () {
+            console.log('Socket is open!');
+            set_connected_true();
+
+            checkPageClosed = function() {
+                if (document.getElementById('control_panel_activity_checker') === null) {
+                    console.log('detected that page is closed, closing socket');
+                    ws.close();
+                    return;
+                }
+
+                setTimeout(checkPageClosed, 500);
+            };
+
+            checkPageClosed();
+        };
+
+        ws.onerror = function (err) {
+            console.error('Socket encountered error: ', err.message, 'Closing socket');
+            ws.close();
+        };
+
+        ws.onclose = function (e) {
+            console.log('Socket is closed.', e.reason);
+
+            if (document.getElementById('control_panel_activity_checker') === null) {
+                console.log('page is closed')
+                return
+            }
+
+            console.log('Reconnect will be attempted in 1 second.')
+
+            set_connected_false();
+
+            setTimeout(function () {
+                connect();
+            }, 1000);
+        };
+
+        ws.onmessage = function (event) {
+            let uint8Array = new Uint8Array(event.data);
+
+            let decoder = new TextDecoder('utf-8');
+            let utf8String = decoder.decode(uint8Array);
+
+            if (utf8String === 'ping') {
+                console.log('ping received');
+                return;
+            }
+
+            msg = JSON.parse(utf8String);
+            console.log(msg);
+
+            if (msg['clear_all'] === true) {
+                document.getElementById('messages_box').innerHTML = '';
+            }
+
+            table = document.getElementById('messages_box');
+
+            updates = msg['updates']
+            for (let i = 0; i < updates.length; i++) {
+                action = updates[i]['action'];
+                data = updates[i]['data'];
+
+                data = JSON.parse(decoder.decode(base64ToArrayBuffer(data)));
+                console.log(data);
+
+                switch (action) {
+                    case 0: // delete
+                        var row = document.getElementById(data['id']);
+                        if (row !== null) {
+                            row.parentNode.removeChild(row);
+                        }
+
+                        break;
+                    case 1: // upsert
+                        var row = document.getElementById(data['id'])
+                        if (row === null) {
+                            row = table.insertRow(-1);
+                            row.id = data['id'];
+
+                            row.insertCell(0).innerHTML = data['requested_by'];
+                            row.insertCell(1).innerHTML = data['request'];
+                            row.insertCell(2).innerHTML = data['skipped_by'];
+                            row.insertCell(3).innerHTML = data['status'];
+                            row.insertCell(4).innerHTML = '<button id=delete_' + data['id'] + '>Delete</button>';
+
+                            document.getElementById('delete_' + data['id']).addEventListener('click', function() {
+                                ws.send(JSON.stringify({
+                                    'action': 0,
+                                    'data': data['id']
+                                }));
+                            });
+                        }
+                        else {
+                            row.cells[0].innerHTML = data['requested_by'];
+                            row.cells[1].innerHTML = data['request'];
+                            row.cells[2].innerHTML = data['skipped_by'];
+                            row.cells[3].innerHTML = data['status'];
+                        }
+
+                        break;
+                }
+            }
+
+            console.log(msg)
+        };
+    }
+
+    connect();
+</script>

@@ -703,6 +703,10 @@ video {
   display: inline-flex;
 }
 
+.table {
+  display: table;
+}
+
 .grid {
   display: grid;
 }
@@ -795,6 +799,10 @@ video {
 
 .flex-grow {
   flex-grow: 1;
+}
+
+.table-auto {
+  table-layout: auto;
 }
 
 .cursor-pointer {
@@ -1002,6 +1010,26 @@ video {
   padding-bottom: 1.5rem;
 }
 
+.px-24 {
+  padding-left: 6rem;
+  padding-right: 6rem;
+}
+
+.px-32 {
+  padding-left: 8rem;
+  padding-right: 8rem;
+}
+
+.px-16 {
+  padding-left: 4rem;
+  padding-right: 4rem;
+}
+
+.px-10 {
+  padding-left: 2.5rem;
+  padding-right: 2.5rem;
+}
+
 .pb-1 {
   padding-bottom: 0.25rem;
 }
@@ -1058,12 +1086,20 @@ video {
   padding-right: 2.5rem;
 }
 
+.pr-16 {
+  padding-right: 4rem;
+}
+
 .pr-2 {
   padding-right: 0.5rem;
 }
 
 .pr-3 {
   padding-right: 0.75rem;
+}
+
+.pr-6 {
+  padding-right: 1.5rem;
 }
 
 .pt-1 {
@@ -1102,12 +1138,8 @@ video {
   padding-top: 2rem;
 }
 
-.pl-12 {
-  padding-left: 3rem;
-}
-
-.pr-6 {
-  padding-right: 1.5rem;
+.text-left {
+  text-align: left;
 }
 
 .text-center {
@@ -1346,4 +1378,8 @@ video {
   .xl\:grid-cols-4 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+.rtl\:text-right:where([dir="rtl"], [dir="rtl"] *) {
+  text-align: right;
 }

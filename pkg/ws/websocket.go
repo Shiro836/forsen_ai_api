@@ -110,3 +110,13 @@ func (ws *Client) Read() (*Message, error) {
 
 	return msg, nil
 }
+
+// use it when you don't need to read messages
+func (ws *Client) DrainRead() {
+	for {
+		_, err := ws.Read()
+		if err != nil {
+			return
+		}
+	}
+}

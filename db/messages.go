@@ -12,21 +12,21 @@ import (
 type MsgStatus int
 
 const (
-	StatusDeleted MsgStatus = iota
-	StatusWait
-	StatusProcessed
-	StatusCurrent
+	MsgStatusDeleted MsgStatus = iota
+	MsgStatusWait
+	MsgStatusProcessed
+	MsgStatusCurrent
 )
 
 func (s MsgStatus) String() string {
 	switch s {
-	case StatusDeleted:
+	case MsgStatusDeleted:
 		return "Deleted"
-	case StatusWait:
+	case MsgStatusWait:
 		return "Wait"
-	case StatusProcessed:
+	case MsgStatusProcessed:
 		return "Processed"
-	case StatusCurrent:
+	case MsgStatusCurrent:
 		return "Current"
 	default:
 		return ""
@@ -47,6 +47,10 @@ type Message struct {
 	Status MsgStatus
 
 	TwitchMessage TwitchMessage
+
+	Updated int
+
+	Data []byte
 }
 
 func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage) error {
@@ -58,7 +62,7 @@ func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage) 
 				status
 			)
 		VALUES ($1, $2, $3)
-	`, userID, msg, StatusWait)
+	`, userID, msg, MsgStatusWait)
 	if err != nil {
 		return fmt.Errorf("failed to push message: %w", err)
 	}
@@ -81,7 +85,7 @@ func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error
 		and
 			status = $2
 		limit 1
-	`, userID, StatusWait).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage)
+	`, userID, MsgStatusWait).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNoRows
@@ -99,7 +103,7 @@ func (db *DB) CleanQueue(ctx context.Context) error {
 			msg_queue
 		where
 			status = $1
-	`, StatusDeleted)
+	`, MsgStatusDeleted)
 
 	if err != nil {
 		return fmt.Errorf("failed to clean queue: %w", err)
@@ -136,7 +140,7 @@ func (db *DB) UpdateCurrentMessage(ctx context.Context, userID uuid.UUID) error 
 			user_id = $2
 		and
 			status = $3
-	`, StatusProcessed, userID, StatusCurrent)
+	`, MsgStatusProcessed, userID, MsgStatusCurrent)
 	if err != nil {
 		return fmt.Errorf("failed to update current message: %w", err)
 	}
@@ -150,6 +154,7 @@ func (db *DB) GetMessageUpdates(ctx context.Context, userID uuid.UUID, updated i
 			id,
 			user_id,
 			status,
+			updated,
 			msg
 		from
 			msg_queue
@@ -165,7 +170,7 @@ func (db *DB) GetMessageUpdates(ctx context.Context, userID uuid.UUID, updated i
 	messages := make([]*Message, 0, 20)
 	for rows.Next() {
 		var msg Message
-		err := rows.Scan(&msg.ID, &msg.UserID, &msg.Status, &msg.TwitchMessage)
+		err := rows.Scan(&msg.ID, &msg.UserID, &msg.Status, &msg.Updated, &msg.TwitchMessage)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan message: %w", err)
 		}
