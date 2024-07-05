@@ -4,6 +4,7 @@ package processor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -114,6 +115,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 						EventType: conns.EventTypeSkip,
 						EventData: []byte(upd.Data),
 					})
+
+					if err = p.db.UpdateMessageStatus(ctx, msgID, db.MsgStatusDeleted); err != nil {
+						logger.Error("error updating message status", "err", err)
+					}
+
+					p.controlPanelNotifications.Notify(broadcaster.ID)
 				}
 			case <-ctx.Done():
 				break loop
@@ -152,7 +159,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	}()
 
 	for {
-		if err := p.db.UpdateCurrentMessage(ctx, broadcaster.ID); err != nil {
+		if err := p.db.UpdateCurrentMessages(ctx, broadcaster.ID); err != nil {
 			logger.Error("error updating current message", "err", err)
 
 			return fmt.Errorf("error updating current message: %w", err)
@@ -177,6 +184,21 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			logger.Error("error getting next message from db", "err", err)
 
 			return fmt.Errorf("error getting next message from db: %w", err)
+		}
+
+		skipMsg := false
+
+		func() {
+			skippedMsgIDsLock.Lock()
+			defer skippedMsgIDsLock.Unlock()
+
+			if _, ok := skippedMsgIDs[msg.ID]; ok {
+				skipMsg = true
+			}
+		}()
+
+		if skipMsg {
+			continue
 		}
 
 		if err := p.db.UpdateMessageStatus(ctx, msg.ID, db.MsgStatusCurrent); err != nil {
@@ -204,7 +226,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				return err
 			}
 
-			requestTtsDone, err := p.playTTS(ctx, eventWriter, msg.TwitchMessage.Message, requestAudio)
+			requestTtsDone, err := p.playTTS(ctx, eventWriter, msg.TwitchMessage.Message, msg.ID.String(), requestAudio)
 			if err != nil {
 				logger.Error("error playing tts", "err", err)
 				return err
@@ -250,7 +272,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return err
 		}
 
-		requestTtsDone, err := p.playTTS(ctx, eventWriter, requestText, requestAudio)
+		requestTtsDone, err := p.playTTS(ctx, eventWriter, requestText, msg.ID.String(), requestAudio)
 		if err != nil {
 			logger.Error("error playing tts", "err", err)
 			return err
@@ -278,7 +300,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return nil
 		}
 
-		responseTtsDone, err := p.playTTS(ctx, eventWriter, llmResult, responseTtsAudio)
+		responseTtsDone, err := p.playTTS(ctx, eventWriter, llmResult, msg.ID.String(), responseTtsAudio)
 		if err != nil {
 			logger.Error("error playing tts", "err", err)
 			continue
@@ -292,7 +314,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	}
 }
 
-func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, audio []byte) (<-chan struct{}, error) {
+type audioMsg struct {
+	Audio []byte `json:"audio"`
+	MsgID string `json:"msg_id"`
+}
+
+func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, msdID string, audio []byte) (<-chan struct{}, error) {
 	textTimings, err := p.alignTextToAudio(ctx, msg, audio)
 	if err != nil {
 		return nil, fmt.Errorf("error aligning text to audio: %w", err)
@@ -303,9 +330,17 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 	go func() {
 		defer close(done)
 
+		audioMsg, err := json.Marshal(&audioMsg{
+			Audio: audio,
+			MsgID: msdID,
+		})
+		if err != nil {
+			return
+		}
+
 		eventWriter(&conns.DataEvent{
 			EventType: conns.EventTypeAudio,
-			EventData: audio,
+			EventData: audioMsg,
 		})
 
 		startTS := time.Now() // linter, are you drunk, or am I drunk???

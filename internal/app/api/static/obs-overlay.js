@@ -95,6 +95,8 @@ async function pageReady() {
     }
 
     function skip(msg_id) {
+        console.log(audio_sources)
+        console.log(msg_id)
         if (audio_sources.has(msg_id)) {
             audio_sources.get(msg_id).stop();
 
@@ -135,7 +137,8 @@ async function pageReady() {
                     updateText(dataStr);
                     break
                 case 'audio':
-                    playWavFile(data, msg['msg_id'])
+                    dataJson = JSON.parse(dataStr);
+                    playWavFile(base64ToArrayBuffer(dataJson.audio), dataJson.msg_id);
                     break
                 case 'image':
                     set_image(dataStr)

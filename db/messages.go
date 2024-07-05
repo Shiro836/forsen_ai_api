@@ -129,7 +129,7 @@ func (db *DB) UpdateMessageStatus(ctx context.Context, msgID uuid.UUID, status M
 	return nil
 }
 
-func (db *DB) UpdateCurrentMessage(ctx context.Context, userID uuid.UUID) error {
+func (db *DB) UpdateCurrentMessages(ctx context.Context, userID uuid.UUID) error {
 	_, err := db.Exec(ctx, `
 		update
 			msg_queue

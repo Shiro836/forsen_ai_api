@@ -36,13 +36,6 @@
                 </tr>
             </thead>
             <tbody id="messages_box">
-                <tr>
-                    <td>No messages yet</td>
-                    <td>a</td>
-                    <td>b</td>
-                    <td>c</td>
-                    <td><button>lula</button></td>
-                </tr>
             </tbody>
         </table>
     </div>
@@ -161,12 +154,13 @@
                             row.insertCell(1).innerHTML = data['request'];
                             row.insertCell(2).innerHTML = data['skipped_by'];
                             row.insertCell(3).innerHTML = data['status'];
-                            row.insertCell(4).innerHTML = '<button id=delete_' + data['id'] + '>Delete</button>';
+                            row.insertCell(4).innerHTML = '<button id="delete_' + data['id'] + '"">Delete</button>';
+
+                            let id = data['id'];
 
                             document.getElementById('delete_' + data['id']).addEventListener('click', function() {
                                 ws.send(JSON.stringify({
-                                    'action': 0,
-                                    'data': data['id']
+                                    'id': id,
                                 }));
                             });
                         }

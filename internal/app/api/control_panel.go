@@ -204,8 +204,6 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 
 	wsClient, done := ws.NewWsClient(wsConn)
 
-	go wsClient.DrainRead()
-
 	defer func() {
 		logger.Info("closing control panel websocket connection")
 		wsClient.Close()
@@ -213,12 +211,34 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 
 	events := api.controlPanelNotifications.SubscribeForNotification(r.Context(), targetUser.ID)
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(20 * time.Minute)
 	defer ticker.Stop()
 
 	lastUpdated := 0
 
 	lastActive := time.Now()
+
+	go func() {
+		defer wsClient.Close()
+
+	read_loop:
+		for {
+			msg, err := wsClient.Read()
+			if err != nil {
+				logger.Error("failed to read control panel websocket message", "err", err)
+				break read_loop
+			}
+
+			var upd *skipMsg
+			err = json.Unmarshal(msg.Message, &upd)
+			if err != nil {
+				logger.Error("failed to unmarshal message from ws", "err", err)
+				break read_loop
+			}
+
+			api.connManager.SkipMessage(targetUser.ID, upd.ID)
+		}
+	}()
 
 loop:
 	for {
@@ -262,7 +282,7 @@ loop:
 			var action Action
 
 			switch dbMessage.Status {
-			case db.MsgStatusProcessed:
+			case db.MsgStatusProcessed, db.MsgStatusDeleted:
 				action = ActionDelete
 				data, err = json.Marshal(&msgDelete{
 					ID: dbMessage.ID.String(),
@@ -271,7 +291,7 @@ loop:
 					logger.Error("failed to marshal message", "err", err)
 					break loop
 				}
-			case db.MsgStatusDeleted, db.MsgStatusCurrent, db.MsgStatusWait:
+			case db.MsgStatusCurrent, db.MsgStatusWait:
 				action = ActionUpsert
 				data, err = json.Marshal(&msgUpsert{
 					ID: dbMessage.ID.String(),
@@ -354,4 +374,8 @@ type Update struct {
 type Updates struct {
 	ClearAll bool     `json:"clear_all"`
 	Updates  []Update `json:"updates"`
+}
+
+type skipMsg struct {
+	ID string `json:"id"`
 }
