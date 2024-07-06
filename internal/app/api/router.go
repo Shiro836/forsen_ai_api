@@ -112,6 +112,9 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Post("/characters/{character_id}/reward_tts", api.rewardTTS)
 		//router.Post("/characters/{character_id}/reward_ai", api.rewardAI)
+
+		router.Post("/control/grant", http.HandlerFunc(api.controlPanelGrant))
+		router.Post("/control/revoke", http.HandlerFunc(api.controlPanelRevoke))
 	})
 
 	router.Group(func(router chi.Router) {
@@ -119,11 +122,13 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/admin", api.nav(api.admin))
 
-		router.Post("/add_mod", http.HandlerFunc(api.managePermission(permissionActionAdd, db.PermissionMod)))
-		router.Post("/remove_mod", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionMod)))
+		router.Post("/admin/add_mod", http.HandlerFunc(api.managePermission(permissionActionAdd, db.PermissionMod)))
+		router.Post("/admin/remove_mod", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionMod)))
 
-		router.Post("/add_admin", http.HandlerFunc(api.managePermission(permissionActionAdd, db.PermissionAdmin)))
-		router.Post("/remove_admin", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionAdmin)))
+		router.Post("/admin/add_admin", http.HandlerFunc(api.managePermission(permissionActionAdd, db.PermissionAdmin)))
+		router.Post("/admin/remove_admin", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionAdmin)))
+
+		router.Post("/admin/add_relation", http.HandlerFunc(api.manageRelation(db.RelationTypeModerating)))
 	})
 
 	router.Group(func(router chi.Router) {

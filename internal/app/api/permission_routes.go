@@ -184,3 +184,16 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 		_, _ = w.Write([]byte("Success"))
 	}
 }
+
+func (api *API) manageRelation(relationType db.RelationType) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		initiatorUser := ctxstore.GetUser(r.Context())
+		if initiatorUser == nil {
+			submitPage(w, authPage(r))
+
+			return
+		}
+
+		panic("finish me")
+	}
+}

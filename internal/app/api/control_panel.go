@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
+	"github.com/nicklaw5/helix/v2"
 )
 
 type PanelData struct {
@@ -141,10 +142,18 @@ func (api *API) controlPanel(r *http.Request) template.HTML {
 		})
 	}
 
+	targetUser, err := api.db.GetUserByTwitchUserID(r.Context(), targetTwitchUserID)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "failed to get target user: " + err.Error(),
+		})
+	}
+
 	return getHtml("control_panel.html", &controlPanel{
 		User: &controlPanelUser{
-			TwitchLogin:  user.TwitchLogin,
-			TwitchUserID: user.TwitchUserID,
+			TwitchLogin:  targetUser.TwitchLogin,
+			TwitchUserID: targetUser.TwitchUserID,
 		},
 	})
 }
@@ -211,7 +220,7 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 
 	events := api.controlPanelNotifications.SubscribeForNotification(r.Context(), targetUser.ID)
 
-	ticker := time.NewTicker(20 * time.Minute)
+	ticker := time.NewTicker(2 * time.Minute)
 	defer ticker.Stop()
 
 	lastUpdated := 0
@@ -378,4 +387,100 @@ type Updates struct {
 
 type skipMsg struct {
 	ID string `json:"id"`
+}
+
+func (api *API) controlPanelGrant(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("unauthorized"))
+		return
+	}
+
+	targetLogin := r.FormValue("twitch_login")
+	if len(targetLogin) == 0 {
+		targetLogin = r.FormValue("twitch_login_2")
+	}
+	if len(targetLogin) == 0 {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusBadRequest,
+			ErrorMessage: "No user provided",
+		})
+
+		return
+	}
+
+	twitchAPI, err := api.twitchClient.NewHelixClient(user.TwitchAccessToken, user.TwitchRefreshToken) // TODO: generalize this
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "twitch client err: " + err.Error(),
+		})
+
+		return
+	}
+
+	resp, err := twitchAPI.GetUsers(&helix.UsersParams{
+		Logins: []string{
+			targetLogin,
+		},
+	})
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
+		})
+
+		return
+	}
+	if resp == nil || len(resp.Data.Users) == 0 {
+		_, _ = w.Write([]byte("user not found"))
+
+		return
+	}
+
+	targetUserID, err := strconv.Atoi(resp.Data.Users[0].ID)
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
+		})
+
+		return
+	}
+
+	_, err = api.db.AddRelation(r.Context(), &db.Relation{
+		TwitchLogin1:  targetLogin,
+		TwitchUserID1: targetUserID,
+
+		TwitchLogin2:  user.TwitchLogin,
+		TwitchUserID2: user.TwitchUserID,
+
+		RelationType: db.RelationTypeModerating,
+	})
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: fmt.Sprintf("failed to add relation: %v", err),
+		})
+
+		return
+	}
+
+	_, _ = w.Write([]byte("success"))
+}
+
+func (api *API) controlPanelRevoke(w http.ResponseWriter, r *http.Request) {
+	_, _ = w.Write([]byte("not implemented"))
+}
+
+// add any relation
+func (api *API) adminControlPanelGrant(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("unauthorized"))
+		return
+	}
+
 }

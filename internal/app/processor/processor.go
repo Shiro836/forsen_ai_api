@@ -80,6 +80,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	skippedMsgIDs := make(map[uuid.UUID]struct{})
 	skippedMsgIDsLock := sync.Mutex{}
 
+	interrupt := make(chan struct{})
+	defer close(interrupt)
+
 	go func() {
 
 	loop:
