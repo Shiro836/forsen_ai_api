@@ -172,6 +172,10 @@ func formToCard(form url.Values) (*db.Card, error) {
 		Data: &db.CardData{},
 	}
 
+	if form.Has("public") {
+		card.Public = true
+	}
+
 	card.Name = form.Get("char_name")
 	card.Description = form.Get("char_description")
 
