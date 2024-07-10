@@ -18,9 +18,11 @@ import (
 	"app/internal/app/notifications"
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
+	"app/pkg/llm"
 	"app/pkg/swearfilter"
 	"app/pkg/tools"
 	"app/pkg/twitch"
+	"app/pkg/whisperx"
 
 	"github.com/google/uuid"
 )
@@ -28,11 +30,11 @@ import (
 type Processor struct {
 	logger *slog.Logger
 
-	llm      *ai.VLLMClient
+	llmModel *llm.Client
 	styleTts *ai.StyleTTSClient
 	metaTts  *ai.MetaTTSClient
 	rvc      *ai.RVCClient
-	whisper  *ai.WhisperClient
+	whisper  *whisperx.Client
 
 	db *db.DB
 
@@ -41,10 +43,10 @@ type Processor struct {
 	controlPanelNotifications *notifications.Client
 }
 
-func NewProcessor(logger *slog.Logger, llm *ai.VLLMClient, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient,
-	rvc *ai.RVCClient, whisper *ai.WhisperClient, db *db.DB, ffmpeg *ffmpeg.Client, controlPanelNotifications *notifications.Client) *Processor {
+func NewProcessor(logger *slog.Logger, llmModel *llm.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient,
+	rvc *ai.RVCClient, whisper *whisperx.Client, db *db.DB, ffmpeg *ffmpeg.Client, controlPanelNotifications *notifications.Client) *Processor {
 	return &Processor{
-		llm:      llm,
+		llmModel: llmModel,
 		styleTts: styleTts,
 		metaTts:  metaTts,
 		rvc:      rvc,
@@ -223,13 +225,15 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		}
 
 		if rewardType == db.TwitchRewardTTS {
-			requestAudio, err := p.TTS(ctx, msg.TwitchMessage.Message, charCard.Data.VoiceReference)
+			filteredRequest := p.FilterText(ctx, broadcaster.ID, msg.TwitchMessage.Message)
+
+			requestAudio, err := p.TTS(ctx, filteredRequest, charCard.Data.VoiceReference)
 			if err != nil {
 				logger.Error("error tts", "err", err)
 				return err
 			}
 
-			requestTtsDone, err := p.playTTS(ctx, eventWriter, msg.TwitchMessage.Message, msg.ID.String(), requestAudio)
+			requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequest, msg.ID.String(), requestAudio)
 			if err != nil {
 				logger.Error("error playing tts", "err", err)
 				return err
@@ -251,7 +255,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		requester := msg.TwitchMessage.TwitchLogin
 
-		prompt, err := p.craftPrompt(ctx, charCard, requester, msg.TwitchMessage.Message)
+		prompt, err := p.craftPrompt(charCard, requester, msg.TwitchMessage.Message)
 		if err != nil {
 			logger.Error("error crafting prompt", "err", err)
 			continue
@@ -264,18 +268,20 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		go func() {
 			defer close(llmResultDone)
 
-			llmResult, llmResultErr = p.llm.Ask(ctx, prompt)
+			llmResult, llmResultErr = p.llmModel.Ask(ctx, prompt)
 		}()
 
 		requestText := requester + " asked me: " + msg.TwitchMessage.Message
 
-		requestAudio, err := p.TTS(ctx, requestText, charCard.Data.VoiceReference)
+		filteredRequestText := p.FilterText(ctx, broadcaster.ID, requestText)
+
+		requestAudio, err := p.TTS(ctx, filteredRequestText, charCard.Data.VoiceReference)
 		if err != nil {
 			logger.Error("error tts", "err", err)
 			return err
 		}
 
-		requestTtsDone, err := p.playTTS(ctx, eventWriter, requestText, msg.ID.String(), requestAudio)
+		requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequestText, msg.ID.String(), requestAudio)
 		if err != nil {
 			logger.Error("error playing tts", "err", err)
 			return err
@@ -287,11 +293,28 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				logger.Error("error asking llm", "err", llmResultErr)
 				continue
 			}
+
+			if len(llmResult) == 0 {
+				llmResult = "empty response"
+			}
+
+			err = p.db.UpdateMessageData(ctx, msg.ID, &db.MessageData{
+				AIResponse: llmResult,
+			})
+			if err != nil {
+				logger.Error("error updating message data", "err", err)
+				continue
+			}
+			p.controlPanelNotifications.Notify(broadcaster.ID)
+
+			logger.Info("llm result", "result", llmResult)
 		case <-ctx.Done():
 			return nil
 		}
 
-		responseTtsAudio, err := p.TTS(ctx, llmResult, charCard.Data.VoiceReference)
+		filteredResponse := p.FilterText(ctx, broadcaster.ID, llmResult)
+
+		responseTtsAudio, err := p.TTS(ctx, filteredResponse, charCard.Data.VoiceReference)
 		if err != nil {
 			logger.Error("error tts", "err", err)
 			continue
@@ -303,7 +326,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return nil
 		}
 
-		responseTtsDone, err := p.playTTS(ctx, eventWriter, llmResult, msg.ID.String(), responseTtsAudio)
+		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID.String(), responseTtsAudio)
 		if err != nil {
 			logger.Error("error playing tts", "err", err)
 			continue
@@ -346,12 +369,12 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 			EventData: audioMsg,
 		})
 
-		startTS := time.Now() // linter, are you drunk, or am I drunk???
+		startTS := time.Now()
 
 		fullText := ""
 
 		for _, timing := range textTimings {
-			fullText += timing.Text
+			fullText += timing.Text + " "
 
 			eventWriter(&conns.DataEvent{
 				EventType: conns.EventTypeText,
@@ -375,6 +398,7 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 }
 
 func (p *Processor) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
+
 	ttsResult, err := p.styleTts.TTS(ctx, msg, refAudio)
 	if err != nil {
 		return nil, err
@@ -383,15 +407,15 @@ func (p *Processor) TTS(ctx context.Context, msg string, refAudio []byte) ([]byt
 	return ttsResult, nil
 }
 
-func (p *Processor) FilterText(ctx context.Context, broadcaster *db.User, text string) string {
+func (p *Processor) FilterText(ctx context.Context, broadcasterID uuid.UUID, text string) string {
 	var swears []string
 
-	filters, err := p.db.GetFilters(ctx, broadcaster.ID)
+	userSettings, err := p.db.GetUserSettings(ctx, broadcasterID)
 	if err == nil {
-		slices.Concat(swears, strings.Split(filters, ","))
+		swears = slices.Concat(swears, strings.Split(userSettings.Filters, ","))
 	}
 
-	slices.Concat(swears, swearfilter.Swears)
+	swears = slices.Concat(swears, swearfilter.Swears)
 
 	swearFilterObj := swearfilter.NewSwearFilter(false, swears...)
 
@@ -405,8 +429,35 @@ func (p *Processor) FilterText(ctx context.Context, broadcaster *db.User, text s
 	return filtered
 }
 
-func (p *Processor) craftPrompt(ctx context.Context, char *db.Card, requester string, message string) (prompt string, err error) {
-	panic("implement me")
+func (p *Processor) craftPrompt(char *db.Card, requester string, message string) (string, error) {
+	data := char.Data
+
+	messageExamples := &strings.Builder{}
+	for _, msgExample := range data.MessageExamples {
+		messageExamples.WriteString(fmt.Sprintf("<START>###UserName: %s\n###%s: %s<END>\n", msgExample.Request, data.Name, msgExample.Response))
+	}
+
+	prompt := &strings.Builder{}
+	prompt.WriteString("Start request/response pairs with <START> and end with <END>\n")
+	if len(data.Name) != 0 {
+		prompt.WriteString(fmt.Sprintf("Name: %s\n", data.Name))
+	}
+	if len(data.Description) != 0 {
+		prompt.WriteString(fmt.Sprintf("Description: %s\n", data.Description))
+	}
+	if len(data.Personality) != 0 {
+		prompt.WriteString(fmt.Sprintf("Personality: %s\n", data.Personality))
+	}
+	if len(data.MessageExamples) != 0 {
+		prompt.WriteString(fmt.Sprintf("Message Examples: %s", messageExamples.String()))
+	}
+	if len(data.SystemPrompt) != 0 {
+		prompt.WriteString(fmt.Sprintf("System Instructions: %s\n", data.SystemPrompt))
+	}
+
+	prompt.WriteString(fmt.Sprintf("Prompt: <START>###%s: %s\n###%s: ", requester, message, data.Name))
+
+	return prompt.String(), nil
 }
 
 func (p *Processor) getAudioLength(ctx context.Context, data []byte) (time.Duration, error) {
@@ -418,23 +469,16 @@ func (p *Processor) getAudioLength(ctx context.Context, data []byte) (time.Durat
 	return res.Duration, nil
 }
 
-type timing struct {
-	Text  string
-	Start time.Duration
-	End   time.Duration
-}
-
-func (p *Processor) alignTextToAudio(ctx context.Context, text string, audio []byte) ([]timing, error) {
-	audioData, err := p.getAudioLength(ctx, audio)
+func (p *Processor) alignTextToAudio(ctx context.Context, text string, audio []byte) ([]whisperx.Timiing, error) {
+	audioLen, err := p.getAudioLength(ctx, audio)
 	if err != nil {
 		return nil, err
 	}
 
-	return []timing{ // TODO: use https://github.com/Shiro836/whisperX-api to align text to audio
-		{
-			Text:  text,
-			Start: 0,
-			End:   audioData,
-		},
-	}, nil
+	timings, err := p.whisper.Align(ctx, text, audio, audioLen)
+	if err != nil {
+		return nil, fmt.Errorf("error aligning text to audio: %w", err)
+	}
+
+	return timings, nil
 }

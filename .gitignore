@@ -1,5 +1,9 @@
 cfg/cfg.yaml
 cfg/docker_cfg.yaml
+cfg/prod_cfg.yaml
+
+prod
+prod.sh
 
 playground
 
@@ -9,3 +13,4 @@ pkg/ai/refs/*
 pkg/ai/res/*
 pkg/ffmpeg/refs/*
 pkg/ffmpeg/tmp/*
+pkg/whisperx/refs/*

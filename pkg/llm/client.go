@@ -1,8 +1,7 @@
-package ai
+package llm
 
 import (
 	"app/pkg/tools"
-
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,31 +12,38 @@ import (
 	"time"
 )
 
-type VLLMConfig struct {
-	URL string `yaml:"url"`
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
-type VLLMClient struct {
+type Config struct {
+	URL         string `yaml:"url"`
+	AccessToken string `yaml:"access_token"`
+
+	Model     string `yaml:"model"`
+	MaxTokens int    `yaml:"max_tokens"`
+}
+
+type Client struct {
 	httpClient HTTPClient
-	cfg        *VLLMConfig
+	cfg        *Config
 }
 
-func NewVLLMClient(httpClient HTTPClient, cfg *VLLMConfig) *VLLMClient {
-	return &VLLMClient{
+func New(httpClient HTTPClient, cfg *Config) *Client {
+	return &Client{
 		httpClient: httpClient,
 		cfg:        cfg,
 	}
 }
 
-func (c *VLLMClient) Ask(ctx context.Context, prompt string) (string, error) {
+func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 	variants, err := c.reqAi(ctx, &aiReq{
-		N:         5,
-		Prompt:    prompt,
+		Model: c.cfg.Model,
+
+		Prompt: prompt,
+
 		MaxTokens: 256,
-		BestOf:    10,
-		TopK:      40,
-		TopP:      0.95,
-		Stop:      []string{"###", "<START>"},
+		Stop:      []string{"###", "<START>", "<END>"},
 
 		Temperature:      0.5,
 		FrequencyPenalty: 0.9,
@@ -58,22 +64,23 @@ func (c *VLLMClient) Ask(ctx context.Context, prompt string) (string, error) {
 }
 
 type aiReq struct {
-	N                int      `json:"n,omitempty"`
+	Model            string   `json:"model"`
 	Prompt           string   `json:"prompt"`
 	MaxTokens        int      `json:"max_tokens"`
-	TopP             float32  `json:"top_p"`
-	TopK             int      `json:"top_k"`
-	BestOf           int      `json:"best_of"`
+	Temperature      float64  `json:"temperature"`
+	FrequencyPenalty float64  `json:"frequency_penalty"`
 	Stop             []string `json:"stop"`
-	Temperature      float32  `json:"temperature"`
-	FrequencyPenalty float32  `json:"frequency_penalty"`
+}
+
+type choice struct {
+	Text string `json:"text"`
 }
 
 type aiResp struct {
-	Responses []string `json:"text"`
+	Choices []choice `json:"choices"`
 }
 
-func (c *VLLMClient) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
+func (c *Client) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 	data, err := json.Marshal(&req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal ai request struct: %w", err)
@@ -84,6 +91,8 @@ func (c *VLLMClient) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 		return nil, fmt.Errorf("failed to create ai http request: %w", err)
 	}
 
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.cfg.AccessToken))
+
 	start := time.Now()
 
 	response, err := c.httpClient.Do(request)
@@ -92,15 +101,15 @@ func (c *VLLMClient) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 	}
 	defer tools.DrainAndClose(response.Body)
 
-	if response.StatusCode != http.StatusOK {
-		metrics.LLMErrors.WithLabelValues(strconv.Itoa(response.StatusCode)).Inc()
-		return nil, fmt.Errorf("unexpected status code: %d", response.StatusCode)
-	}
-
 	responseData, err := io.ReadAll(response.Body)
 	if err != nil {
 		metrics.LLMErrors.WithLabelValues("500").Inc()
 		return nil, fmt.Errorf("failed to read ai http response body: %w", err)
+	}
+
+	if response.StatusCode != http.StatusOK {
+		metrics.LLMErrors.WithLabelValues(strconv.Itoa(response.StatusCode)).Inc()
+		return nil, fmt.Errorf("unexpected status code: %d, body: %s", response.StatusCode, string(responseData))
 	}
 
 	var resp *aiResp
@@ -110,11 +119,12 @@ func (c *VLLMClient) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 		return nil, fmt.Errorf("failed to unmarshal ai http response body: %w", err)
 	}
 
-	for i := range resp.Responses {
-		resp.Responses[i] = resp.Responses[i][len(req.Prompt):]
-	}
-
 	metrics.LLMQueryTime.Observe(time.Since(start).Seconds())
 
-	return resp.Responses, nil
+	ans := make([]string, 0, len(resp.Choices))
+	for _, choice := range resp.Choices {
+		ans = append(ans, choice.Text)
+	}
+
+	return ans, nil
 }

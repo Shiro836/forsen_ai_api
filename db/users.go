@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -163,6 +164,37 @@ func (db *DB) GetUserBySession(ctx context.Context, session string) (*User, erro
 	return &user, nil
 }
 
-func (db *DB) GetFilters(ctx context.Context, userID uuid.UUID) (string, error) {
-	panic("not implemented")
+type UserSettings struct {
+	Filters        string        `json:"filters"`
+	RequestTimeout time.Duration `json:"requestTimeout"`
+}
+
+func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {
+	_, err := db.Exec(ctx, `
+		UPDATE users
+		SET
+			data = $1
+		WHERE id = $2
+	`, settings, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update user data: %w", err)
+	}
+
+	return nil
+}
+
+func (db *DB) GetUserSettings(ctx context.Context, userID uuid.UUID) (*UserSettings, error) {
+	var settings UserSettings
+
+	err := db.QueryRow(ctx, `
+		SELECT
+			data
+		FROM users
+		WHERE id = $1
+	`, userID).Scan(&settings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user settings: %w", err)
+	}
+
+	return &settings, nil
 }

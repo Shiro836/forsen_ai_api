@@ -9,6 +9,7 @@ import (
 	"app/internal/app/conns"
 	"app/internal/app/notifications"
 	"app/pkg/ai"
+	"app/pkg/llm"
 	"app/pkg/twitch"
 
 	"github.com/go-chi/chi/v5"
@@ -32,7 +33,7 @@ type API struct {
 
 	styleTts *ai.StyleTTSClient
 	metaTts  *ai.MetaTTSClient
-	llm      *ai.VLLMClient
+	llm      *llm.Client
 
 	twitchClient *twitch.Client
 
@@ -42,7 +43,7 @@ type API struct {
 }
 
 func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, controlPanelNotifications *notifications.Client,
-	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, llm *ai.VLLMClient, db *db.DB) *API {
+	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, llm *llm.Client, db *db.DB) *API {
 	return &API{
 		cfg: cfg,
 
@@ -100,7 +101,6 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/", api.nav(api.home))
 		router.Get("/characters", api.nav(api.characters))
-		router.Get("/filters", api.nav(api.filters))
 
 		router.Get("/characters/{character_id}", api.nav(api.character))
 		router.Post("/characters/{character_id}", api.upsertCharacter)
@@ -110,11 +110,14 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/characters/{character_id}/image", api.charImage)
 		// router.Get("/characters/{character_id}/audio", api.charAudio)
 
-		router.Post("/characters/{character_id}/reward_tts", api.rewardTTS)
-		//router.Post("/characters/{character_id}/reward_ai", api.rewardAI)
+		router.Post("/characters/{character_id}/reward_tts", api.reward(db.TwitchRewardTTS))
+		router.Post("/characters/{character_id}/reward_ai", api.reward(db.TwitchRewardAI))
 
 		router.Post("/control/grant", http.HandlerFunc(api.controlPanelGrant))
 		router.Post("/control/revoke", http.HandlerFunc(api.controlPanelRevoke))
+
+		router.Get("/filters", api.nav(api.filters))
+		router.Post("/filters", api.updateFilters)
 	})
 
 	router.Group(func(router chi.Router) {

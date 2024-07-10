@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -129,6 +130,41 @@ func (db *DB) UpdateMessageStatus(ctx context.Context, msgID uuid.UUID, status M
 	return nil
 }
 
+type MessageData struct {
+	AIResponse string `json:"ai_response"`
+}
+
+func (db *DB) UpdateMessageData(ctx context.Context, msgID uuid.UUID, data *MessageData) error {
+	_, err := db.Exec(ctx, `
+		update
+			msg_queue
+		set
+			data = $1,
+			updated = nextval('updated_seq')
+		where
+			id = $2
+	`, data, msgID)
+	if err != nil {
+		return fmt.Errorf("failed to update message data: %w", err)
+	}
+
+	return nil
+}
+
+func ParseMessageData(data []byte) (*MessageData, error) {
+	if len(data) == 0 {
+		return &MessageData{}, nil
+	}
+
+	msgData := MessageData{}
+	err := json.Unmarshal(data, &msgData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal message data: %w", err)
+	}
+
+	return &msgData, nil
+}
+
 func (db *DB) UpdateCurrentMessages(ctx context.Context, userID uuid.UUID) error {
 	_, err := db.Exec(ctx, `
 		update
@@ -155,7 +191,8 @@ func (db *DB) GetMessageUpdates(ctx context.Context, userID uuid.UUID, updated i
 			user_id,
 			status,
 			updated,
-			msg
+			msg,
+			data
 		from
 			msg_queue
 		where
@@ -170,7 +207,7 @@ func (db *DB) GetMessageUpdates(ctx context.Context, userID uuid.UUID, updated i
 	messages := make([]*Message, 0, 20)
 	for rows.Next() {
 		var msg Message
-		err := rows.Scan(&msg.ID, &msg.UserID, &msg.Status, &msg.Updated, &msg.TwitchMessage)
+		err := rows.Scan(&msg.ID, &msg.UserID, &msg.Status, &msg.Updated, &msg.TwitchMessage, &msg.Data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan message: %w", err)
 		}

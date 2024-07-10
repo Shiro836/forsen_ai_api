@@ -1,6 +1,20 @@
 package main
 
 import (
+	"context"
+	_ "embed"
+	"flag"
+	"fmt"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"strconv"
+	"sync"
+	"time"
+
+	"app/cfg"
 	"app/db"
 	"app/internal/app/api"
 	"app/internal/app/conns"
@@ -9,22 +23,10 @@ import (
 	"app/internal/app/processor"
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
+	"app/pkg/llm"
 	"app/pkg/slg"
 	"app/pkg/twitch"
-	"flag"
-	"fmt"
-	"strconv"
-
-	"app/cfg"
-	"context"
-	_ "embed"
-	"log"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"sync"
-	"time"
+	"app/pkg/whisperx"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"gopkg.in/yaml.v3"
@@ -74,22 +76,22 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	llm := ai.NewVLLMClient(httpClient, &cfg.LLM)
+	llmModel := llm.New(httpClient, &cfg.LLM)
 	styleTts := ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
 	metaTts := ai.NewMetaTTSClient(httpClient, &cfg.MetaTTS)
 	rvc := ai.NewRVCClient(httpClient, &cfg.Rvc)
-	whisper := ai.NewWhisperClient(httpClient, &cfg.Whisper)
+	whisper := whisperx.New(httpClient, &cfg.Whisper)
 	ffmpeg := ffmpeg.New(&cfg.Ffmpeg)
 
 	controlPanelNotifications := notifications.New()
 
-	processor := processor.NewProcessor(logger.WithGroup("processor"), llm, styleTts, metaTts, rvc, whisper, db, ffmpeg, controlPanelNotifications)
+	processor := processor.NewProcessor(logger.WithGroup("processor"), llmModel, styleTts, metaTts, rvc, whisper, db, ffmpeg, controlPanelNotifications)
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), processor)
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, controlPanelNotifications, twitchClient, styleTts, metaTts, llm, db)
+	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, controlPanelNotifications, twitchClient, styleTts, metaTts, llmModel, db)
 
 	router := api.NewRouter()
 

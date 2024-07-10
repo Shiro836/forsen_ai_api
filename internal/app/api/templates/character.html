@@ -164,7 +164,7 @@
             </div>
 
             <div class="flex justify-end pt-8">
-                <button hx-post="/characters/{{.CharacterID}}" hx-target="#operation_result" class="py-2 px-4 border-2 {{template "button-2"}}">{{if .Card}}Update{{else}}Create{{end}}</button>
+                <button class='py-2 px-4 border-2 {{template "button-2"}}' hx-post="/characters/{{.CharacterID}}" hx-target="#operation_result">{{if .Card}}Update{{else}}Create{{end}}</button>
             </div>
 
             <div id="operation_result"></div>

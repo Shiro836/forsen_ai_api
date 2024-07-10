@@ -15,22 +15,28 @@
         </div>
     </div>
     <div class="pt-6">
-        <table class="table-auto w-full text-left">
+        <table class="table-auto w-full text-left text-sm border-collapse border-spacing-2">
             <thead>
                 <tr>
-                    <th scope="col" class="px-10">
+                    <th scope="col" class='px-8 {{template "ui-border-clr"}} px-10 border-r border-b'>
                         Requested By
                     </th>
-                    <th scope="col" class="px-32">
+                    <th scope="col" class='px-4 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                        Type
+                    </th>
+                    <th scope="col" class='px-8 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                        Char Name
+                    </th>
+                    <th scope="col" class='px-20 {{template "ui-border-clr"}} px-10 border-r border-b'>
                         Request
                     </th>
-                    <th scope="col" class="">
-                        Skipped By
+                    <th scope="col" class='px-20 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                        Response
                     </th>
-                    <th scope="col" class="">
+                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-r border-b'>
                         Status
                     </th>
-                    <th scope="col" class="">
+                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-b'>
                         Actions
                     </th>
                 </tr>
@@ -136,29 +142,36 @@
                 data = JSON.parse(decoder.decode(base64ToArrayBuffer(data)));
                 console.log(data);
 
+                let id = data['id'];
+
                 switch (action) {
                     case 0: // delete
-                        var row = document.getElementById(data['id']);
+                        var row = document.getElementById(id);
                         if (row !== null) {
                             row.parentNode.removeChild(row);
                         }
 
                         break;
                     case 1: // upsert
-                        var row = document.getElementById(data['id'])
+                        var row = document.getElementById(id)
                         if (row === null) {
                             row = table.insertRow(-1);
-                            row.id = data['id'];
+                            row.id = id;
 
-                            row.insertCell(0).innerHTML = data['requested_by'];
-                            row.insertCell(1).innerHTML = data['request'];
-                            row.insertCell(2).innerHTML = data['skipped_by'];
-                            row.insertCell(3).innerHTML = data['status'];
-                            row.insertCell(4).innerHTML = '<button id="delete_' + data['id'] + '"">Delete</button>';
+                            row.insertCell(-1).innerHTML = data['requested_by'];
+                            row.insertCell(-1).innerHTML = data['type'];
+                            row.insertCell(-1).innerHTML = data['char_name'];
+                            row.insertCell(-1).innerHTML = data['request'];
+                            row.insertCell(-1).innerHTML = data['response'];
+                            row.insertCell(-1).innerHTML = data['status'];
+                            row.insertCell(-1).innerHTML = '<button id="delete_' + id + '"">Delete</button>';
 
-                            let id = data['id'];
+                            for (let j = 0; j < 6; j++) {
+                                row.cells[j].className = '{{template "ui-border-clr"}} border-r border-t'
+                            }
+                            row.cells[7].className = '{{template "ui-border-clr"}} border-l border-t'
 
-                            document.getElementById('delete_' + data['id']).addEventListener('click', function() {
+                            document.getElementById('delete_' + id).addEventListener('click', function() {
                                 ws.send(JSON.stringify({
                                     'id': id,
                                 }));
@@ -166,9 +179,11 @@
                         }
                         else {
                             row.cells[0].innerHTML = data['requested_by'];
-                            row.cells[1].innerHTML = data['request'];
-                            row.cells[2].innerHTML = data['skipped_by'];
-                            row.cells[3].innerHTML = data['status'];
+                            row.cells[1].innerHTML = data['type'];
+                            row.cells[2].innerHTML = data['char_name'];
+                            row.cells[3].innerHTML = data['request'];
+                            row.cells[4].innerHTML = data['response'];
+                            row.cells[5].innerHTML = data['status'];
                         }
 
                         break;

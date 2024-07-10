@@ -302,12 +302,38 @@ loop:
 				}
 			case db.MsgStatusCurrent, db.MsgStatusWait:
 				action = ActionUpsert
+				charCard, rewardType, err := api.db.GetCharCardByTwitchReward(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID)
+				if err != nil {
+					logger.Error("failed to get char card by twitch reward", "err", err)
+					break loop
+				}
+
+				var rewardTypeStr string = "unknown"
+				switch rewardType {
+				case db.TwitchRewardTTS:
+					rewardTypeStr = "TTS"
+				case db.TwitchRewardAI:
+					rewardTypeStr = "AI"
+				}
+
+				msgData, err := db.ParseMessageData(dbMessage.Data)
+				if err != nil {
+					logger.Error("failed to parse message data", "err", err)
+					break loop
+				}
+
 				data, err = json.Marshal(&msgUpsert{
 					ID: dbMessage.ID.String(),
 
-					Request: dbMessage.TwitchMessage.Message,
+					RequestedBy: dbMessage.TwitchMessage.TwitchLogin,
 
-					Status: dbMessage.Status,
+					Type:     rewardTypeStr,
+					CharName: charCard.Name,
+
+					Request:  dbMessage.TwitchMessage.Message,
+					Response: msgData.AIResponse,
+
+					Status: dbMessage.Status.String(),
 				})
 				if err != nil {
 					logger.Error("failed to marshal message", "err", err)
@@ -358,14 +384,13 @@ type msgUpsert struct {
 
 	RequestedBy string `json:"requested_by"`
 
-	Request          string `json:"request"`
-	FilteredRequest  string `json:"filtered_request"`
-	Response         string `json:"response"`
-	FilteredResponse string `json:"filtered_response"`
+	Type     string `json:"type"`
+	CharName string `json:"char_name"`
 
-	SkippedBy string `json:"skipped_by"`
+	Request  string `json:"request"`
+	Response string `json:"response"`
 
-	Status db.MsgStatus `json:"status"`
+	Status string `json:"status"`
 }
 
 type Action int

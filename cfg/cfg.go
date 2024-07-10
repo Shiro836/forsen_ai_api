@@ -5,17 +5,19 @@ import (
 	"app/internal/app/api"
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
+	"app/pkg/llm"
 	"app/pkg/twitch"
+	"app/pkg/whisperx"
 )
 
 type Config struct {
 	Api api.Config `yaml:"api"`
 
-	LLM      ai.VLLMConfig     `yaml:"llm"`
+	LLM      llm.Config        `yaml:"llm"`
 	MetaTTS  ai.MetaTTSConfig  `yaml:"meta_tts"`
 	StyleTTS ai.StyleTTSConfig `yaml:"style_tts"`
 	Rvc      ai.RVCConfig      `yaml:"rvc"`
-	Whisper  ai.WhisperConfig  `yaml:"whisper"`
+	Whisper  whisperx.Config   `yaml:"whisper"`
 
 	Twitch twitch.Config `yaml:"twitch"`
 

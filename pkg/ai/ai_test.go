@@ -10,14 +10,14 @@ import (
 
 	_ "embed"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 //go:embed refs/witcher_low.wav
 var audioRef []byte
 
 func TestStyleTTS(t *testing.T) {
-	assert := assert.New(t)
+	assert := require.New(t)
 
 	client := ai.NewStyleTTSClient(http.DefaultClient, &ai.StyleTTSConfig{
 		URL: "http://localhost:4111/tts",

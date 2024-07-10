@@ -19,7 +19,3 @@ func (api *API) home(r *http.Request) template.HTML {
 		URL: r.Host + "/" + user.TwitchLogin,
 	})
 }
-
-func (api *API) filters(r *http.Request) template.HTML {
-	return getHtml("filters.html", nil)
-}

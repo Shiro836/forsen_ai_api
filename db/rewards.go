@@ -14,6 +14,17 @@ const (
 	TwitchRewardAI
 )
 
+func (t TwitchRewardType) String() string {
+	switch t {
+	case TwitchRewardTTS:
+		return "TTS"
+	case TwitchRewardAI:
+		return "AI"
+	default:
+		return "unknown"
+	}
+}
+
 type TwitchRewardData struct{}
 
 type TwitchReward struct {

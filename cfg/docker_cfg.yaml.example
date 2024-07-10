@@ -20,3 +20,7 @@ influx:
   token: forsen-forsen-forsen-forsen
   org: forsen
   bucket: forsen
+ffmpeg:
+  tmp_dir: /tmp
+whisper:
+  url: http://localhost:8777

@@ -35,11 +35,16 @@ func (c *Client) Notify(userID uuid.UUID) {
 		}
 	}()
 
-	limit := time.After(10 * time.Millisecond)
+	limit := time.NewTimer(10 * time.Millisecond)
+	defer func() {
+		if !limit.Stop() {
+			<-limit.C
+		}
+	}()
 
-	for i := 0; i < 100; i++ { // up to 100 subscribers!!!
+	for i := 0; i < 10; i++ {
 		select {
-		case <-limit:
+		case <-limit.C:
 			return
 		default:
 		}
@@ -91,12 +96,6 @@ func (c *Client) SubscribeForNotification(ctx context.Context, userID uuid.UUID)
 				select {
 				case events <- struct{}{}:
 				default:
-				}
-
-				select { // let Notify func finish sending shit to other subscribers
-				case <-ctx.Done():
-					return
-				case <-time.After(40 * time.Millisecond):
 				}
 			}
 		}
