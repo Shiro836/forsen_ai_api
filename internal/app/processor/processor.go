@@ -225,6 +225,11 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		}
 
 		if rewardType == db.TwitchRewardTTS {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeImage,
+				EventData: []byte("/characters/" + charCard.ID.String() + "/image"),
+			})
+
 			filteredRequest := p.FilterText(ctx, broadcaster.ID, msg.TwitchMessage.Message)
 
 			requestAudio, err := p.TTS(ctx, filteredRequest, charCard.Data.VoiceReference)
@@ -244,6 +249,11 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			case <-ctx.Done():
 				return nil
 			}
+
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeImage,
+				EventData: []byte(" "),
+			})
 
 			continue
 		}
@@ -270,6 +280,11 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 			llmResult, llmResultErr = p.llmModel.Ask(ctx, prompt)
 		}()
+
+		eventWriter(&conns.DataEvent{
+			EventType: conns.EventTypeImage,
+			EventData: []byte("/characters/" + charCard.ID.String() + "/image"),
+		})
 
 		requestText := requester + " asked me: " + msg.TwitchMessage.Message
 
@@ -343,6 +358,11 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		case <-ctx.Done():
 			return nil
 		}
+
+		eventWriter(&conns.DataEvent{
+			EventType: conns.EventTypeImage,
+			EventData: []byte(" "),
+		})
 	}
 }
 

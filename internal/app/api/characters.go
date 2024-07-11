@@ -240,6 +240,20 @@ func (api *API) extractVoiceRef(r *http.Request) ([]byte, error) {
 	return voiceRef, nil
 }
 
+func (api *API) extractImage(r *http.Request) ([]byte, error) {
+	file, _, err := r.FormFile("image")
+	if err != nil {
+		return nil, fmt.Errorf("r.FormFile(): %w", err)
+	}
+
+	image, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("io.ReadAll(): %w", err)
+	}
+
+	return image, nil
+}
+
 func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWriter, r *http.Request) {
 	var voiceRef []byte
 	if _, ok := r.MultipartForm.File["voice_ref"]; !ok {
@@ -265,6 +279,31 @@ func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWri
 		}
 	}
 	card.Data.VoiceReference = voiceRef
+
+	var image []byte
+	if _, ok := r.MultipartForm.File["image"]; !ok {
+		oldCard, err := api.db.GetCharCardByID(r.Context(), user.ID, card.ID)
+		if err != nil {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: err.Error(),
+			})
+			return
+		}
+
+		image = oldCard.Data.Image
+	} else {
+		var err error
+		image, err = api.extractImage(r)
+		if err != nil {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: err.Error(),
+			})
+			return
+		}
+	}
+	card.Data.Image = image
 
 	if err := api.db.UpdateCharCard(r.Context(), user.ID, card); err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
@@ -296,8 +335,26 @@ func (api *API) insertCharacter(user *db.User, card *db.Card, w http.ResponseWri
 		return
 	}
 
+	image, err := api.extractImage(r)
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "extractImage: " + err.Error(),
+		})
+		return
+	}
+
+	if len(image) == 0 {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "No Image Provided",
+		})
+		return
+	}
+
 	card.OwnerUserID = user.ID
 	card.Data.VoiceReference = voiceRef
+	card.Data.Image = image
 
 	cardID, err := api.db.InsertCharCard(r.Context(), card)
 	if err != nil {
@@ -414,16 +471,16 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	card, err := api.db.GetCharCardByID(r.Context(), user.ID, characterID)
+	charImage, err := api.db.GetCharImage(r.Context(), user.ID, characterID)
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "GetCharCardByID: " + err.Error(),
+			ErrorMessage: "GetCharImage: " + err.Error(),
 		})
 		return
 	}
 
-	if len(card.Data.Image) == 0 {
+	if len(charImage) == 0 {
 		img, err := staticFS.ReadFile("static/doctorWTF.png")
 		if err != nil {
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
@@ -437,5 +494,5 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _ = w.Write(card.Data.Image)
+	_, _ = w.Write(charImage)
 }
