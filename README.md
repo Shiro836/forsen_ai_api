@@ -9,6 +9,7 @@
 
 ## Plans:
 - [x] Security features (added control panel sharing and fixed filters, so I guess it's done)
+- [ ] Add images to chars
 - [ ] Tune LLM
 - [ ] Separate NixOS full setup repo
 - [ ] Switch to metavoice TTS or Mars5 TTS or something better
