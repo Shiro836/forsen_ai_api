@@ -326,6 +326,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return nil
 		}
 
+		select { // to prevent audio overlap
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+			return nil
+		}
+
 		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID.String(), responseTtsAudio)
 		if err != nil {
 			logger.Error("error playing tts", "err", err)
@@ -349,6 +355,13 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 	textTimings, err := p.alignTextToAudio(ctx, msg, audio)
 	if err != nil {
 		return nil, fmt.Errorf("error aligning text to audio: %w", err)
+	}
+
+	mp3Audio, err := p.ffmpeg.Ffmpeg2Mp3(ctx, audio)
+	if err == nil {
+		audio = mp3Audio
+	} else {
+		p.logger.Error("error converting audio to mp3", "err", err)
 	}
 
 	done := make(chan struct{})
@@ -419,14 +432,22 @@ func (p *Processor) FilterText(ctx context.Context, broadcasterID uuid.UUID, tex
 
 	swearFilterObj := swearfilter.NewSwearFilter(false, swears...)
 
-	filtered := text
+	// beforeFilter := text
 
-	tripped, _ := swearFilterObj.Check(text)
-	for _, word := range tripped {
-		filtered = tools.IReplace(filtered, word, strings.Repeat("*", len(word)))
+	tripped, err := swearFilterObj.Check(text)
+	if err != nil {
+		p.logger.Error("error checking for swears", "err", err)
+
+		return text
 	}
 
-	return filtered
+	for _, word := range tripped {
+		text = tools.IReplace(text, word, "(filtered)")
+	}
+
+	// p.logger.Debug("filter", "tripped", tripped, "filters", swears, "before", beforeFilter, "after", text)
+
+	return text
 }
 
 func (p *Processor) craftPrompt(char *db.Card, requester string, message string) (string, error) {

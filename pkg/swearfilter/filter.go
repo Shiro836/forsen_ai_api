@@ -26,6 +26,10 @@ type SwearFilter struct {
 
 // NewSwearFilter returns an initialized SwearFilter struct to check messages against
 func NewSwearFilter(enableSpacedBypass bool, uhohwords ...string) (filter *SwearFilter) {
+	for i := range uhohwords {
+		uhohwords[i] = strings.ToLower(uhohwords[i])
+	}
+
 	filter = &SwearFilter{
 		EnableSpacedBypass: enableSpacedBypass,
 		BadWords:           make(map[string]struct{}),
