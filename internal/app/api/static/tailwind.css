@@ -763,6 +763,20 @@ video {
   height: 100%;
 }
 
+.h-min {
+  height: -moz-min-content;
+  height: min-content;
+}
+
+.h-max {
+  height: -moz-max-content;
+  height: max-content;
+}
+
+.max-h-full {
+  max-height: 100%;
+}
+
 .w-11 {
   width: 2.75rem;
 }
@@ -1006,9 +1020,14 @@ video {
   stroke: currentColor;
 }
 
-.object-fill {
-  -o-object-fit: fill;
-     object-fit: fill;
+.object-contain {
+  -o-object-fit: contain;
+     object-fit: contain;
+}
+
+.object-scale-down {
+  -o-object-fit: scale-down;
+     object-fit: scale-down;
 }
 
 .p-4 {

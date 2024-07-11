@@ -1,7 +1,7 @@
 {{ block "char_frame" . }}
 
 <div class="grid grid-rows-12 grid-cols-12 w-full h-full overflow-hidden">
-    <img class="col-start-2 col-end-7 row-start-2 row-end-7 object-fill w-full h-full" src="/characters/{{ .Card.ID }}/image"></img>
+    <img class="col-start-2 col-end-7 row-start-2 row-end-7 object-contain max-h-full" src="/characters/{{ .Card.ID }}/image"></img>
     <div class="col-start-1 col-end-13 row-start-8 row-end-11 text-xl text-center">{{ .Card.Name }}</div>
     {{ if .CanEdit }}
     <button  class="row-start-11 row-end-12 col-start-2 col-end-4" hx-get="/characters/{{ .Card.ID }}" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Edit</button>
