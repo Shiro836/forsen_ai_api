@@ -8,7 +8,9 @@
 - Forsen forsen forsen forsen forsen forsen forsen forsen forsen forsen.
 
 ## Plans:
-- [ ] Security features
+- [x] Security features (added control panel sharing and fixed filters, so I guess it's done)
 - [ ] Tune LLM
 - [ ] Separate NixOS full setup repo
 - [ ] Switch to metavoice TTS or Mars5 TTS or something better
+- [ ] Add more chars
+- [ ] Train TTS on more voices
