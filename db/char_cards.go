@@ -43,7 +43,7 @@ type CardData struct {
 	VoiceReference []byte `json:"voice_reference"`
 }
 
-func (db *DB) GetCharImage(ctx context.Context, userID uuid.UUID, cardID uuid.UUID) ([]byte, error) {
+func (db *DB) GetCharImage(ctx context.Context, cardID uuid.UUID) ([]byte, error) {
 	var data *CardData
 	err := db.QueryRow(ctx, `
 		select
@@ -51,9 +51,7 @@ func (db *DB) GetCharImage(ctx context.Context, userID uuid.UUID, cardID uuid.UU
 		from char_cards cc
 		where
 			cc.id = $1
-		and
-			(cc.owner_user_id = $2 or cc.public = true)
-	`, cardID, userID).Scan(&data)
+	`, cardID).Scan(&data)
 	if err != nil {
 		return nil, fmt.Errorf("get char image: %w", err)
 	}
@@ -76,7 +74,8 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 		from char_cards cc
 		where
 			cc.id = $1
-			and cc.owner_user_id = $2
+		and
+			(cc.owner_user_id = $2 or cc.public = true)
 	`, cardID, userID).Scan(
 		&card.ID,
 		&card.OwnerUserID,

@@ -164,12 +164,12 @@
                             row.insertCell(-1).innerHTML = data['request'];
                             row.insertCell(-1).innerHTML = data['response'];
                             row.insertCell(-1).innerHTML = data['status'];
-                            row.insertCell(-1).innerHTML = '<button id="delete_' + id + '"">Delete</button>';
+                            row.insertCell(-1).innerHTML = "<button id='delete_" + id + "'>Delete</button>";
 
                             for (let j = 0; j < 6; j++) {
                                 row.cells[j].className = '{{template "ui-border-clr"}} border-r border-t'
                             }
-                            row.cells[7].className = '{{template "ui-border-clr"}} border-l border-t'
+                            row.cells[6].className = '{{template "ui-border-clr"}} border-l border-t'
 
                             document.getElementById('delete_' + id).addEventListener('click', function() {
                                 ws.send(JSON.stringify({

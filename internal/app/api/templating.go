@@ -127,6 +127,12 @@ func empty(r *http.Request) template.HTML {
 	return ""
 }
 
+func (api *API) elemNoPermissions(getContent func(r *http.Request) template.HTML) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(getContent(r)))
+	})
+}
+
 func (api *API) elem(getContent func(r *http.Request) template.HTML) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := ctxstore.GetUser(r.Context())

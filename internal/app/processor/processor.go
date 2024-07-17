@@ -347,6 +347,19 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return nil
 		}
 
+		func() {
+			skippedMsgIDsLock.Lock()
+			defer skippedMsgIDsLock.Unlock()
+
+			if _, ok := skippedMsgIDs[msg.ID]; ok {
+				skipMsg = true
+			}
+		}()
+
+		if skipMsg {
+			continue
+		}
+
 		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID.String(), responseTtsAudio)
 		if err != nil {
 			logger.Error("error playing tts", "err", err)

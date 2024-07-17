@@ -452,14 +452,14 @@ func (api *API) newMessageExample(r *http.Request) template.HTML {
 }
 
 func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
-	user := ctxstore.GetUser(r.Context())
-	if user == nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusUnauthorized,
-			ErrorMessage: "not authorized",
-		})
-		return
-	}
+	// user := ctxstore.GetUser(r.Context())
+	// if user == nil {
+	// 	_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+	// 		ErrorCode:    http.StatusUnauthorized,
+	// 		ErrorMessage: "not authorized",
+	// 	})
+	// 	return
+	// } // for use in obs
 
 	characterIDStr := chi.URLParam(r, "character_id")
 	characterID, err := uuid.Parse(characterIDStr)
@@ -471,7 +471,7 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	charImage, err := api.db.GetCharImage(r.Context(), user.ID, characterID)
+	charImage, err := api.db.GetCharImage(r.Context(), characterID)
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,

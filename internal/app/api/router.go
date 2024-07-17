@@ -89,8 +89,14 @@ func (api *API) NewRouter() *chi.Mux {
 
 	router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))
 
-	router.Get("/{twitch_login}", api.elem(api.obsOverlay))
+	// START No perms routes
+
+	router.Get("/{twitch_login}", api.elemNoPermissions(api.obsOverlay))
 	router.Get("/ws/{twitch_login}", api.wsHandler) // permission is checked based on param cuz there is no auth cookie in obs
+
+	router.Get("/characters/{character_id}/image", api.charImage)
+
+	// END
 
 	router.Get("/control", api.nav(api.controlPanelMenu))
 	router.Get("/control/ws/{twitch_user_id}", api.controlPanelWSConn)
@@ -107,7 +113,7 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/new_message_example/{id}", api.elem(api.newMessageExample))
 
-		router.Get("/characters/{character_id}/image", api.charImage)
+		// router.Get("/characters/{character_id}/image", api.charImage)
 		// router.Get("/characters/{character_id}/audio", api.charAudio)
 
 		router.Post("/characters/{character_id}/reward_tts", api.reward(db.TwitchRewardTTS))

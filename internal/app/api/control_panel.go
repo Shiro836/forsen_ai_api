@@ -508,4 +508,5 @@ func (api *API) adminControlPanelGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_, _ = w.Write([]byte("not implemented"))
 }

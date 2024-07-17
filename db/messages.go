@@ -103,8 +103,10 @@ func (db *DB) CleanQueue(ctx context.Context) error {
 		delete from
 			msg_queue
 		where
-			status = $1
-	`, MsgStatusDeleted)
+			(status = $1 or status = $2)
+		and
+			updated < currval('updated_seq') - 200
+	`, MsgStatusDeleted, MsgStatusProcessed)
 
 	if err != nil {
 		return fmt.Errorf("failed to clean queue: %w", err)
