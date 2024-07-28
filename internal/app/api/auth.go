@@ -111,16 +111,16 @@ func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	twitchUser, err := api.twitchClient.CodeHandler(code)
+	user, err := api.twitchClient.CodeHandler(code)
 	if err != nil {
 		submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
 
 		return
 	}
 
-	twitchUser.Session = uuid.NewString()
+	user.Session = uuid.NewString()
 
-	_, err = api.db.UpsertUser(r.Context(), twitchUser)
+	id, err := api.db.UpsertUser(r.Context(), user)
 	if err != nil {
 		submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
 
@@ -129,13 +129,17 @@ func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, &http.Cookie{
 		Name:  cookieSessionID,
-		Value: twitchUser.Session,
+		Value: user.Session,
 
 		Path:    "/",
 		Expires: time.Now().Add(time.Hour * 24 * 365),
 
 		Secure: true,
 	})
+
+	user.ID = id
+
+	_ = api.handleNewUser(r.Context(), user)
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

@@ -3,6 +3,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"app/db"
@@ -40,6 +41,8 @@ type API struct {
 	db *db.DB
 
 	cfg *Config
+
+	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 }
 
 func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, controlPanelNotifications *notifications.Client,

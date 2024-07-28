@@ -534,5 +534,21 @@ func (p *Processor) alignTextToAudio(ctx context.Context, text string, audio []b
 		return nil, fmt.Errorf("error aligning text to audio: %w", err)
 	}
 
+	if len(timings) == 0 {
+		timings = append(timings, whisperx.Timiing{
+			Start: 0,
+			End:   audioLen,
+			Text:  text,
+		})
+	}
+
+	for _, timing := range timings {
+		if timing.End > audioLen {
+			timing.End = audioLen
+		}
+	}
+
+	timings[len(timings)-1].End = audioLen
+
 	return timings, nil
 }

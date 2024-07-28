@@ -74,7 +74,7 @@ func (db *DB) GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error) 
 		&user.Session,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user by id: %w", err)
+		return nil, fmt.Errorf("failed to get user by id: %w", parseErr(err))
 	}
 
 	return &user, nil
@@ -102,7 +102,7 @@ func (db *DB) GetUserByTwitchLogin(ctx context.Context, twitchLogin string) (*Us
 		&user.Session,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user by twitch login: %w", err)
+		return nil, fmt.Errorf("failed to get user by twitch login: %w", parseErr(err))
 	}
 
 	return &user, nil
@@ -130,7 +130,7 @@ func (db *DB) GetUserByTwitchUserID(ctx context.Context, twitchUserID int) (*Use
 		&user.Session,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user by twitch user id: %w", err)
+		return nil, fmt.Errorf("failed to get user by twitch user id: %w", parseErr(err))
 	}
 
 	return &user, nil

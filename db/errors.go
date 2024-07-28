@@ -46,10 +46,7 @@ func parseErr(err error) error {
 	}
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &dbErr{
-			Code: ErrCodeNoRows,
-			Err:  err,
-		}
+		return ErrNoRows
 	}
 
 	return err

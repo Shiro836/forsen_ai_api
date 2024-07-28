@@ -69,6 +69,14 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 				return
 			}
 
+			defer func() {
+				if permission == db.PermissionStreamer && permissionAction == permissionActionAdd {
+					_ = api.handleNewUser(r.Context(), targetUser)
+				}
+			}()
+
+			// TODO: stop processor
+
 			switch permissionAction {
 			case permissionActionAdd:
 				if err = api.db.AddPermission(r.Context(), initiatorUser, targetUser.TwitchUserID, targetUser.TwitchLogin, permission); err != nil {
@@ -143,7 +151,7 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 			return
 		}
 
-		targetUserID, err := strconv.Atoi(resp.Data.Users[0].ID)
+		targetTwitchUserID, err := strconv.Atoi(resp.Data.Users[0].ID)
 		if err != nil {
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 				ErrorCode:    http.StatusInternalServerError,
@@ -153,9 +161,15 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 			return
 		}
 
+		defer func() {
+			if permission == db.PermissionStreamer && permissionAction == permissionActionAdd {
+				_ = api.handleNewTwitchUserID(r.Context(), targetTwitchUserID)
+			}
+		}()
+
 		switch permissionAction {
 		case permissionActionAdd:
-			if err = api.db.AddPermission(r.Context(), initiatorUser, targetUserID, resp.Data.Users[0].Login, permission); err != nil {
+			if err = api.db.AddPermission(r.Context(), initiatorUser, targetTwitchUserID, resp.Data.Users[0].Login, permission); err != nil {
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusInternalServerError,
 					ErrorMessage: fmt.Sprintf("db add permission err: %v", err),
@@ -164,7 +178,7 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 				return
 			}
 		case permissionActionRemove:
-			if err = api.db.RemovePermission(r.Context(), initiatorUser, targetUserID, permission); err != nil {
+			if err = api.db.RemovePermission(r.Context(), initiatorUser, targetTwitchUserID, permission); err != nil {
 				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 					ErrorCode:    http.StatusInternalServerError,
 					ErrorMessage: fmt.Sprintf("db add permission err: %v", err),

@@ -95,6 +95,43 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 	return &card, nil
 }
 
+func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, userID uuid.UUID, twitchRewardID string) (*Card, TwitchRewardType, error) {
+	var rewardType TwitchRewardType
+	var card Card
+	err := db.QueryRow(ctx, `
+		select
+			cc.id,
+			cc.owner_user_id,
+			cc.name,
+			cc.description,
+			cc.public,
+			cc.redeems,
+			cc.updated_at,
+			cc.data,
+			rb.reward_type
+		from char_cards cc join reward_buttons rb on cc.id = rb.card_id
+		where
+			rb.twitch_reward_id = $1
+	`, twitchRewardID).Scan(
+		&card.ID,
+		&card.OwnerUserID,
+		&card.Description,
+		&card.Name,
+		&card.Public,
+		&card.Redeems,
+		&card.UpdatedAt,
+		&card.Data,
+		&rewardType,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get char card: %w", err)
+	}
+
+	card.CreatedAt = tools.UUIDToTime(card.ID)
+
+	return &card, rewardType, nil
+}
+
 func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) (*Card, TwitchRewardType, error) {
 	var rewardType TwitchRewardType
 	var card Card

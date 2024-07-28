@@ -302,7 +302,7 @@ loop:
 				}
 			case db.MsgStatusCurrent, db.MsgStatusWait:
 				action = ActionUpsert
-				charCard, rewardType, err := api.db.GetCharCardByTwitchReward(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID)
+				charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID)
 				if err != nil {
 					logger.Error("failed to get char card by twitch reward", "err", err)
 					break loop

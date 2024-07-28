@@ -3,11 +3,9 @@ package db
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 type MsgStatus int
@@ -88,11 +86,7 @@ func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error
 		limit 1
 	`, userID, MsgStatusWait).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNoRows
-		}
-
-		return nil, fmt.Errorf("failed to get next message: %w", err)
+		return nil, fmt.Errorf("failed to get next message: %w", parseErr(err))
 	}
 
 	return &msg, nil
