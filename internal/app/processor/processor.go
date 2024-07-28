@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -19,8 +20,6 @@ import (
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
-	"app/pkg/swearfilter"
-	"app/pkg/tools"
 	"app/pkg/twitch"
 	"app/pkg/whisperx"
 
@@ -456,31 +455,21 @@ func (p *Processor) TTS(ctx context.Context, msg string, refAudio []byte) ([]byt
 }
 
 func (p *Processor) FilterText(ctx context.Context, broadcasterID uuid.UUID, text string) string {
-	var swears []string
+	swears := GlobalSwears // regex patterns
 
 	userSettings, err := p.db.GetUserSettings(ctx, broadcasterID)
 	if err == nil {
 		swears = slices.Concat(swears, strings.Split(userSettings.Filters, ","))
 	}
 
-	swears = slices.Concat(swears, swearfilter.Swears)
-
-	swearFilterObj := swearfilter.NewSwearFilter(false, swears...)
-
-	// beforeFilter := text
-
-	tripped, err := swearFilterObj.Check(text)
-	if err != nil {
-		p.logger.Error("error checking for swears", "err", err)
-
-		return text
+	for _, exp := range swears {
+		r, err := regexp.Compile("(?i)" + exp) // makes them case-insensitive by default
+		if err != nil {
+			p.logger.Warn(fmt.Sprintf("failed compiling reg expression '%s' for %s", exp, broadcasterID), "err", err)
+			continue
+		}
+		text = r.ReplaceAllString(text, "(filtered)")
 	}
-
-	for _, word := range tripped {
-		text = tools.IReplace(text, word, "(filtered)")
-	}
-
-	// p.logger.Debug("filter", "tripped", tripped, "filters", swears, "before", beforeFilter, "after", text)
 
 	return text
 }
