@@ -153,7 +153,11 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Post("/remove_streamer", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionStreamer)))
 
 		router.Post("/restart", func(w http.ResponseWriter, r *http.Request) {
-			os.Exit(0)
+			time.AfterFunc(300*time.Millisecond, func() {
+				os.Exit(0)
+			})
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("restart signal sent"))
 		})
 	})
 

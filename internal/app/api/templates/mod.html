@@ -37,26 +37,35 @@
                 </div>
             </div>
         </div>
-        <div class="pl-32">
-            <div class="pb-1 font-medium">Manage Access Requests</div>
-            <div class="border py-3 px-3 {{template "ui-border-clr"}}">
-                <div class="flex flex-col">
-                    {{ range .Requests }}
-                    <div class="flex items-center pt-3">
-                        <div class="w-36">{{ .Login }}</div>
-                        <div class="flex" id="user_id_{{ .UserID }}">
-                            <div>
-                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/add_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Approve</button>
-                            </div>
-                            <div class="pl-4">
-                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/remove_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Deny</button>
+        <div class="flex flex-col pl-32">
+            <div class="flex flex-col">
+                <div class="pb-1 font-medium">Manage Access Requests</div>
+                <div class="border py-3 px-3 {{template "ui-border-clr"}}">
+                    <div class="flex flex-col">
+                        {{ range .Requests }}
+                        <div class="flex items-center pt-3">
+                            <div class="w-36">{{ .Login }}</div>
+                            <div class="flex" id="user_id_{{ .UserID }}">
+                                <div>
+                                    <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/add_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Approve</button>
+                                </div>
+                                <div class="pl-4">
+                                    <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/remove_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#user_id_{{ .UserID }}">Deny</button>
+                                </div>
                             </div>
                         </div>
+                        {{ else }}
+                        <div class="flex flex-col items-center w-72">Empty</div>
+                        {{ end }}
                     </div>
-                    {{ else }}
-                    <div class="flex flex-col items-center w-72">Empty</div>
-                    {{ end }}
                 </div>
+            </div>
+            <div class="flex flex-col pt-48 items-center w-min">
+                <button class="w-48 py-1 px-4 {{template "button-2"}}" hx-post="/restart"  hx-target="#restart_result">Restart App</button>
+                <div class="text-xs pt-4 text-center">
+                    If there are issues with the app, you can press this button. It will restart the whole shit. Don't press it too often. App will restart in 6 seconds.
+                </div>
+                <div class="pt-2" id="restart_result"></div>
             </div>
         </div>
     </div>
