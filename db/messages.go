@@ -161,8 +161,8 @@ func ParseMessageData(data []byte) (*MessageData, error) {
 	return &msgData, nil
 }
 
-func (db *DB) UpdateCurrentMessages(ctx context.Context, userID uuid.UUID) error {
-	_, err := db.Exec(ctx, `
+func (db *DB) UpdateCurrentMessages(ctx context.Context, userID uuid.UUID) (cntUpdated int, err error) {
+	tag, err := db.Exec(ctx, `
 		update
 			msg_queue
 		set
@@ -174,10 +174,10 @@ func (db *DB) UpdateCurrentMessages(ctx context.Context, userID uuid.UUID) error
 			status = $3
 	`, MsgStatusProcessed, userID, MsgStatusCurrent)
 	if err != nil {
-		return fmt.Errorf("failed to update current message: %w", err)
+		return 0, fmt.Errorf("failed to update current message: %w", err)
 	}
 
-	return nil
+	return int(tag.RowsAffected()), nil
 }
 
 func (db *DB) GetMessageUpdates(ctx context.Context, userID uuid.UUID, updated int) ([]*Message, error) {

@@ -3,6 +3,7 @@ package api
 import (
 	"app/db"
 	"app/pkg/ctxstore"
+	immediateticker "app/pkg/immediate_ticker"
 	"app/pkg/ws"
 	"encoding/json"
 	"fmt"
@@ -220,7 +221,7 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 
 	events := api.controlPanelNotifications.SubscribeForNotification(r.Context(), targetUser.ID)
 
-	ticker := time.NewTicker(2 * time.Minute)
+	ticker := immediateticker.New(2 * time.Minute)
 	defer ticker.Stop()
 
 	lastUpdated := 0
@@ -251,6 +252,8 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 
 loop:
 	for {
+		defer wsClient.Close()
+
 		select {
 		case <-done:
 			break loop

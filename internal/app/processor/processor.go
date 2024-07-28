@@ -164,15 +164,17 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	}()
 
 	for {
-		if err := p.db.UpdateCurrentMessages(ctx, broadcaster.ID); err != nil {
+		updated, err := p.db.UpdateCurrentMessages(ctx, broadcaster.ID)
+		if err != nil {
 			logger.Error("error updating current message", "err", err)
 
 			return fmt.Errorf("error updating current message: %w", err)
 		}
 
-		p.controlPanelNotifications.Notify(broadcaster.ID)
+		if updated > 0 {
+			p.controlPanelNotifications.Notify(broadcaster.ID)
+		}
 
-		var msg *db.Message
 		msg, err := p.db.GetNextMsg(ctx, broadcaster.ID)
 		if err != nil {
 			if errors.Is(err, db.ErrNoRows) {
