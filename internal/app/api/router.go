@@ -3,6 +3,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -150,6 +151,10 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Post("/add_streamer", http.HandlerFunc(api.managePermission(permissionActionAdd, db.PermissionStreamer)))
 		router.Post("/remove_streamer", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionStreamer)))
+
+		router.Post("/restart", func(w http.ResponseWriter, r *http.Request) {
+			os.Exit(0)
+		})
 	})
 
 	router.Handle("/static/*", http.FileServerFS(staticFS))

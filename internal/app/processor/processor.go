@@ -458,7 +458,7 @@ func (p *Processor) FilterText(ctx context.Context, broadcasterID uuid.UUID, tex
 	swears := GlobalSwears // regex patterns
 
 	userSettings, err := p.db.GetUserSettings(ctx, broadcasterID)
-	if err == nil {
+	if err == nil && len(userSettings.Filters) != 0 {
 		swears = slices.Concat(swears, strings.Split(userSettings.Filters, ","))
 	}
 
