@@ -63,44 +63,38 @@ func NewProcessor(logger *slog.Logger, llmModel *llm.Client, styleTts *ai.StyleT
 
 func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User) error {
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	logger := p.logger.With("user", broadcaster.TwitchLogin)
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("connection panic", "r", r)
+		}
+	}()
 
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeText,
 		EventData: []byte("processor started"),
 	})
 
-	defer func() {
-		cancel()
-		if r := recover(); r != nil {
-			logger.Error("connection panic")
-		}
-	}()
-
 	skippedMsgIDs := make(map[uuid.UUID]struct{})
 	skippedMsgIDsLock := sync.Mutex{}
 
-	interrupt := make(chan struct{})
-	defer close(interrupt)
-
 	go func() {
+		defer cancel()
 
-	loop:
 		for {
 			select {
 			case upd, ok := <-updates:
 				if !ok {
-					updates = nil
-					cancel()
-					break loop
+					return
 				}
 
 				logger.Info("processor signal recieved", "upd_signal", upd)
 				switch upd.UpdateType {
 				case conns.RestartProcessor:
-					cancel()
-					break loop
+					return
 				case conns.SkipMessage:
 					msgID, err := uuid.Parse(upd.Data)
 					if err != nil {
@@ -127,16 +121,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 					p.controlPanelNotifications.Notify(broadcaster.ID)
 				}
 			case <-ctx.Done():
-				break loop
+				return
 			}
 		}
 	}()
 
-	wg := sync.WaitGroup{}
-
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		defer cancel()
 
 		twitchChatCh := twitch.MessagesFetcher(ctx, broadcaster.TwitchLogin, true)
@@ -194,19 +184,6 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		skipMsg := false
 
-		func() {
-			skippedMsgIDsLock.Lock()
-			defer skippedMsgIDsLock.Unlock()
-
-			if _, ok := skippedMsgIDs[msg.ID]; ok {
-				skipMsg = true
-			}
-		}()
-
-		if skipMsg {
-			continue
-		}
-
 		if err := p.db.UpdateMessageStatus(ctx, msg.ID, db.MsgStatusCurrent); err != nil {
 			logger.Error("error updating message status", "err", err)
 
@@ -239,7 +216,18 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				return err
 			}
 
-			requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequest, msg.ID.String(), requestAudio)
+			func() {
+				skippedMsgIDsLock.Lock()
+				defer skippedMsgIDsLock.Unlock()
+
+				_, skipMsg = skippedMsgIDs[msg.ID]
+			}()
+
+			if skipMsg {
+				continue
+			}
+
+			requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequest, msg.ID, requestAudio, &skippedMsgIDs, &skippedMsgIDsLock)
 			if err != nil {
 				logger.Error("error playing tts", "err", err)
 				return err
@@ -297,7 +285,18 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return err
 		}
 
-		requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequestText, msg.ID.String(), requestAudio)
+		func() {
+			skippedMsgIDsLock.Lock()
+			defer skippedMsgIDsLock.Unlock()
+
+			_, skipMsg = skippedMsgIDs[msg.ID]
+		}()
+
+		if skipMsg {
+			continue
+		}
+
+		requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequestText, msg.ID, requestAudio, &skippedMsgIDs, &skippedMsgIDsLock)
 		if err != nil {
 			logger.Error("error playing tts", "err", err)
 			return err
@@ -352,16 +351,14 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			skippedMsgIDsLock.Lock()
 			defer skippedMsgIDsLock.Unlock()
 
-			if _, ok := skippedMsgIDs[msg.ID]; ok {
-				skipMsg = true
-			}
+			_, skipMsg = skippedMsgIDs[msg.ID]
 		}()
 
 		if skipMsg {
 			continue
 		}
 
-		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID.String(), responseTtsAudio)
+		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID, responseTtsAudio, &skippedMsgIDs, &skippedMsgIDsLock)
 		if err != nil {
 			logger.Error("error playing tts", "err", err)
 			continue
@@ -385,7 +382,7 @@ type audioMsg struct {
 	MsgID string `json:"msg_id"`
 }
 
-func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, msdID string, audio []byte) (<-chan struct{}, error) {
+func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex) (<-chan struct{}, error) {
 	textTimings, err := p.alignTextToAudio(ctx, msg, audio)
 	if err != nil {
 		return nil, fmt.Errorf("error aligning text to audio: %w", err)
@@ -405,7 +402,7 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 
 		audioMsg, err := json.Marshal(&audioMsg{
 			Audio: audio,
-			MsgID: msdID,
+			MsgID: msdID.String(),
 		})
 		if err != nil {
 			return
@@ -422,6 +419,18 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 
 		for _, timing := range textTimings {
 			fullText += timing.Text + " "
+
+			var skipMsg bool
+			func() {
+				skippedMsgIDsLock.Lock()
+				defer skippedMsgIDsLock.Unlock()
+
+				_, skipMsg = (*skippedMsgIDs)[msdID]
+			}()
+
+			if skipMsg {
+				break
+			}
 
 			eventWriter(&conns.DataEvent{
 				EventType: conns.EventTypeText,
