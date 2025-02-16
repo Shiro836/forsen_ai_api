@@ -3,9 +3,11 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type MsgStatus int
@@ -103,6 +105,11 @@ func (db *DB) CleanQueue(ctx context.Context) error {
 	`, MsgStatusDeleted, MsgStatusProcessed)
 
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "55000" {
+			return nil
+		}
+
 		return fmt.Errorf("failed to clean queue: %w", err)
 	}
 

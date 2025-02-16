@@ -53,7 +53,7 @@ func (db *DB) GetCharImage(ctx context.Context, cardID uuid.UUID) ([]byte, error
 			cc.id = $1
 	`, cardID).Scan(&data)
 	if err != nil {
-		return nil, fmt.Errorf("get char image: %w", err)
+		return nil, fmt.Errorf("get char image: %w", parseErr(err))
 	}
 
 	return data.Image, nil
@@ -87,7 +87,7 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 		&card.Data,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("get char card by id: %w", err)
+		return nil, fmt.Errorf("get char card by id: %w", parseErr(err))
 	}
 
 	card.CreatedAt = tools.UUIDToTime(card.ID)
@@ -124,7 +124,7 @@ func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, userID uuid.
 		&rewardType,
 	)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get char card: %w", err)
+		return nil, 0, fmt.Errorf("failed to get char card: %w", parseErr(err))
 	}
 
 	card.CreatedAt = tools.UUIDToTime(card.ID)
@@ -165,7 +165,7 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, t
 		&rewardType,
 	)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get char card: %w", err)
+		return nil, 0, fmt.Errorf("failed to get char card: %w", parseErr(err))
 	}
 
 	card.CreatedAt = tools.UUIDToTime(card.ID)

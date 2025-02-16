@@ -29,6 +29,7 @@ import (
 	"app/pkg/whisperx"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -73,25 +74,26 @@ func main() {
 
 	slog.SetDefault(logger)
 
+	reg := prometheus.NewRegistry()
+	nvidia.RegisterMetrics(reg)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	llmModel := llm.New(httpClient, &cfg.LLM)
 	styleTts := ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
-	metaTts := ai.NewMetaTTSClient(httpClient, &cfg.MetaTTS)
-	rvc := ai.NewRVCClient(httpClient, &cfg.Rvc)
 	whisper := whisperx.New(httpClient, &cfg.Whisper)
 	ffmpeg := ffmpeg.New(&cfg.Ffmpeg)
 
 	controlPanelNotifications := notifications.New()
 
-	processor := processor.NewProcessor(logger.WithGroup("processor"), llmModel, styleTts, metaTts, rvc, whisper, db, ffmpeg, controlPanelNotifications)
+	processor := processor.NewProcessor(logger.WithGroup("processor"), llmModel, styleTts, whisper, db, ffmpeg, controlPanelNotifications)
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), processor)
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, controlPanelNotifications, twitchClient, styleTts, metaTts, llmModel, db)
+	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, controlPanelNotifications, twitchClient, styleTts, llmModel, db)
 
 	router := api.NewRouter()
 
@@ -105,6 +107,22 @@ func main() {
 	}
 
 	wg := sync.WaitGroup{}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+	loop:
+		for {
+			select {
+			case <-time.After(5 * time.Second):
+			case <-ctx.Done():
+				break loop
+			}
+
+			nvidia.GatherAndSendMetrics(ctx, reg, influxWriter, logger.WithGroup("metrics"))
+		}
+	}()
 
 	wg.Add(1)
 	go func() {
@@ -152,12 +170,12 @@ func main() {
 		}
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	// wg.Add(1)
+	// go func() {
+	// 	defer wg.Done()
 
-		nvidia.MonitoringLoop(ctx, logger.WithGroup("nvidia"))
-	}()
+	// 	nvidia.MonitoringLoop(ctx, logger.WithGroup("nvidia"))
+	// }()
 
 	select {
 	case <-ctx.Done():

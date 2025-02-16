@@ -43,6 +43,7 @@ type ttsReq struct {
 
 type ttsResp struct {
 	Audio []byte `json:"audio"`
+	Error string `json:"error"`
 }
 
 func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
@@ -56,8 +57,8 @@ func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) (
 		Text:     msg,
 		RefAudio: refAudio,
 
-		Alpha: 0.3,
-		Beta:  0.7,
+		Alpha: 0.5,
+		Beta:  0.8,
 
 		EmbeddingScale: 1,
 	}
@@ -94,6 +95,10 @@ func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) (
 	if err != nil {
 		metrics.TTSErrors.WithLabelValues("500").Inc()
 		return nil, fmt.Errorf("failed to unmarshal tts resp data: %w", err)
+	}
+
+	if len(ttsResp.Error) > 0 {
+		return nil, fmt.Errorf("tts api returned: %s", ttsResp.Error)
 	}
 
 	metrics.TTSQueryTime.Observe(time.Since(start).Seconds())

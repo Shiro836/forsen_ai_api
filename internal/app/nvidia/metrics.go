@@ -2,8 +2,15 @@ package nvidia
 
 import (
 	"app/pkg/ws"
+	"context"
+	"fmt"
+	"log/slog"
+	"time"
 
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/prometheus/client_golang/prometheus"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
 type Metrics struct {
@@ -71,4 +78,76 @@ func RegisterMetrics(reg prometheus.Registerer) {
 	reg.MustRegister(metrics.RVCErrors)
 	reg.MustRegister(metrics.AIUserRequests)
 	reg.MustRegister(metrics.NvidiaStats)
+}
+
+func GatherAndSendMetrics(ctx context.Context, reg prometheus.Gatherer, influxWriter api.WriteAPI, logger *slog.Logger) {
+	metrics, err := reg.Gather()
+	if err != nil {
+		logger.Error("Error gathering metrics", "err", err)
+		return
+	}
+
+	for _, m := range metrics {
+		for _, metric := range m.GetMetric() {
+			select {
+			case <-ctx.Done():
+				logger.Debug("Context canceled, stopping metric processing")
+				return
+			default:
+				labels := make(map[string]string)
+				for _, label := range metric.GetLabel() {
+					labels[label.GetName()] = label.GetValue()
+				}
+
+				switch m.GetType() {
+				case io_prometheus_client.MetricType_COUNTER:
+					point := influxdb2.NewPoint(
+						m.GetName(),
+						labels,
+						map[string]interface{}{"value": metric.GetCounter().GetValue()},
+						time.Now(),
+					)
+					influxWriter.WritePoint(point)
+				case io_prometheus_client.MetricType_GAUGE:
+					point := influxdb2.NewPoint(
+						m.GetName(),
+						labels,
+						map[string]interface{}{"value": metric.GetGauge().GetValue()},
+						time.Now(),
+					)
+					influxWriter.WritePoint(point)
+				case io_prometheus_client.MetricType_HISTOGRAM, io_prometheus_client.MetricType_GAUGE_HISTOGRAM:
+					hist := metric.GetHistogram()
+					for _, bucket := range hist.GetBucket() {
+						bucketLabels := make(map[string]string)
+						for k, v := range labels {
+							bucketLabels[k] = v
+						}
+						bucketLabels["le"] = fmt.Sprintf("%f", bucket.GetUpperBound())
+						point := influxdb2.NewPoint(
+							m.GetName()+"_bucket",
+							bucketLabels,
+							map[string]interface{}{"count": bucket.GetCumulativeCount()},
+							time.Now(),
+						)
+						influxWriter.WritePoint(point)
+					}
+					influxWriter.WritePoint(influxdb2.NewPoint(
+						m.GetName()+"_sum",
+						labels,
+						map[string]interface{}{"value": hist.GetSampleSum()},
+						time.Now(),
+					))
+					influxWriter.WritePoint(influxdb2.NewPoint(
+						m.GetName()+"_count",
+						labels,
+						map[string]interface{}{"value": hist.GetSampleCount()},
+						time.Now(),
+					))
+				default:
+					logger.Error("Unsupported metric type", "err", m.GetType().String())
+				}
+			}
+		}
+	}
 }

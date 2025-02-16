@@ -31,8 +31,6 @@ type Processor struct {
 
 	llmModel *llm.Client
 	styleTts *ai.StyleTTSClient
-	metaTts  *ai.MetaTTSClient
-	rvc      *ai.RVCClient
 	whisper  *whisperx.Client
 
 	db *db.DB
@@ -42,13 +40,10 @@ type Processor struct {
 	controlPanelNotifications *notifications.Client
 }
 
-func NewProcessor(logger *slog.Logger, llmModel *llm.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient,
-	rvc *ai.RVCClient, whisper *whisperx.Client, db *db.DB, ffmpeg *ffmpeg.Client, controlPanelNotifications *notifications.Client) *Processor {
+func NewProcessor(logger *slog.Logger, llmModel *llm.Client, styleTts *ai.StyleTTSClient, whisper *whisperx.Client, db *db.DB, ffmpeg *ffmpeg.Client, controlPanelNotifications *notifications.Client) *Processor {
 	return &Processor{
 		llmModel: llmModel,
 		styleTts: styleTts,
-		metaTts:  metaTts,
-		rvc:      rvc,
 		whisper:  whisper,
 
 		logger: logger,
@@ -75,7 +70,13 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeText,
-		EventData: []byte("processor started"),
+		EventData: []byte(" "),
+		// EventData: []byte("processor started"),
+	})
+
+	eventWriter(&conns.DataEvent{
+		EventType: conns.EventTypeImage,
+		EventData: []byte(" "),
 	})
 
 	skippedMsgIDs := make(map[uuid.UUID]struct{})
@@ -198,7 +199,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		charCard, rewardType, err := p.db.GetCharCardByTwitchReward(ctx, broadcaster.ID, msg.TwitchMessage.RewardID)
 		if err != nil {
-			logger.Error("error getting card by twitch reward", "err", err)
+			if db.ErrCode(err) != db.ErrCodeNoRows {
+				logger.Error("error getting card by twitch reward", "err", err)
+			}
 			continue
 		}
 
@@ -229,6 +232,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 			requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequest, msg.ID, requestAudio, &skippedMsgIDs, &skippedMsgIDsLock)
 			if err != nil {
+				fmt.Println(err)
 				logger.Error("error playing tts", "err", err)
 				return err
 			}
@@ -298,6 +302,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequestText, msg.ID, requestAudio, &skippedMsgIDs, &skippedMsgIDsLock)
 		if err != nil {
+			fmt.Println(err)
 			logger.Error("error playing tts", "err", err)
 			return err
 		}
@@ -360,6 +365,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID, responseTtsAudio, &skippedMsgIDs, &skippedMsgIDsLock)
 		if err != nil {
+			fmt.Println(err)
 			logger.Error("error playing tts", "err", err)
 			continue
 		}

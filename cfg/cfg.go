@@ -14,9 +14,7 @@ type Config struct {
 	Api api.Config `yaml:"api"`
 
 	LLM      llm.Config        `yaml:"llm"`
-	MetaTTS  ai.MetaTTSConfig  `yaml:"meta_tts"`
 	StyleTTS ai.StyleTTSConfig `yaml:"style_tts"`
-	Rvc      ai.RVCConfig      `yaml:"rvc"`
 	Whisper  whisperx.Config   `yaml:"whisper"`
 
 	Twitch twitch.Config `yaml:"twitch"`

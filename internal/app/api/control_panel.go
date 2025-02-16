@@ -6,6 +6,7 @@ import (
 	immediateticker "app/pkg/immediate_ticker"
 	"app/pkg/ws"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -235,7 +236,9 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 		for {
 			msg, err := wsClient.Read()
 			if err != nil {
-				logger.Error("failed to read control panel websocket message", "err", err)
+				if !errors.Is(err, ws.ErrClosed) {
+					logger.Error("failed to read control panel websocket message", "err", err)
+				}
 				break read_loop
 			}
 
@@ -307,8 +310,8 @@ loop:
 				action = ActionUpsert
 				charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID)
 				if err != nil {
-					logger.Error("failed to get char card by twitch reward", "err", err)
-					break loop
+					logger.Info("failed to get char card by twitch reward", "err", err) // might be non baj ai reward
+					continue
 				}
 
 				var rewardTypeStr string = "unknown"

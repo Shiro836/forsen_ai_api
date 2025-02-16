@@ -34,7 +34,6 @@ type API struct {
 	controlPanelNotifications *notifications.Client
 
 	styleTts *ai.StyleTTSClient
-	metaTts  *ai.MetaTTSClient
 	llm      *llm.Client
 
 	twitchClient *twitch.Client
@@ -47,7 +46,7 @@ type API struct {
 }
 
 func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, controlPanelNotifications *notifications.Client,
-	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, metaTts *ai.MetaTTSClient, llm *llm.Client, db *db.DB) *API {
+	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, llm *llm.Client, db *db.DB) *API {
 	return &API{
 		cfg: cfg,
 
@@ -60,7 +59,6 @@ func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, contro
 		twitchClient: twitchClient,
 
 		styleTts: styleTts,
-		metaTts:  metaTts,
 		llm:      llm,
 
 		db: db,

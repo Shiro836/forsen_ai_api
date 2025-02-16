@@ -6,6 +6,7 @@ var GlobalSwears = []string{
 	`\bn[i1]gg.*\b`,
 	`\bnegros?\b`,
 	`knee ?grows?`,
+	`knee ?gears?`,
 	`\bcoon\b`,
 	`jig+ers?`,
 	`wig+ers?`,
@@ -37,7 +38,7 @@ var GlobalSwears = []string{
 	`\bkys\b`,
 	`kill ?(your|him|her|the[my])sel(f|ves)`,
 
-	`\brap(e|ist|ing)\b`,
+	`\bg?rap(e|ist|ing|ed)\b`,
 }
 
 // cmonBruh

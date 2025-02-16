@@ -2,8 +2,6 @@ llm:
   url: llm/generate
 tts:
   url: tts/tts
-rvc:
-  url: rvc/voice2voice
 whisper:
   url: whisper/
 twitch:

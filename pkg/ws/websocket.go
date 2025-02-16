@@ -1,12 +1,15 @@
 package ws
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
+
+var ErrClosed = errors.New("ws is closed")
 
 var Upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
@@ -94,7 +97,7 @@ func (ws *Client) Send(msg *Message) error {
 	defer ws.lock.Unlock()
 
 	if ws.closed {
-		return fmt.Errorf("ws is closed")
+		return ErrClosed
 	}
 
 	ws.writeChan <- msg
@@ -105,7 +108,7 @@ func (ws *Client) Send(msg *Message) error {
 func (ws *Client) Read() (*Message, error) {
 	msg, ok := <-ws.readChan
 	if !ok {
-		return nil, fmt.Errorf("ws is closed")
+		return nil, ErrClosed
 	}
 
 	return msg, nil
