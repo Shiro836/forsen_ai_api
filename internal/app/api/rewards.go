@@ -58,7 +58,7 @@ func (api *API) reward(rewardType db.TwitchRewardType) http.HandlerFunc {
 			IsEnabled:                         true,
 			BackgroundColor:                   "#A970FF",
 			IsUserInputRequired:               true,
-			ShouldRedemptionsSkipRequestQueue: true,
+			ShouldRedemptionsSkipRequestQueue: false,
 		})
 		if err != nil {
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{

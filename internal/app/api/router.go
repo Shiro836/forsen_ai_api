@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"sync"
 	"time"
 
@@ -151,9 +152,25 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Post("/remove_streamer", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionStreamer)))
 
 		router.Post("/restart", func(w http.ResponseWriter, r *http.Request) {
+			cmds := [][]string{
+				// {"sudo", "systemctl", "restart", "lexi"},
+				// {"sudo", "systemctl", "restart", "style"},
+				{"docker", "restart", "whisper-api"},
+			}
+			for _, cmdArgs := range cmds {
+				cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+				if err := cmd.Run(); err != nil {
+					api.logger.Error("Failed to restart service", "error", err, "command", cmdArgs)
+					w.Write([]byte("failed to restart service: " + err.Error()))
+
+					return
+				}
+			}
+
 			time.AfterFunc(300*time.Millisecond, func() {
 				os.Exit(0)
 			})
+
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("restart signal sent"))
 		})

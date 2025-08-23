@@ -26,6 +26,7 @@ var GlobalSwears = []string{
 	`gusanos?`,
 
 	// Identity
+	`fag+s?`,
 	`(\bfag+s?\b|fag+ots?)`,
 	`tran+(y|ie)s?`,
 	`troons?`,
