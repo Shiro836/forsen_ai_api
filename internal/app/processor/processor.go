@@ -398,6 +398,21 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 		}
 	}
 
+	audioLen, err := p.getAudioLength(ctx, audio)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(textTimings) == 0 {
+		textTimings = append(textTimings, whisperx.Timiing{
+			Text:  msg,
+			Start: 0,
+			End:   audioLen,
+		})
+	} else {
+		textTimings[len(textTimings)-1].End = audioLen
+	}
+
 	mp3Audio, err := p.ffmpeg.Ffmpeg2Mp3(ctx, audio)
 	if err == nil {
 		audio = mp3Audio
