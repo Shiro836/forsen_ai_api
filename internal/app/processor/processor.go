@@ -213,7 +213,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 			filteredRequest := p.FilterText(ctx, broadcaster.ID, msg.TwitchMessage.Message)
 
-			requestAudio, err := p.TTS(ctx, filteredRequest, charCard.Data.VoiceReference)
+			requestAudio, textTimings, err := p.TTSWithTimings(ctx, filteredRequest, charCard.Data.VoiceReference)
 			if err != nil {
 				logger.Error("error tts", "err", err)
 				return err
@@ -230,7 +230,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				continue
 			}
 
-			requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequest, msg.ID, requestAudio, &skippedMsgIDs, &skippedMsgIDsLock)
+			requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequest, msg.ID, requestAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock)
 			if err != nil {
 				fmt.Println(err)
 				logger.Error("error playing tts", "err", err)
@@ -283,7 +283,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		filteredRequestText := p.FilterText(ctx, broadcaster.ID, requestText)
 
-		requestAudio, err := p.TTS(ctx, filteredRequestText, charCard.Data.VoiceReference)
+		requestAudio, textTimings, err := p.TTSWithTimings(ctx, filteredRequestText, charCard.Data.VoiceReference)
 		if err != nil {
 			logger.Error("error tts", "err", err)
 			return err
@@ -300,7 +300,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			continue
 		}
 
-		requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequestText, msg.ID, requestAudio, &skippedMsgIDs, &skippedMsgIDsLock)
+		requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequestText, msg.ID, requestAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock)
 		if err != nil {
 			fmt.Println(err)
 			logger.Error("error playing tts", "err", err)
@@ -334,7 +334,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		filteredResponse := p.FilterText(ctx, broadcaster.ID, llmResult)
 
-		responseTtsAudio, err := p.TTS(ctx, filteredResponse, charCard.Data.VoiceReference)
+		responseTtsAudio, textTimings, err := p.TTSWithTimings(ctx, filteredResponse, charCard.Data.VoiceReference)
 		if err != nil {
 			logger.Error("error tts", "err", err)
 			continue
@@ -363,7 +363,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			continue
 		}
 
-		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID, responseTtsAudio, &skippedMsgIDs, &skippedMsgIDsLock)
+		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID, responseTtsAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock)
 		if err != nil {
 			fmt.Println(err)
 			logger.Error("error playing tts", "err", err)
@@ -388,10 +388,14 @@ type audioMsg struct {
 	MsgID string `json:"msg_id"`
 }
 
-func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex) (<-chan struct{}, error) {
-	textTimings, err := p.alignTextToAudio(ctx, msg, audio)
-	if err != nil {
-		return nil, fmt.Errorf("error aligning text to audio: %w", err)
+func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex) (<-chan struct{}, error) {
+	if textTimings == nil {
+		var err error
+
+		textTimings, err = p.alignTextToAudio(ctx, msg, audio)
+		if err != nil {
+			return nil, fmt.Errorf("error aligning text to audio: %w", err)
+		}
 	}
 
 	mp3Audio, err := p.ffmpeg.Ffmpeg2Mp3(ctx, audio)
@@ -459,14 +463,13 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 	return done, nil
 }
 
-func (p *Processor) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
-
-	ttsResult, err := p.styleTts.TTS(ctx, msg, refAudio)
+func (p *Processor) TTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
+	ttsResult, ttsSegments, err := p.styleTts.TTS(ctx, msg, refAudio)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return ttsResult, nil
+	return ttsResult, ttsSegments, nil
 }
 
 func (p *Processor) FilterText(ctx context.Context, broadcasterID uuid.UUID, text string) string {

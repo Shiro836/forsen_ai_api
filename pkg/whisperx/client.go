@@ -55,12 +55,12 @@ type word struct {
 	End   float64 `json:"end"`
 }
 
-type segment struct {
+type Segment struct {
 	Words []word `json:"words"`
 }
 
 type alignResponse struct {
-	Segments []segment `json:"segments"`
+	Segments []Segment `json:"segments"`
 }
 
 func (c *Client) Align(ctx context.Context, text string, audio []byte, audioLen time.Duration) ([]Timiing, error) {

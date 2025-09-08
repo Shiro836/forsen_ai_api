@@ -2,6 +2,7 @@ package ai
 
 import (
 	"app/pkg/tools"
+	"app/pkg/whisperx"
 
 	"bytes"
 	"context"
@@ -42,13 +43,14 @@ type ttsReq struct {
 }
 
 type ttsResp struct {
-	Audio []byte `json:"audio"`
-	Error string `json:"error"`
+	Audio    []byte             `json:"audio"`
+	Error    string             `json:"error"`
+	Segments []whisperx.Segment `json:"segments"`
 }
 
-func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, error) {
+func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
 	if len(refAudio) == 0 {
-		return nil, fmt.Errorf("no audio provided")
+		return nil, nil, fmt.Errorf("no audio provided")
 	}
 
 	start := time.Now()
@@ -65,43 +67,55 @@ func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) (
 
 	data, err := json.Marshal(&req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.cfg.URL, bytes.NewReader(data))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	request.Header.Add("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(request)
 	if err != nil {
-		return nil, fmt.Errorf("failed to post to tts server: %w", err)
+		return nil, nil, fmt.Errorf("failed to post to tts server: %w", err)
 	}
 	defer tools.DrainAndClose(resp.Body)
 
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read body: %w", err)
+		return nil, nil, fmt.Errorf("failed to read body: %w", err)
 	}
 
 	if resp.StatusCode > 299 {
 		metrics.TTSErrors.WithLabelValues(strconv.Itoa(resp.StatusCode)).Inc()
-		return nil, fmt.Errorf("status code %d, err - %s", resp.StatusCode, string(respData))
+		return nil, nil, fmt.Errorf("status code %d, err - %s", resp.StatusCode, string(respData))
 	}
 
 	ttsResp := &ttsResp{}
 	err = json.Unmarshal(respData, &ttsResp)
 	if err != nil {
 		metrics.TTSErrors.WithLabelValues("500").Inc()
-		return nil, fmt.Errorf("failed to unmarshal tts resp data: %w", err)
+		return nil, nil, fmt.Errorf("failed to unmarshal tts resp data: %w", err)
 	}
 
 	if len(ttsResp.Error) > 0 {
-		return nil, fmt.Errorf("tts api returned: %s", ttsResp.Error)
+		return nil, nil, fmt.Errorf("tts api returned: %s", ttsResp.Error)
 	}
 
 	metrics.TTSQueryTime.Observe(time.Since(start).Seconds())
 
-	return ttsResp.Audio, nil
+	timings := make([]whisperx.Timiing, 0, len(ttsResp.Segments))
+
+	for _, segment := range ttsResp.Segments {
+		for _, word := range segment.Words {
+			timings = append(timings, whisperx.Timiing{
+				Text:  word.Word,
+				Start: time.Duration(word.Start * float64(time.Second)),
+				End:   time.Duration(word.End * float64(time.Second)),
+			})
+		}
+	}
+
+	return ttsResp.Audio, timings, nil
 }
