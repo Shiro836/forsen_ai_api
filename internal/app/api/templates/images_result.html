@@ -1,0 +1,15 @@
+<div class="flex flex-col space-y-2">
+    <div>Uploaded. ID: <code>{{ .ID }}</code></div>
+    <div class="flex gap-2">
+        <a class='{{template "button-2"}} py-2 px-4' href="{{ .URL }}" target="_blank">Open image</a>
+        <button type="button" class='{{template "button-2"}} py-2 px-4'
+            onclick="navigator.clipboard.writeText('<img:{{ .ID }}>'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy &lt;img:{{ .ID }}&gt;', 1200);">
+            Copy &lt;img:{{ .ID }}&gt;
+        </button>
+    </div>
+    <div>
+        <img src="{{ .URL }}" style="max-width:100%;height:auto;" />
+    </div>
+</div>
+
+

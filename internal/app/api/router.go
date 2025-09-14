@@ -13,6 +13,7 @@ import (
 	"app/internal/app/notifications"
 	"app/pkg/ai"
 	"app/pkg/llm"
+	"app/pkg/s3client"
 	"app/pkg/twitch"
 
 	"github.com/go-chi/chi/v5"
@@ -22,7 +23,6 @@ import (
 )
 
 type Config struct {
-	Domain  string        `yaml:"domain"`
 	Port    int           `yaml:"port"`
 	Timeout time.Duration `yaml:"timeout"`
 }
@@ -41,13 +41,15 @@ type API struct {
 
 	db *db.DB
 
+	s3 *s3client.Client
+
 	cfg *Config
 
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 }
 
 func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, controlPanelNotifications *notifications.Client,
-	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, llm *llm.Client, db *db.DB) *API {
+	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, llm *llm.Client, db *db.DB, s3 *s3client.Client) *API {
 	return &API{
 		cfg: cfg,
 
@@ -63,6 +65,8 @@ func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, contro
 		llm:      llm,
 
 		db: db,
+
+		s3: s3,
 	}
 }
 
@@ -91,6 +95,11 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Get("/twitch_redirect_handler", http.HandlerFunc(api.twitchRedirectHandler))
 
 	router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))
+
+	// Images upload page and retrieval (registered before catch-all route)
+	router.Get("/images", api.nav(api.imagesPage))
+	router.Post("/images", http.HandlerFunc(api.imagesUpload))
+	router.Get("/images/{id}", http.HandlerFunc(api.imageGet))
 
 	// START No perms routes
 

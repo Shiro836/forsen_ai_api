@@ -6,6 +6,7 @@ import (
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
+	"app/pkg/s3client"
 	"app/pkg/twitch"
 	"app/pkg/whisperx"
 )
@@ -14,6 +15,7 @@ type Config struct {
 	Api api.Config `yaml:"api"`
 
 	LLM      llm.Config        `yaml:"llm"`
+	ImageLLM llm.Config        `yaml:"image_llm"`
 	StyleTTS ai.StyleTTSConfig `yaml:"style_tts"`
 	Whisper  whisperx.Config   `yaml:"whisper"`
 
@@ -24,6 +26,8 @@ type Config struct {
 	InfluxDB InfluxConfig `yaml:"influx"`
 
 	Ffmpeg ffmpeg.Config `yaml:"ffmpeg"`
+
+	S3 s3client.Config `yaml:"s3"`
 }
 
 type InfluxConfig struct {

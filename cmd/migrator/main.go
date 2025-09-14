@@ -42,7 +42,7 @@ func main() {
 	defer cancel()
 	db, err := db.New(createDbCtx, &cfg.DB)
 	if err != nil {
-		log.Fatal("failed to init postgre db", err)
+		log.Fatal("failed to init postgre db: ", err)
 	}
 
 	files, err := os.ReadDir(migrationsFolder)

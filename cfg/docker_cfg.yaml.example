@@ -1,5 +1,7 @@
 llm:
   url: llm/generate
+image_llm:
+  url: image_llm/generate
 tts:
   url: tts/tts
 whisper:
@@ -9,7 +11,6 @@ twitch:
   secret: secret
 api:
   port: 8080
-  domain: forsen.fun
   page_prefix: BAJ AI
 db:
   conn_str: "postgres://postgres/postgres?user=postgres&password=postgres"
@@ -22,3 +23,9 @@ ffmpeg:
   tmp_dir: /tmp
 whisper:
   url: http://localhost:8777
+s3:
+  endpoint: "minio:9000"
+  access_key_id: "minioadmin"
+  secret_access_key: "minioadmin"
+  use_ssl: false
+  bucket: "forsen-images"

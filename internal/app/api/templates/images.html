@@ -1,0 +1,20 @@
+<div>
+  <form id="uploadForm" hx-post="/images" hx-target="#images_result" hx-swap="innerHTML" enctype="multipart/form-data">
+    <div class="flex flex-col justify-start pt-6 pl-6">
+      <div class="flex flex-col flex-grow justify-start w-[25rem]">
+        <div class="flex items-center pb-2">
+          <label for="image_file">Upload image</label>
+        </div>
+        <input id="image_file" name="file" type="file" accept="image/*" class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer" required />
+        <div class="flex pt-4 justify-end font-bold">
+          <button type="submit" class='{{template "button-2"}} py-2 px-4 w-28'>Upload</button>
+        </div>
+        <div class="flex pt-2 justify-end">
+          <div id="images_result"></div>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+

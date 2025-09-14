@@ -24,7 +24,7 @@ import (
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
-	"app/pkg/slg"
+	"app/pkg/s3client"
 	"app/pkg/twitch"
 	"app/pkg/whisperx"
 
@@ -49,7 +49,7 @@ func main() {
 	defer cancel()
 	db, err := db.New(createDbCtx, &cfg.DB)
 	if err != nil {
-		log.Fatal("failed to init postgre db", err)
+		log.Fatal("failed to init postgre db: ", err)
 	}
 
 	httpClient := &http.Client{
@@ -70,7 +70,8 @@ func main() {
 	influxWriter := influxDBClient.WriteAPI(cfg.InfluxDB.Org, cfg.InfluxDB.Bucket)
 	defer influxWriter.Flush()
 
-	logger := slog.New(&slg.InfluxDBHandler{InfluxDBWriter: influxWriter})
+	// logger := slog.New(&slg.InfluxDBHandler{InfluxDBWriter: influxWriter})
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	slog.SetDefault(logger)
 
@@ -81,19 +82,26 @@ func main() {
 	defer cancel()
 
 	llmModel := llm.New(httpClient, &cfg.LLM)
+	imageLlm := llm.New(httpClient, &cfg.ImageLLM)
 	styleTts := ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
 	whisper := whisperx.New(httpClient, &cfg.Whisper)
 	ffmpeg := ffmpeg.New(&cfg.Ffmpeg)
 
+	// init s3 client
+	s3, err := s3client.New(ctx, &cfg.S3)
+	if err != nil {
+		log.Fatal("failed to init s3 client: ", err)
+	}
+
 	controlPanelNotifications := notifications.New()
 
-	processor := processor.NewProcessor(logger.WithGroup("processor"), llmModel, styleTts, whisper, db, ffmpeg, controlPanelNotifications)
+	processor := processor.NewProcessor(logger.WithGroup("processor"), llmModel, imageLlm, styleTts, whisper, db, ffmpeg, controlPanelNotifications, s3)
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), processor)
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, controlPanelNotifications, twitchClient, styleTts, llmModel, db)
+	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, controlPanelNotifications, twitchClient, styleTts, llmModel, db, s3)
 
 	router := api.NewRouter()
 

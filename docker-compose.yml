@@ -4,7 +4,7 @@ services:
   influxdb:
     image: influxdb:2.7.5
     ports:
-      - 8086:8086
+      - 8085:8086
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=forsen
@@ -19,24 +19,6 @@ services:
     networks:
       - forsen
 
-  influxdb-prod:
-    image: influxdb:2.7.5
-    ports:
-      - 8085:8086
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=forsen
-      - DOCKER_INFLUXDB_INIT_PASSWORD=forsenxd
-      - DOCKER_INFLUXDB_INIT_ORG=forsen
-      - DOCKER_INFLUXDB_INIT_BUCKET=forsen
-      - DOCKER_INFLUXDB_INIT_RETENTION=1w
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=forsen-forsen-forsen-forsen
-    volumes:
-      - influxdb-prod:/var/lib/influxdb2
-    restart: unless-stopped
-    networks:
-      - prod
-
   grafana:
     user: root
     image: grafana/grafana:10.3.3
@@ -50,13 +32,14 @@ services:
     env_file:
       - .env
     networks:
-      - prod
+      - forsen
 
   postgres:
+    image: pg_uuidv7:latest
     user: root
-    image: ghcr.io/fboulnois/pg_uuidv7:1.5.0
+    cpus: "2"
     ports:
-      - 5432:5432
+      - 6444:5432
     command: postgres -c 'shared_buffers=4GB' -c 'effective_cache_size=12GB' -c 'work_mem=41MB' -c 'maintenance_work_mem=819MB' -c 'min_wal_size=2GB' -c 'max_wal_size=3GB' -c 'random_page_cost=1.1' -c 'effective_io_concurrency=200' -c 'max_parallel_workers=12'
     environment:
       POSTGRES_USER: postgres
@@ -68,55 +51,17 @@ services:
     networks:
       - forsen
 
-  postgres-prod:
-    image: ghcr.io/fboulnois/pg_uuidv7:1.5.0
-    user: postgres
-    cpus: "2"
-    ports:
-      - 6432:5432
-    command: postgres -c 'shared_buffers=4GB' -c 'effective_cache_size=12GB' -c 'work_mem=41MB' -c 'maintenance_work_mem=819MB' -c 'min_wal_size=2GB' -c 'max_wal_size=3GB' -c 'random_page_cost=1.1' -c 'effective_io_concurrency=200' -c 'max_parallel_workers=12'
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      PGDATA: /data/postgres
-    volumes:
-       - pg-prod:/data/postgres
-    restart: unless-stopped
-    networks:
-      - prod
-
-  postgres-prod-4:
-    image: docker.io/library/pg_uuidv7-new
-    user: root
-    cpus: "2"
-    ports:
-      - 6432:5432
-    command: postgres -c 'shared_buffers=4GB' -c 'effective_cache_size=12GB' -c 'work_mem=41MB' -c 'maintenance_work_mem=819MB' -c 'min_wal_size=2GB' -c 'max_wal_size=3GB' -c 'random_page_cost=1.1' -c 'effective_io_concurrency=200' -c 'max_parallel_workers=12'
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      PGDATA: /data/postgres
-    volumes:
-       - pg-prod-clean:/data/postgres
-    restart: unless-stopped
-    networks:
-      - prod
-
 volumes:
-  pg-prod-clean:
   pg-data:
-  pg-prod:
   grafana-data-1:
   grafana-data-2:
   influxdb-data:
-  influxdb-prod:
 
 networks:
   isolated:
     driver: bridge
     internal: true
   forsen:
-  prod:
 
 # sudo docker-compose up --force-recreate -d
 # sudo docker-compose down

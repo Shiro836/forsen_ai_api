@@ -26,21 +26,31 @@ async function pageReady() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)({});
 
     const audio_sources = new Map();
+    const pending_skips = new Set();
 
     function playWavFile(arrayBuffer, msg_id) {
+        // If skip already requested for this message, do not start playback
+        if (pending_skips.has(msg_id)) {
+            return;
+        }
+
         audioContext.decodeAudioData(arrayBuffer, function (buffer) {
-            let source = audioContext.createBufferSource();
+            // Check skip after decode
+            if (pending_skips.has(msg_id)) {
+                return;
+            }
+
+            const source = audioContext.createBufferSource();
             source.buffer = buffer;
             source.channelCount = 1;
             source.connect(audioContext.destination);
 
             source.onended = () => {
                 audio_sources.delete(msg_id);
-            }
+            };
 
+            audio_sources.set(msg_id, source);
             source.start();
-
-            audio_sources.set(msg_id, source)
         });
     }
 
@@ -95,11 +105,15 @@ async function pageReady() {
     }
 
     function skip(msg_id) {
-        console.log(audio_sources)
-        console.log(msg_id)
-        if (audio_sources.has(msg_id)) {
-            audio_sources.get(msg_id).stop();
+        console.log('skip requested for:', msg_id);
+        console.log('current audio sources:', audio_sources);
+        
+        pending_skips.add(msg_id);
 
+        const src = audio_sources.get(msg_id);
+        if (src) {
+            try { src.stop(); } catch (e) {}
+            audio_sources.delete(msg_id);
             updateText(" ");
             set_image("");
         }
@@ -116,6 +130,16 @@ async function pageReady() {
 
         ws.onclose = function (e) {
             console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+
+            // stop all current audio to avoid orphan playback
+            for (const [id, src] of audio_sources.entries()) {
+                try { src.stop(); } catch (err) {}
+                audio_sources.delete(id);
+            }
+            // clear UI
+            updateText(" ");
+            set_image("");
+
             setTimeout(function () {
                 connect();
             }, 1000);
@@ -153,6 +177,8 @@ async function pageReady() {
                     break;
             }
         };
+        // clear any pending skip markers on a fresh connection
+        pending_skips.clear();
     }
 
     connect();

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"regexp"
 	"slices"
@@ -20,6 +21,7 @@ import (
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
+	"app/pkg/s3client"
 	"app/pkg/twitch"
 	"app/pkg/whisperx"
 
@@ -30,6 +32,7 @@ type Processor struct {
 	logger *slog.Logger
 
 	llmModel *llm.Client
+	imageLlm *llm.Client
 	styleTts *ai.StyleTTSClient
 	whisper  *whisperx.Client
 
@@ -37,12 +40,15 @@ type Processor struct {
 
 	ffmpeg *ffmpeg.Client
 
+	s3 *s3client.Client
+
 	controlPanelNotifications *notifications.Client
 }
 
-func NewProcessor(logger *slog.Logger, llmModel *llm.Client, styleTts *ai.StyleTTSClient, whisper *whisperx.Client, db *db.DB, ffmpeg *ffmpeg.Client, controlPanelNotifications *notifications.Client) *Processor {
+func NewProcessor(logger *slog.Logger, llmModel *llm.Client, imageLlm *llm.Client, styleTts *ai.StyleTTSClient, whisper *whisperx.Client, db *db.DB, ffmpeg *ffmpeg.Client, controlPanelNotifications *notifications.Client, s3 *s3client.Client) *Processor {
 	return &Processor{
 		llmModel: llmModel,
+		imageLlm: imageLlm,
 		styleTts: styleTts,
 		whisper:  whisper,
 
@@ -52,9 +58,13 @@ func NewProcessor(logger *slog.Logger, llmModel *llm.Client, styleTts *ai.StyleT
 
 		ffmpeg: ffmpeg,
 
+		s3: s3,
+
 		controlPanelNotifications: controlPanelNotifications,
 	}
 }
+
+const addCtxToImageLlm = false
 
 func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -211,7 +221,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				EventData: []byte("/characters/" + charCard.ID.String() + "/image"),
 			})
 
-			filteredRequest := p.FilterText(ctx, broadcaster.ID, msg.TwitchMessage.Message)
+			// Replace any <img:{id}> tags with image_1, image_2 for TTS readability
+			ttsMsg := replaceImageTagsForTTS(msg.TwitchMessage.Message)
+			filteredRequest := p.FilterText(ctx, broadcaster.ID, ttsMsg)
 
 			requestAudio, textTimings, err := p.TTSWithTimings(ctx, filteredRequest, charCard.Data.VoiceReference)
 			if err != nil {
@@ -258,7 +270,121 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		requester := msg.TwitchMessage.TwitchLogin
 
-		prompt, err := p.craftPrompt(charCard, requester, msg.TwitchMessage.Message)
+		// Prepare message with inline image analyses replacing <img:{id}> tags
+		updatedMessage := msg.TwitchMessage.Message
+
+		// Extract up to 2 <img:{id}> tags and fetch images
+		imageIDs := make([]string, 0, 2)
+		imgMatches := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`).FindAllStringSubmatch(msg.TwitchMessage.Message, -1)
+		for _, m := range imgMatches {
+			if len(m) >= 2 {
+				imageIDs = append(imageIDs, m[1])
+				if len(imageIDs) == 2 {
+					break
+				}
+			}
+		}
+		if len(imageIDs) > 0 {
+			logger.Info("found image tags in message", "ids", imageIDs)
+		}
+
+		var attachments []llm.Attachment
+		if len(imageIDs) > 0 && p.s3 != nil {
+			for _, id := range imageIDs {
+				obj, err := p.s3.GetObject(ctx, id)
+				if err != nil {
+					logger.Warn("failed to fetch image from s3", "id", id, "err", err)
+					continue
+				}
+				data, err := io.ReadAll(obj)
+				obj.Close()
+				if err != nil {
+					logger.Warn("failed to read image from s3", "id", id, "err", err)
+					continue
+				}
+				attachments = append(attachments, llm.Attachment{Data: data, ContentType: "image/png"})
+				logger.Info("fetched image for analysis", "id", id, "bytes", len(data))
+			}
+		}
+
+		// Replace each <img:{id}> with per-image analysis inline, up to 2
+		if len(imageIDs) > 0 {
+			replacedCount := 0
+
+			// Build concise character context for the image LLM
+			charCtx := &strings.Builder{}
+			if n := charCard.Data.Name; len(n) > 0 {
+				charCtx.WriteString("Name: ")
+				charCtx.WriteString(n)
+				charCtx.WriteString("\n")
+			}
+			if d := charCard.Data.Description; len(d) > 0 {
+				charCtx.WriteString("Description: ")
+				charCtx.WriteString(d)
+				charCtx.WriteString("\n")
+			}
+			if ptxt := charCard.Data.Personality; len(ptxt) > 0 {
+				charCtx.WriteString("Personality: ")
+				charCtx.WriteString(ptxt)
+				charCtx.WriteString("\n")
+			}
+			if sp := charCard.Data.SystemPrompt; len(sp) > 0 {
+				charCtx.WriteString("System Instructions: ")
+				charCtx.WriteString(sp)
+				charCtx.WriteString("\n")
+			}
+
+			// Include message examples prior to the user prompt (same format as main prompt)
+			msgEx := &strings.Builder{}
+			if len(charCard.Data.MessageExamples) > 0 {
+				for _, ex := range charCard.Data.MessageExamples {
+					msgEx.WriteString(fmt.Sprintf("<START>###UserName: %s\n###%s: %s<END>\n", ex.Request, charCard.Data.Name, ex.Response))
+				}
+			}
+			for i, id := range imageIDs {
+				if i >= len(attachments) { // safety
+					break
+				}
+				att := attachments[i]
+				// Build a single user message; optionally include char-card context/examples based on toggle
+				combined := &strings.Builder{}
+				if addCtxToImageLlm {
+					combined.WriteString(charCtx.String())
+					if msgEx.Len() > 0 {
+						combined.WriteString("Message Examples: ")
+						combined.WriteString(msgEx.String())
+					}
+					combined.WriteString("User prompt: ")
+					combined.WriteString(updatedMessage)
+					combined.WriteString("\nDescribe THIS image in 1 to 6 sentences, including details relevant to the character context above and the user's prompt. No markdown.")
+				} else {
+					combined.WriteString("Describe THIS image in 1 to 6 sentences. No markdown.")
+				}
+
+				messages := []llm.Message{
+					{Role: "system", Content: []llm.MessageContent{{Type: "text", Text: "."}}},
+					{Role: "user", Content: []llm.MessageContent{{Type: "text", Text: combined.String()}}},
+				}
+				analysis, err := p.imageLlm.AskMessages(ctx, messages, []llm.Attachment{att})
+				if err != nil || len(analysis) == 0 {
+					logger.Warn("image analysis failed", "id", id, "err", err)
+					// remove the tag if analysis failed
+					updatedMessage = strings.Replace(updatedMessage, "<img:"+id+">", "", 1)
+					continue
+				}
+
+				logger.Info("image analysis", "id", id, "analysis", analysis)
+
+				// Replace the first occurrence of this tag with wrapped analysis so the text LLM can identify it
+				wrapped := "<image_analysis:{" + analysis + "}>"
+				updatedMessage = strings.Replace(updatedMessage, "<img:"+id+">", wrapped, 1)
+				replacedCount++
+				logger.Info("replaced image tag with analysis", "id", id, "analysis_len", len(analysis))
+			}
+			logger.Info("inline image replacements done", "count", replacedCount)
+		}
+
+		prompt, err := p.craftPrompt(charCard, requester, updatedMessage)
 		if err != nil {
 			logger.Error("error crafting prompt", "err", err)
 			continue
@@ -279,7 +405,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			EventData: []byte("/characters/" + charCard.ID.String() + "/image"),
 		})
 
-		requestText := requester + " asked me: " + msg.TwitchMessage.Message
+		// For TTS of the incoming request, replace inline image tags with placeholders
+		ttsUserMsg := replaceImageTagsForTTS(msg.TwitchMessage.Message)
+		requestText := requester + " asked me: " + ttsUserMsg
 
 		filteredRequestText := p.FilterText(ctx, broadcaster.ID, requestText)
 
@@ -383,6 +511,16 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	}
 }
 
+// replaceImageTagsForTTS converts <img:{id}> occurrences to sequential placeholders image_1, image_2 in order of appearance
+func replaceImageTagsForTTS(s string) string {
+	re := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`)
+	idx := 0
+	return re.ReplaceAllStringFunc(s, func(_ string) string {
+		idx++
+		return fmt.Sprintf("image_%d", idx)
+	})
+}
+
 type audioMsg struct {
 	Audio []byte `json:"audio"`
 	MsgID string `json:"msg_id"`
@@ -424,6 +562,17 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 
 	go func() {
 		defer close(done)
+
+		// Check skip before sending any audio to the client
+		var skipBeforeSend bool
+		func() {
+			skippedMsgIDsLock.Lock()
+			defer skippedMsgIDsLock.Unlock()
+			_, skipBeforeSend = (*skippedMsgIDs)[msdID]
+		}()
+		if skipBeforeSend {
+			return
+		}
 
 		audioMsg, err := json.Marshal(&audioMsg{
 			Audio: audio,
