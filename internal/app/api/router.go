@@ -97,7 +97,7 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))
 
 	// Images upload page and retrieval (registered before catch-all route)
-	router.Get("/images", api.nav(api.imagesPage))
+	router.Get("/images", api.navPublic(api.imagesPage))
 	router.Post("/images", http.HandlerFunc(api.imagesUpload))
 	router.Get("/images/{id}", http.HandlerFunc(api.imageGet))
 

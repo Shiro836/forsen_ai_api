@@ -9,9 +9,18 @@
 
 ## Plans:
 - [x] Security features (added control panel sharing and fixed filters, so I guess it's done)
-- [ ] Add images to chars
-- [ ] Tune LLM
-- [ ] Separate NixOS full setup repo
+- [x] Add images to chars
+- [x] Tune LLM
 - [ ] Switch to metavoice TTS or Mars5 TTS or something better
 - [ ] Add more chars
 - [ ] Train TTS on more voices
+
+## Bugs
+- [ ] Fix show image not working sometimes and not working when request is not active yet
+- [ ] Make better README 
+- [ ] Fix skip button stopping working
+- [ ] Full switch from production version to beta
+- [ ] Move all static files(images and voice references) from postgres to minio
+
+
+FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN 

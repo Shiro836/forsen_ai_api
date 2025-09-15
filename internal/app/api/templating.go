@@ -147,6 +147,43 @@ func (api *API) elem(getContent func(r *http.Request) template.HTML) http.Handle
 	})
 }
 
+// navPublic renders the standard page layout (styles and navbar) without enforcing authentication.
+// If a user exists, it enriches the navbar with permissions; otherwise, it renders a basic layout.
+func (api *API) navPublic(getContent func(r *http.Request) template.HTML) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := ctxstore.GetUser(r.Context())
+
+		page := createPage(r)
+
+		navPage := &navPage{
+			Content: getContent(r),
+		}
+
+		if user != nil {
+			userPermissions, err := api.db.GetUserPermissions(r.Context(), user.ID, db.PermissionStatusGranted)
+			if err != nil {
+				submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
+
+				return
+			}
+
+			for _, permission := range userPermissions {
+				switch permission {
+				case db.PermissionStreamer:
+					navPage.IsStreamer = true
+				case db.PermissionMod:
+					navPage.IsMod = true
+				case db.PermissionAdmin:
+					navPage.IsAdmin = true
+				}
+			}
+		}
+
+		page.Content = getHtml("navbar.html", navPage)
+		submitPage(w, page)
+	})
+}
+
 func (api *API) nav(getContent func(r *http.Request) template.HTML) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user := ctxstore.GetUser(r.Context())

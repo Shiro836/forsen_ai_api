@@ -122,11 +122,14 @@ async function pageReady() {
         // Set image count for CSS to size evenly without distorting ratios
         imagesContainer.style.setProperty('--img-count', String(currentImageURLs.length));
         for (let i = 0; i < currentImageURLs.length; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'img_slot';
             const img = document.createElement('img');
             // Ensure absolute URL for overlay context
             const url = currentImageURLs[i].startsWith('http') ? currentImageURLs[i] : (window.location.origin + currentImageURLs[i]);
             img.src = url;
-            imagesContainer.appendChild(img);
+            slot.appendChild(img);
+            imagesContainer.appendChild(slot);
         }
         imagesContainer.style.display = 'flex';
     }
