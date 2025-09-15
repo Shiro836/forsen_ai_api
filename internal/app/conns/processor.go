@@ -11,6 +11,8 @@ type EventWriter func(event *DataEvent) bool
 const (
 	RestartProcessor UpdateType = iota
 	SkipMessage
+	ShowImages
+	HideImages
 )
 
 type UpdateType int

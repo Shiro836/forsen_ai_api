@@ -42,7 +42,7 @@ func (c *Client) Notify(userID uuid.UUID) {
 		}
 	}()
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 2; i++ {
 		select {
 		case <-limit.C:
 			return

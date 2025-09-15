@@ -44,6 +44,11 @@ func NewConnectionManager(ctx context.Context, logger *slog.Logger, processor Pr
 	}
 }
 
+type PromptImages struct {
+	ImageIDs   []string `json:"image_ids"`
+	ShowImages *bool    `json:"show_images,omitempty"`
+}
+
 type Audio struct {
 	Audio []byte `json:"audio"`
 }
@@ -55,9 +60,12 @@ type Text struct {
 const (
 	EventTypeAudio EventType = iota + 1
 	EventTypeVideo
-	EventTypeText
 	EventTypeImage
+	EventTypePromptImage
+	EventTypeText
 	EventTypeSkip
+	EventTypeShowImages
+	EventTypeHideImages
 	EventTypePing
 )
 
@@ -69,14 +77,20 @@ func (et EventType) String() string {
 		return "audio"
 	case EventTypeVideo:
 		return "video"
-	case EventTypeText:
-		return "text"
 	case EventTypeImage:
 		return "image"
+	case EventTypePromptImage:
+		return "prompt_image"
+	case EventTypeText:
+		return "text"
 	case EventTypeSkip:
 		return "skip"
 	case EventTypePing:
 		return "ping"
+	case EventTypeShowImages:
+		return "show_images"
+	case EventTypeHideImages:
+		return "hide_images"
 	default:
 		return "unknown"
 	}
@@ -186,6 +200,36 @@ func (m *Manager) SkipMessage(userID uuid.UUID, msgID string) {
 		select {
 		case ch <- &Update{
 			UpdateType: SkipMessage,
+			Data:       msgID,
+		}:
+		default:
+		}
+	}
+}
+
+func (m *Manager) ShowImages(userID uuid.UUID, msgID string) {
+	m.rwMutex.RLock()
+	defer m.rwMutex.RUnlock()
+
+	if ch, ok := m.updateEventsCh[userID]; ok {
+		select {
+		case ch <- &Update{
+			UpdateType: ShowImages,
+			Data:       msgID,
+		}:
+		default:
+		}
+	}
+}
+
+func (m *Manager) HideImages(userID uuid.UUID, msgID string) {
+	m.rwMutex.RLock()
+	defer m.rwMutex.RUnlock()
+
+	if ch, ok := m.updateEventsCh[userID]; ok {
+		select {
+		case ch <- &Update{
+			UpdateType: HideImages,
 			Data:       msgID,
 		}:
 		default:

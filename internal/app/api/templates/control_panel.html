@@ -39,6 +39,9 @@
                     <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-b'>
                         Actions
                     </th>
+                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                        Images
+                    </th>
                 </tr>
             </thead>
             <tbody id="messages_box">
@@ -134,6 +137,24 @@
 
             table = document.getElementById('messages_box');
 
+            // Helper function to render images into a cell
+            function renderImages(cell, imageUrls, useAbsolute) {
+                cell.innerHTML = '';
+                if (Array.isArray(imageUrls)) {
+                    for (let k = 0; k < imageUrls.length; k++) {
+                        let imgUrl = imageUrls[k];
+                        let absUrl = useAbsolute ? (window.location.origin + imgUrl) : imgUrl;
+                        let imgElem = document.createElement('img');
+                        imgElem.src = absUrl;
+                        imgElem.style.maxWidth = '512px';
+                        imgElem.style.maxHeight = '512px';
+                        imgElem.style.marginRight = '8px';
+                        imgElem.style.marginLeft = '8px';
+                        cell.appendChild(imgElem);
+                    }
+                }
+            }
+
             updates = msg['updates']
             for (let i = 0; i < updates.length; i++) {
                 action = updates[i]['action'];
@@ -164,18 +185,15 @@
                             row.insertCell(-1).innerHTML = data['request'];
                             row.insertCell(-1).innerHTML = data['response'];
                             row.insertCell(-1).innerHTML = data['status'];
-                            row.insertCell(-1).innerHTML = "<button id='delete_" + id + "'>Delete</button>";
+                            row.insertCell(-1).innerHTML = "<button id='delete_" + id + "'>Delete</button><br><button id='show_" + id + "'>Show Images</button><br><button id='hide_" + id + "'>Hide Images</button>";
+                            // Render images as <img> tags with absolute URLs in the last cell
+                            let imagesCell = row.insertCell(-1);
+                            renderImages(imagesCell, data['image_urls'], true);
 
-                            for (let j = 0; j < 6; j++) {
+                            for (let j = 0; j < 8; j++) {
                                 row.cells[j].className = '{{template "ui-border-clr"}} border-r border-t'
                             }
-                            row.cells[6].className = '{{template "ui-border-clr"}} border-l border-t'
-
-                            document.getElementById('delete_' + id).addEventListener('click', function() {
-                                ws.send(JSON.stringify({
-                                    'id': id,
-                                }));
-                            });
+                            row.cells[8].className = '{{template "ui-border-clr"}} border-l border-t'
                         }
                         else {
                             row.cells[0].innerHTML = data['requested_by'];
@@ -184,7 +202,47 @@
                             row.cells[3].innerHTML = data['request'];
                             row.cells[4].innerHTML = data['response'];
                             row.cells[5].innerHTML = data['status'];
+                            row.cells[6].innerHTML = "<button id='delete_" + id + "'>Delete</button><br><button id='show_" + id + "'>Show Images</button><br><button id='hide_" + id + "'>Hide Images</button>";
+                            // Render images as <img> tags (relative URLs) in the last cell
+                            renderImages(row.cells[7], data['image_urls'], false);
                         }
+
+                        // Remove existing listeners before adding new ones to prevent duplicates
+                        const deleteBtn = document.getElementById('delete_' + id);
+                        const showBtn = document.getElementById('show_' + id);
+                        const hideBtn = document.getElementById('hide_' + id);
+                        
+                        // Clone elements to remove all event listeners
+                        const newDeleteBtn = deleteBtn.cloneNode(true);
+                        const newShowBtn = showBtn.cloneNode(true);
+                        const newHideBtn = hideBtn.cloneNode(true);
+                        
+                        // Replace elements with clean clones
+                        deleteBtn.parentNode.replaceChild(newDeleteBtn, deleteBtn);
+                        showBtn.parentNode.replaceChild(newShowBtn, showBtn);
+                        hideBtn.parentNode.replaceChild(newHideBtn, hideBtn);
+                        
+                        // Add fresh event listeners
+                        newDeleteBtn.addEventListener('click', function() {
+                            ws.send(JSON.stringify({
+                                'id': id,
+                                'action': 'skip',
+                            }));
+                        });
+
+                        newShowBtn.addEventListener('click', function() {
+                            ws.send(JSON.stringify({
+                                'id': id,
+                                'action': 'show_images',
+                            }));
+                        });
+                        
+                        newHideBtn.addEventListener('click', function() {
+                            ws.send(JSON.stringify({
+                                'id': id,
+                                'action': 'hide_images',
+                            }));
+                        });
 
                         break;
                 }

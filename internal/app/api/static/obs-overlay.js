@@ -28,6 +28,11 @@ async function pageReady() {
     const audio_sources = new Map();
     const pending_skips = new Set();
 
+    // Track current message and image visibility
+    let currentMsgId = null;
+    let showImages = false;
+    let currentImageURLs = [];
+
     function playWavFile(arrayBuffer, msg_id) {
         // If skip already requested for this message, do not start playback
         if (pending_skips.has(msg_id)) {
@@ -94,14 +99,36 @@ async function pageReady() {
     function set_image(url) {
         const charImg = document.getElementById("char_image");
 
-        if (!url) {
+        if (!url || url.length <= 1) {
             charImg.style.opacity = "0";
-
+            // also clear any prompt images
+            currentImageURLs = [];
+            showImages = false;
+            renderPromptImages();
             return;
         }
 
         charImg.src = url;
         charImg.style.opacity = "1";
+    }
+
+    function renderPromptImages() {
+        const imagesContainer = document.getElementById('images_container');
+        imagesContainer.innerHTML = '';
+        if (!showImages || currentImageURLs.length === 0) {
+            imagesContainer.style.display = 'none';
+            return;
+        }
+        // Set image count for CSS to size evenly without distorting ratios
+        imagesContainer.style.setProperty('--img-count', String(currentImageURLs.length));
+        for (let i = 0; i < currentImageURLs.length; i++) {
+            const img = document.createElement('img');
+            // Ensure absolute URL for overlay context
+            const url = currentImageURLs[i].startsWith('http') ? currentImageURLs[i] : (window.location.origin + currentImageURLs[i]);
+            img.src = url;
+            imagesContainer.appendChild(img);
+        }
+        imagesContainer.style.display = 'flex';
     }
 
     function skip(msg_id) {
@@ -166,6 +193,27 @@ async function pageReady() {
                     break
                 case 'image':
                     set_image(dataStr)
+                    break
+                case 'prompt_image':
+                    try {
+                        const payload = JSON.parse(dataStr);
+                        currentImageURLs = Array.isArray(payload.image_ids) ? payload.image_ids.map(id => `/images/${id}`) : [];
+                        // Reset visibility per-message; default to false if missing
+                        showImages = !!payload.show_images;
+                        // Optionally track msg id if provided later; default to null now
+                        renderPromptImages();
+                    } catch (e) {
+                        console.error('failed to parse prompt_image payload', e);
+                    }
+                    break
+                case 'show_images':
+                    // msg data is message id to show for; no-op for id since overlay only shows current
+                    showImages = true;
+                    renderPromptImages();
+                    break
+                case 'hide_images':
+                    showImages = false;
+                    renderPromptImages();
                     break
                 case 'skip':
                     skip(dataStr)

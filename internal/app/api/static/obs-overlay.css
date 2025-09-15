@@ -46,14 +46,39 @@ main {
 
 .character {
     display: flex;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 12px;
     margin: 10px 0;
+    height: 70vh;
 }
 
 #char_image {
     opacity: 0;
     transition: opacity 0.5s linear;
-    max-height: 500px;
+    height: 100%;
+    max-height: 100%;
+    width: auto;
+    flex-shrink: 0;
+}
+
+#images_container {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    gap: 8px;
+    flex-shrink: 0;
+    min-width: 300px;
+}
+
+#images_container img {
+    height: calc(100% / var(--img-count, 1));
+    width: auto;
+    max-width: 512px;
+    object-fit: contain;
+    border-radius: .3em;
 }
 
 @keyframes wordFadeIn {

@@ -64,8 +64,6 @@ func NewProcessor(logger *slog.Logger, llmModel *llm.Client, imageLlm *llm.Clien
 	}
 }
 
-const addCtxToImageLlm = false
-
 func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -130,6 +128,21 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 					}
 
 					p.controlPanelNotifications.Notify(broadcaster.ID)
+
+				case conns.ShowImages:
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeShowImages,
+						EventData: []byte(upd.Data),
+					})
+
+					p.controlPanelNotifications.Notify(broadcaster.ID)
+				case conns.HideImages:
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeHideImages,
+						EventData: []byte(upd.Data),
+					})
+
+					p.controlPanelNotifications.Notify(broadcaster.ID)
 				}
 			case <-ctx.Done():
 				return
@@ -151,12 +164,30 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				continue
 			}
 
-			if err := p.db.PushMsg(ctx, broadcaster.ID, db.TwitchMessage{
+			// Extract up to two image ids and store with the message on insert
+			imgMatches := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`).FindAllStringSubmatch(msg.Message, -1)
+			imageIDs := make([]string, 0, 2)
+			for _, m := range imgMatches {
+				if len(m) >= 2 {
+					imageIDs = append(imageIDs, m[1])
+					if len(imageIDs) == 2 {
+						break
+					}
+				}
+			}
+
+			// logger.Info("ingest twitch msg", "from", msg.TwitchLogin, "reward", msg.RewardID)
+
+			_, err := p.db.PushMsg(ctx, broadcaster.ID, db.TwitchMessage{
 				TwitchLogin: msg.TwitchLogin,
 				Message:     msg.Message,
 				RewardID:    msg.RewardID,
-			}); err != nil {
+			}, &db.MessageData{ImageIDs: imageIDs, ShowImages: false})
+			if err != nil {
 				logger.Error("error pushing message to db", "err", err)
+			}
+			if len(imageIDs) > 0 {
+				logger.Info("stored image ids with message", "ids", imageIDs)
 			}
 
 			p.controlPanelNotifications.Notify(broadcaster.ID)
@@ -270,135 +301,120 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		requester := msg.TwitchMessage.TwitchLogin
 
-		// Prepare message with inline image analyses replacing <img:{id}> tags
 		updatedMessage := msg.TwitchMessage.Message
 
-		// Extract up to 2 <img:{id}> tags and fetch images
-		imageIDs := make([]string, 0, 2)
-		imgMatches := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`).FindAllStringSubmatch(msg.TwitchMessage.Message, -1)
-		for _, m := range imgMatches {
-			if len(m) >= 2 {
-				imageIDs = append(imageIDs, m[1])
-				if len(imageIDs) == 2 {
-					break
-				}
-			}
-		}
-		if len(imageIDs) > 0 {
-			logger.Info("found image tags in message", "ids", imageIDs)
+		var imageIDs []string
+		showImages := false
+
+		if msgData, err := db.ParseMessageData(msg.Data); err == nil {
+			imageIDs = msgData.ImageIDs
+			showImages = msgData.ShowImages
+
+			logger.Info("parsed image ids from message data", "ids", imageIDs)
+		} else {
+			logger.Warn("failed to parse message data for image ids", "err", err)
 		}
 
-		var attachments []llm.Attachment
-		if len(imageIDs) > 0 && p.s3 != nil {
-			for _, id := range imageIDs {
-				obj, err := p.s3.GetObject(ctx, id)
-				if err != nil {
-					logger.Warn("failed to fetch image from s3", "id", id, "err", err)
-					continue
-				}
-				data, err := io.ReadAll(obj)
-				obj.Close()
-				if err != nil {
-					logger.Warn("failed to read image from s3", "id", id, "err", err)
-					continue
-				}
-				attachments = append(attachments, llm.Attachment{Data: data, ContentType: "image/png"})
-				logger.Info("fetched image for analysis", "id", id, "bytes", len(data))
-			}
-		}
-
-		// Replace each <img:{id}> with per-image analysis inline, up to 2
-		if len(imageIDs) > 0 {
-			replacedCount := 0
-
-			// Build concise character context for the image LLM
-			charCtx := &strings.Builder{}
-			if n := charCard.Data.Name; len(n) > 0 {
-				charCtx.WriteString("Name: ")
-				charCtx.WriteString(n)
-				charCtx.WriteString("\n")
-			}
-			if d := charCard.Data.Description; len(d) > 0 {
-				charCtx.WriteString("Description: ")
-				charCtx.WriteString(d)
-				charCtx.WriteString("\n")
-			}
-			if ptxt := charCard.Data.Personality; len(ptxt) > 0 {
-				charCtx.WriteString("Personality: ")
-				charCtx.WriteString(ptxt)
-				charCtx.WriteString("\n")
-			}
-			if sp := charCard.Data.SystemPrompt; len(sp) > 0 {
-				charCtx.WriteString("System Instructions: ")
-				charCtx.WriteString(sp)
-				charCtx.WriteString("\n")
-			}
-
-			// Include message examples prior to the user prompt (same format as main prompt)
-			msgEx := &strings.Builder{}
-			if len(charCard.Data.MessageExamples) > 0 {
-				for _, ex := range charCard.Data.MessageExamples {
-					msgEx.WriteString(fmt.Sprintf("<START>###UserName: %s\n###%s: %s<END>\n", ex.Request, charCard.Data.Name, ex.Response))
-				}
-			}
-			for i, id := range imageIDs {
-				if i >= len(attachments) { // safety
-					break
-				}
-				att := attachments[i]
-				// Build a single user message; optionally include char-card context/examples based on toggle
-				combined := &strings.Builder{}
-				if addCtxToImageLlm {
-					combined.WriteString(charCtx.String())
-					if msgEx.Len() > 0 {
-						combined.WriteString("Message Examples: ")
-						combined.WriteString(msgEx.String())
-					}
-					combined.WriteString("User prompt: ")
-					combined.WriteString(updatedMessage)
-					combined.WriteString("\nDescribe THIS image in 1 to 6 sentences, including details relevant to the character context above and the user's prompt. No markdown.")
-				} else {
-					combined.WriteString("Describe THIS image in 1 to 6 sentences. No markdown.")
-				}
-
-				messages := []llm.Message{
-					{Role: "system", Content: []llm.MessageContent{{Type: "text", Text: "."}}},
-					{Role: "user", Content: []llm.MessageContent{{Type: "text", Text: combined.String()}}},
-				}
-				analysis, err := p.imageLlm.AskMessages(ctx, messages, []llm.Attachment{att})
-				if err != nil || len(analysis) == 0 {
-					logger.Warn("image analysis failed", "id", id, "err", err)
-					// remove the tag if analysis failed
-					updatedMessage = strings.Replace(updatedMessage, "<img:"+id+">", "", 1)
-					continue
-				}
-
-				logger.Info("image analysis", "id", id, "analysis", analysis)
-
-				// Replace the first occurrence of this tag with wrapped analysis so the text LLM can identify it
-				wrapped := "<image_analysis:{" + analysis + "}>"
-				updatedMessage = strings.Replace(updatedMessage, "<img:"+id+">", wrapped, 1)
-				replacedCount++
-				logger.Info("replaced image tag with analysis", "id", id, "analysis_len", len(analysis))
-			}
-			logger.Info("inline image replacements done", "count", replacedCount)
-		}
-
-		prompt, err := p.craftPrompt(charCard, requester, updatedMessage)
+		imageIDsBytes, err := json.Marshal(&conns.PromptImages{
+			ImageIDs:   imageIDs,
+			ShowImages: &showImages,
+		})
 		if err != nil {
-			logger.Error("error crafting prompt", "err", err)
-			continue
+			logger.Error("failed to marshal image ids", "err", err)
+		} else {
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypePromptImage,
+				EventData: imageIDsBytes,
+			})
+		}
+
+		imageAnalysisDone := make(chan struct{})
+		if len(imageIDs) == 0 || p.s3 == nil || p.imageLlm == nil {
+			// Nothing to analyze; keep updatedMessage as original and signal done
+			close(imageAnalysisDone)
+		} else {
+			go func(origMsg string, ids []string) {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Error("panic in image analysis goroutine", "r", r)
+						updatedMessage = origMsg
+					}
+					close(imageAnalysisDone)
+				}()
+
+				localMsg := origMsg
+				replacedCount := 0
+
+				var wg sync.WaitGroup
+				type res struct {
+					id       string
+					analysis string
+					ok       bool
+				}
+				resultsCh := make(chan res, len(ids))
+
+				for _, id := range ids {
+					id := id
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						// Fetch image bytes
+						obj, err := p.s3.GetObject(ctx, id)
+						if err != nil {
+							logger.Warn("failed to fetch image from s3", "id", id, "err", err)
+							resultsCh <- res{id: id, ok: false}
+							return
+						}
+						data, err := io.ReadAll(obj)
+						obj.Close()
+						if err != nil {
+							logger.Warn("failed to read image from s3", "id", id, "err", err)
+							resultsCh <- res{id: id, ok: false}
+							return
+						}
+						logger.Info("fetched image for analysis", "id", id, "bytes", len(data))
+
+						messages := []llm.Message{
+							{Role: "system", Content: []llm.MessageContent{{Type: "text", Text: "."}}},
+							{Role: "user", Content: []llm.MessageContent{{Type: "text", Text: `Describe the imag as if you are a witty streamer's AI co-host in a witty, playful style while staying in third person. 
+Do not use first-person expressions like "I" or "we," and avoid conversational greetings. 
+The description should read like a clever commentary, not like someone talking about themselves.  in 4 to 20 sentences. No markdown.`}}},
+						}
+						analysis, err := p.imageLlm.AskMessages(ctx, messages, []llm.Attachment{{Data: data, ContentType: "image/png"}})
+						if err != nil || len(analysis) == 0 {
+							logger.Warn("image analysis failed", "id", id, "err", err)
+							resultsCh <- res{id: id, ok: false}
+							return
+						}
+						logger.Info("image analysis", "id", id, "analysis", analysis)
+						resultsCh <- res{id: id, analysis: analysis, ok: true}
+					}()
+				}
+
+				go func() {
+					wg.Wait()
+					close(resultsCh)
+				}()
+
+				for r := range resultsCh {
+					if !r.ok {
+						localMsg = strings.Replace(localMsg, "<img:"+r.id+">", "", 1)
+						continue
+					}
+					wrapped := "<image_" + r.id + ":{" + r.analysis + "}>"
+					localMsg = strings.Replace(localMsg, "<img:"+r.id+">", wrapped, 1)
+					replacedCount++
+					logger.Info("replaced image tag with analysis", "id", r.id, "analysis_len", len(r.analysis))
+				}
+
+				logger.Info("inline image replacements done", "count", replacedCount)
+				updatedMessage = localMsg
+			}(updatedMessage, imageIDs)
 		}
 
 		var llmResult string
 		var llmResultErr error
-
 		llmResultDone := make(chan struct{})
-		go func() {
-			defer close(llmResultDone)
-
-			llmResult, llmResultErr = p.llmModel.Ask(ctx, prompt)
-		}()
 
 		eventWriter(&conns.DataEvent{
 			EventType: conns.EventTypeImage,
@@ -434,6 +450,25 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			logger.Error("error playing tts", "err", err)
 			return err
 		}
+
+		// Wait for image analysis to complete, then craft prompt and start text LLM while TTS plays
+		select {
+		case <-imageAnalysisDone:
+			// proceed with updatedMessage (may be unchanged if no images or analysis failed)
+		case <-ctx.Done():
+			return nil
+		}
+
+		prompt, err := p.craftPrompt(charCard, requester, updatedMessage)
+		if err != nil {
+			logger.Error("error crafting prompt", "err", err)
+			continue
+		}
+
+		go func() {
+			defer close(llmResultDone)
+			llmResult, llmResultErr = p.llmModel.Ask(ctx, prompt)
+		}()
 
 		select {
 		case <-llmResultDone:

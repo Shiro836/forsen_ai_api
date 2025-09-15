@@ -54,21 +54,25 @@ type Message struct {
 	Data []byte
 }
 
-func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage) error {
-	_, err := db.Exec(ctx, `
+func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage, data *MessageData) (uuid.UUID, error) {
+	var id uuid.UUID
+
+	err := db.QueryRow(ctx, `
 		INSERT INTO
 			msg_queue (
 				user_id,
 				msg,
-				status
+				status,
+				data
 			)
-		VALUES ($1, $2, $3)
-	`, userID, msg, MsgStatusWait)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
+	`, userID, msg, MsgStatusWait, data).Scan(&id)
 	if err != nil {
-		return fmt.Errorf("failed to push message: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to push message: %w", err)
 	}
 
-	return nil
+	return id, nil
 }
 
 func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error) {
@@ -78,7 +82,8 @@ func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error
 		select
 			id,
 			user_id,
-			msg
+			msg,
+			data
 		from
 			msg_queue
 		where
@@ -86,7 +91,7 @@ func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error
 		and
 			status = $2
 		limit 1
-	`, userID, MsgStatusWait).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage)
+	`, userID, MsgStatusWait).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage, &msg.Data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get next message: %w", parseErr(err))
 	}
@@ -135,6 +140,9 @@ func (db *DB) UpdateMessageStatus(ctx context.Context, msgID uuid.UUID, status M
 
 type MessageData struct {
 	AIResponse string `json:"ai_response"`
+
+	ShowImages bool     `json:"show_images"`
+	ImageIDs   []string `json:"image_ids,omitempty"`
 }
 
 func (db *DB) UpdateMessageData(ctx context.Context, msgID uuid.UUID, data *MessageData) error {
@@ -142,7 +150,7 @@ func (db *DB) UpdateMessageData(ctx context.Context, msgID uuid.UUID, data *Mess
 		update
 			msg_queue
 		set
-			data = $1,
+			data = coalesce(data, '{}'::jsonb) || $1::jsonb,
 			updated = nextval('updated_seq')
 		where
 			id = $2

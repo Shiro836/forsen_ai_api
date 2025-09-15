@@ -5,6 +5,7 @@
         <div class="flex items-center pb-2">
           <label for="image_file">Upload image</label>
         </div>
+        <div class="text-sm text-gray-500 dark:text-gray-400 pb-2">Tip: Press Ctrl+V to paste an image from your clipboard.</div>
         <input id="image_file" name="file" type="file" accept="image/*" class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer" required />
         <div class="flex pt-4 justify-end font-bold">
           <button type="submit" class='{{template "button-2"}} py-2 px-4 w-28'>Upload</button>
@@ -16,5 +17,53 @@
     </div>
   </form>
 </div>
+
+
+<script>
+(function() {
+  const resultsEl = document.getElementById('images_result');
+
+  async function uploadPastedImage(file) {
+    if (!file) return;
+    try {
+      if (resultsEl) {
+        resultsEl.innerHTML = '<div class="text-sm opacity-80">Uploading pasted image…</div>';
+      }
+      const formData = new FormData();
+      formData.append('file', file, file.name || 'pasted.png');
+      const resp = await fetch('/images', { method: 'POST', body: formData, credentials: 'same-origin' });
+      const html = await resp.text();
+      if (resultsEl) {
+        resultsEl.innerHTML = html;
+      }
+    } catch (err) {
+      if (resultsEl) {
+        resultsEl.innerHTML = '<div class="text-red-600 dark:text-red-400 text-sm">Failed to upload pasted image.</div>';
+      }
+    }
+  }
+
+  document.addEventListener('paste', function(e) {
+    const active = document.activeElement;
+    const isTypingTarget = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+    if (isTypingTarget) return;
+
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items || !items.length) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          uploadPastedImage(file);
+          break;
+        }
+      }
+    }
+  });
+})();
+</script>
 
 

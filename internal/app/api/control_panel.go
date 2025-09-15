@@ -242,14 +242,23 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 				break read_loop
 			}
 
-			var upd *skipMsg
+			var upd *actionMessage
 			err = json.Unmarshal(msg.Message, &upd)
 			if err != nil {
 				logger.Error("failed to unmarshal message from ws", "err", err)
 				break read_loop
 			}
 
-			api.connManager.SkipMessage(targetUser.ID, upd.ID)
+			switch upd.Action {
+			case ActionDeleteString:
+				api.connManager.SkipMessage(targetUser.ID, upd.ID)
+			case ActionImagesShowString:
+				api.connManager.ShowImages(targetUser.ID, upd.ID)
+			case ActionImagesHideString:
+				api.connManager.HideImages(targetUser.ID, upd.ID)
+			default:
+				logger.Error("unknown action", "action", upd.Action)
+			}
 		}
 	}()
 
@@ -328,6 +337,14 @@ loop:
 					break loop
 				}
 
+				// Build image URLs from stored image IDs, if any
+				imageURLs := make([]string, 0, len(msgData.ImageIDs))
+				for _, iid := range msgData.ImageIDs {
+					imageURLs = append(imageURLs, fmt.Sprintf("/images/%s", iid))
+				}
+
+				logger.Info("image urls", "image_urls", imageURLs)
+
 				data, err = json.Marshal(&msgUpsert{
 					ID: dbMessage.ID.String(),
 
@@ -340,6 +357,9 @@ loop:
 					Response: msgData.AIResponse,
 
 					Status: dbMessage.Status.String(),
+
+					ShowImages: msgData.ShowImages,
+					ImageURLs:  imageURLs,
 				})
 				if err != nil {
 					logger.Error("failed to marshal message", "err", err)
@@ -397,6 +417,9 @@ type msgUpsert struct {
 	Response string `json:"response"`
 
 	Status string `json:"status"`
+
+	ShowImages bool     `json:"show_images"`
+	ImageURLs  []string `json:"image_urls,omitempty"`
 }
 
 type Action int
@@ -404,7 +427,33 @@ type Action int
 const (
 	ActionDelete Action = iota
 	ActionUpsert
+	ActionImagesShow
+	ActionImagesHide
 )
+
+type ActionString string
+
+const (
+	ActionDeleteString     ActionString = "delete"
+	ActionUpsertString     ActionString = "upsert"
+	ActionImagesShowString ActionString = "show_images"
+	ActionImagesHideString ActionString = "hide_images"
+)
+
+func (a ActionString) Action() Action {
+	switch a {
+	case ActionDeleteString:
+		return ActionDelete
+	case ActionUpsertString:
+		return ActionUpsert
+	case ActionImagesShowString:
+		return ActionImagesShow
+	case ActionImagesHideString:
+		return ActionImagesHide
+	default:
+		return ActionDelete
+	}
+}
 
 type Update struct {
 	Action Action `json:"action"`
@@ -416,8 +465,9 @@ type Updates struct {
 	Updates  []Update `json:"updates"`
 }
 
-type skipMsg struct {
-	ID string `json:"id"`
+type actionMessage struct {
+	ID     string       `json:"id"`
+	Action ActionString `json:"action"`
 }
 
 func (api *API) controlPanelGrant(w http.ResponseWriter, r *http.Request) {
