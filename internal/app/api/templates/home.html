@@ -13,7 +13,16 @@
     <div class="pt-12 pb-4 text-xl font-medium">
         Settings
     </div>
-    <div>
+    <div class="pt-18 text-xl font-medium">
+        Images guide
+    </div>
+    <ul class="pt-6 space-y-6 list-inside list-disc">
+        <li>AI can react to images in prompt. Images are not shown in obs overlay automatically and need to be approven in control panel to be shown.</li>
+        <li>Users need to upload images in <button class="underline" hx-get="/images" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Images</button>. Copy the generated code</li>
+        <li>Use it in prompt preferably in the beginning of prompt like - <b> &lt;img:sdfns&gt; opinion on thing</b></li>
+        <li>Images need to be manually approved in control panel. It's not very easy while streaming, so you can put people you trust to approve images in setting below.</li>
+    </ul>
+    <div class="pt-12">
         <div class="flex flex-col">
             <div class="pb-1 flex">
                 <div class="font-medium">Grant control panel permissions</div>
