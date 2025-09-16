@@ -19,6 +19,7 @@
 - [x] Fix show image not working sometimes and not working when request is not active yet
 - [x] Fix skip button stopping working
 - [x] Make better images guide 
+- [ ] Show response when state of prompt image changes and show image visibility state
 - [ ] Full switch from production version to beta
 - [ ] Move all static files(images and voice references) from postgres to minio
 
