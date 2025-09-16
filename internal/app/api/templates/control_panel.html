@@ -193,7 +193,7 @@
                             for (let j = 0; j < 8; j++) {
                                 row.cells[j].className = '{{template "ui-border-clr"}} border-r border-t'
                             }
-                            row.cells[8].className = '{{template "ui-border-clr"}} border-l border-t'
+                            row.cells[7].className = '{{template "ui-border-clr"}} border-l border-t'
                         }
                         else {
                             row.cells[0].innerHTML = data['requested_by'];
@@ -226,7 +226,7 @@
                         newDeleteBtn.addEventListener('click', function() {
                             ws.send(JSON.stringify({
                                 'id': id,
-                                'action': 'skip',
+                                'action': 'delete',
                             }));
                         });
 

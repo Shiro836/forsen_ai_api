@@ -130,17 +130,33 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 					p.controlPanelNotifications.Notify(broadcaster.ID)
 
 				case conns.ShowImages:
+					msgID, err := uuid.Parse(upd.Data)
+					if err != nil {
+						logger.Error("msg id is not valid uuid", "err", err)
+						continue
+					}
+
 					eventWriter(&conns.DataEvent{
 						EventType: conns.EventTypeShowImages,
 						EventData: []byte(upd.Data),
 					})
 
+					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: true})
+
 					p.controlPanelNotifications.Notify(broadcaster.ID)
 				case conns.HideImages:
+					msgID, err := uuid.Parse(upd.Data)
+					if err != nil {
+						logger.Error("msg id is not valid uuid", "err", err)
+						continue
+					}
+
 					eventWriter(&conns.DataEvent{
 						EventType: conns.EventTypeHideImages,
 						EventData: []byte(upd.Data),
 					})
+
+					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: false})
 
 					p.controlPanelNotifications.Notify(broadcaster.ID)
 				}
@@ -315,19 +331,6 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			logger.Warn("failed to parse message data for image ids", "err", err)
 		}
 
-		imageIDsBytes, err := json.Marshal(&conns.PromptImages{
-			ImageIDs:   imageIDs,
-			ShowImages: &showImages,
-		})
-		if err != nil {
-			logger.Error("failed to marshal image ids", "err", err)
-		} else {
-			eventWriter(&conns.DataEvent{
-				EventType: conns.EventTypePromptImage,
-				EventData: imageIDsBytes,
-			})
-		}
-
 		imageAnalysisDone := make(chan struct{})
 		if len(imageIDs) == 0 || p.s3 == nil || p.imageLlm == nil {
 			// Nothing to analyze; keep updatedMessage as original and signal done
@@ -420,6 +423,20 @@ The description should read like a clever commentary, not like someone talking a
 			EventType: conns.EventTypeImage,
 			EventData: []byte("/characters/" + charCard.ID.String() + "/image"),
 		})
+
+		imageIDsBytes, err := json.Marshal(&conns.PromptImages{
+			ImageIDs:   imageIDs,
+			ShowImages: &showImages,
+		})
+		if err != nil {
+			logger.Error("failed to marshal image ids", "err", err)
+		} else {
+			logger.Info("sending prompt image", "prompt_image", string(imageIDsBytes))
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypePromptImage,
+				EventData: imageIDsBytes,
+			})
+		}
 
 		// For TTS of the incoming request, replace inline image tags with placeholders
 		ttsUserMsg := replaceImageTagsForTTS(msg.TwitchMessage.Message)

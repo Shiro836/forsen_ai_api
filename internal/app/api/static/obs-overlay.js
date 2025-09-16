@@ -51,11 +51,13 @@ async function pageReady() {
             source.connect(audioContext.destination);
 
             source.onended = () => {
+                currentMsgId = null;
                 audio_sources.delete(msg_id);
             };
 
             audio_sources.set(msg_id, source);
             source.start();
+            currentMsgId = msg_id;
         });
     }
 
@@ -98,16 +100,17 @@ async function pageReady() {
 
     function set_image(url) {
         const charImg = document.getElementById("char_image");
+        showImages = false;
 
         if (!url || url.length <= 1) {
             charImg.style.opacity = "0";
             // also clear any prompt images
             currentImageURLs = [];
-            showImages = false;
             renderPromptImages();
             return;
         }
 
+        renderPromptImages();
         charImg.src = url;
         charImg.style.opacity = "1";
     }
@@ -132,6 +135,7 @@ async function pageReady() {
             imagesContainer.appendChild(slot);
         }
         imagesContainer.style.display = 'flex';
+        console.log('showed images ', String(currentImageURLs.length));
     }
 
     function skip(msg_id) {
@@ -202,7 +206,9 @@ async function pageReady() {
                         const payload = JSON.parse(dataStr);
                         currentImageURLs = Array.isArray(payload.image_ids) ? payload.image_ids.map(id => `/images/${id}`) : [];
                         // Reset visibility per-message; default to false if missing
+                        console.log('showImages', payload.show_images);
                         showImages = !!payload.show_images;
+                        console.log('showImages', showImages);
                         // Optionally track msg id if provided later; default to null now
                         renderPromptImages();
                     } catch (e) {
@@ -210,11 +216,19 @@ async function pageReady() {
                     }
                     break
                 case 'show_images':
+                    msgID = dataStr;
                     // msg data is message id to show for; no-op for id since overlay only shows current
+                    if (currentMsgId !== msgID) {
+                        return;
+                    }
                     showImages = true;
                     renderPromptImages();
                     break
                 case 'hide_images':
+                    msgID = dataStr;
+                    if (currentMsgId !== msgID) {
+                        return;
+                    }
                     showImages = false;
                     renderPromptImages();
                     break
