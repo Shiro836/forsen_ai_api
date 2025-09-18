@@ -90,6 +90,9 @@ func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error
 			user_id = $1
 		and
 			status = $2
+        order by
+            updated asc,
+            id asc
 		limit 1
 	`, userID, MsgStatusWait).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage, &msg.Data)
 	if err != nil {

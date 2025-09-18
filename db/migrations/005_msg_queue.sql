@@ -14,6 +14,8 @@ create table if not exists msg_queue (
     data jsonb not null default '{}'::jsonb
 );
 
-create index if not exists msg_queue_user_id_idx on msg_queue (user_id);
-create index if not exists msg_queue_status_idx on msg_queue (status);
-create index if not exists msg_queue_updated_idx on msg_queue (updated);
+CREATE INDEX IF NOT EXISTS msg_queue_user_status_updated_id_idx
+ON msg_queue (user_id, status, updated, id);
+
+CREATE INDEX IF NOT EXISTS msg_queue_user_updated_idx
+ON msg_queue (user_id, updated);
