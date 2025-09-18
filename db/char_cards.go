@@ -1,9 +1,12 @@
 package db
 
 import (
+	"app/pkg/s3client"
 	"app/pkg/tools"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,6 +44,9 @@ type CardData struct {
 
 	Image          []byte `json:"image"`
 	VoiceReference []byte `json:"voice_reference"`
+
+	ImageID string `json:"image_id,omitempty"`
+	VoiceID string `json:"voice_id,omitempty"`
 }
 
 func (db *DB) GetCharImage(ctx context.Context, cardID uuid.UUID) ([]byte, error) {
@@ -54,6 +60,17 @@ func (db *DB) GetCharImage(ctx context.Context, cardID uuid.UUID) ([]byte, error
 	`, cardID).Scan(&data)
 	if err != nil {
 		return nil, fmt.Errorf("get char image: %w", parseErr(err))
+	}
+
+	if data != nil && len(data.Image) == 0 && data.ImageID != "" && db.s3 != nil {
+		rc, err := db.s3.GetObject(ctx, s3client.CharDataBucket, data.ImageID)
+		if err == nil {
+			b, rerr := io.ReadAll(rc)
+			rc.Close()
+			if rerr == nil {
+				return b, nil
+			}
+		}
 	}
 
 	return data.Image, nil
@@ -92,6 +109,8 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 
 	card.CreatedAt = tools.UUIDToTime(card.ID)
 
+	db.populateCardDataMedia(ctx, card.Data)
+
 	return &card, nil
 }
 
@@ -128,6 +147,8 @@ func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, userID uuid.
 	}
 
 	card.CreatedAt = tools.UUIDToTime(card.ID)
+
+	db.populateCardDataMedia(ctx, card.Data)
 
 	return &card, rewardType, nil
 }
@@ -170,11 +191,34 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, t
 
 	card.CreatedAt = tools.UUIDToTime(card.ID)
 
+	db.populateCardDataMedia(ctx, card.Data)
+
 	return &card, rewardType, nil
 }
 
 func (db *DB) InsertCharCard(ctx context.Context, card *Card) (uuid.UUID, error) {
 	var cardID uuid.UUID
+
+	// store media to s3 if configured
+	dataForStore := *card.Data
+	if db.s3 != nil && card.Data != nil {
+		if len(card.Data.Image) > 0 {
+			imgID := uuid.New().String()
+			if err := db.s3.PutObject(ctx, s3client.CharDataBucket, imgID, bytes.NewReader(card.Data.Image), int64(len(card.Data.Image)), "application/octet-stream"); err != nil {
+				return uuid.Nil, fmt.Errorf("upload image to s3: %w", err)
+			}
+			dataForStore.ImageID = imgID
+			dataForStore.Image = nil
+		}
+		if len(card.Data.VoiceReference) > 0 {
+			voiceID := uuid.New().String()
+			if err := db.s3.PutObject(ctx, s3client.CharDataBucket, voiceID, bytes.NewReader(card.Data.VoiceReference), int64(len(card.Data.VoiceReference)), "application/octet-stream"); err != nil {
+				return uuid.Nil, fmt.Errorf("upload voice to s3: %w", err)
+			}
+			dataForStore.VoiceID = voiceID
+			dataForStore.VoiceReference = nil
+		}
+	}
 
 	if err := db.QueryRow(ctx, `
 		insert into char_cards (
@@ -191,7 +235,7 @@ func (db *DB) InsertCharCard(ctx context.Context, card *Card) (uuid.UUID, error)
 			$5
 		)
 		RETURNING id
-	`, card.OwnerUserID, card.Name, card.Description, card.Public, card.Data).Scan(&cardID); err != nil {
+    `, card.OwnerUserID, card.Name, card.Description, card.Public, &dataForStore).Scan(&cardID); err != nil {
 		return uuid.Nil, fmt.Errorf("failed to insert char card: %w", err)
 	}
 
@@ -199,6 +243,27 @@ func (db *DB) InsertCharCard(ctx context.Context, card *Card) (uuid.UUID, error)
 }
 
 func (db *DB) UpdateCharCard(ctx context.Context, userID uuid.UUID, card *Card) error {
+	// store media to s3 if configured
+	dataForStore := *card.Data
+	if db.s3 != nil && card.Data != nil {
+		if len(card.Data.Image) > 0 {
+			imgID := uuid.New().String()
+			if err := db.s3.PutObject(ctx, s3client.CharDataBucket, imgID, bytes.NewReader(card.Data.Image), int64(len(card.Data.Image)), "application/octet-stream"); err != nil {
+				return fmt.Errorf("upload image to s3: %w", err)
+			}
+			dataForStore.ImageID = imgID
+			dataForStore.Image = nil
+		}
+		if len(card.Data.VoiceReference) > 0 {
+			voiceID := uuid.New().String()
+			if err := db.s3.PutObject(ctx, s3client.CharDataBucket, voiceID, bytes.NewReader(card.Data.VoiceReference), int64(len(card.Data.VoiceReference)), "application/octet-stream"); err != nil {
+				return fmt.Errorf("upload voice to s3: %w", err)
+			}
+			dataForStore.VoiceID = voiceID
+			dataForStore.VoiceReference = nil
+		}
+	}
+
 	_, err := db.Exec(ctx, `
 		update char_cards set
 			name = $2,
@@ -210,7 +275,7 @@ func (db *DB) UpdateCharCard(ctx context.Context, userID uuid.UUID, card *Card) 
 			id = $6
 		and
 			owner_user_id = $1
-	`, userID, card.Name, card.Description, card.Public, card.Data, card.ID)
+    `, userID, card.Name, card.Description, card.Public, &dataForStore, card.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update char card: %w", err)
 	}
@@ -242,6 +307,29 @@ const (
 type GetChatCardsParams struct {
 	ShowPublic bool
 	SortBy     CharCardSortBy
+}
+
+// populateCardDataMedia loads media bytes from S3 if IDs are present and inline bytes are empty
+func (db *DB) populateCardDataMedia(ctx context.Context, data *CardData) {
+	if db.s3 == nil || data == nil {
+		return
+	}
+	if len(data.Image) == 0 && data.ImageID != "" {
+		if rc, err := db.s3.GetObject(ctx, s3client.CharDataBucket, data.ImageID); err == nil {
+			if b, rerr := io.ReadAll(rc); rerr == nil {
+				data.Image = b
+			}
+			rc.Close()
+		}
+	}
+	if len(data.VoiceReference) == 0 && data.VoiceID != "" {
+		if rc, err := db.s3.GetObject(ctx, s3client.CharDataBucket, data.VoiceID); err == nil {
+			if b, rerr := io.ReadAll(rc); rerr == nil {
+				data.VoiceReference = b
+			}
+			rc.Close()
+		}
+	}
 }
 
 func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChatCardsParams) ([]*Card, error) {

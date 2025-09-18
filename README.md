@@ -20,8 +20,8 @@
 - [x] Fix skip button stopping working
 - [x] Make better images guide 
 - [x] Show response when state of prompt image changes and show image visibility state
+- [x] Move all static files(images and voice references) from postgres to minio
 - [ ] Full switch from production version to beta
-- [ ] Move all static files(images and voice references) from postgres to minio
 
 
 FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN 

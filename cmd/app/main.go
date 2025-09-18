@@ -92,6 +92,16 @@ func main() {
 		log.Fatal("failed to init s3 client: ", err)
 	}
 
+	if err := s3.EnsureBucket(ctx, s3client.UserImagesBucket); err != nil {
+		log.Fatal("failed to ensure s3 bucket: ", err)
+	}
+	if err := s3.EnsureBucket(ctx, s3client.CharDataBucket); err != nil {
+		log.Fatal("failed to ensure s3 char data bucket: ", err)
+	}
+
+	// attach s3 to db so it can transparently store media
+	db.AttachS3Client(s3)
+
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
 	processor := processor.NewProcessor(logger.WithGroup("processor"), llmModel, imageLlm, styleTts, whisper, db, ffmpeg, connManager, s3)
 	conns.SetProcessor(connManager, processor)

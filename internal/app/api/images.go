@@ -17,6 +17,8 @@ import (
 	"github.com/disintegration/imaging"
 	"github.com/go-chi/chi/v5"
 
+	"app/pkg/s3client"
+
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -94,7 +96,7 @@ func (api *API) imagesUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.s3.PutObject(r.Context(), id, bytes.NewReader(out.Bytes()), int64(out.Len()), "image/png"); err != nil {
+	if err := api.s3.PutObject(r.Context(), s3client.UserImagesBucket, id, bytes.NewReader(out.Bytes()), int64(out.Len()), "image/png"); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(getHtml("error.html", &htmlErr{ErrorCode: http.StatusInternalServerError, ErrorMessage: "upload error: " + err.Error()})))
@@ -115,7 +117,7 @@ func (api *API) imageGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obj, err := api.s3.GetObject(r.Context(), id)
+	obj, err := api.s3.GetObject(r.Context(), s3client.UserImagesBucket, id)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("not found"))
@@ -124,7 +126,7 @@ func (api *API) imageGet(w http.ResponseWriter, r *http.Request) {
 	defer obj.Close()
 
 	// Try stat for content-type
-	if info, err := api.s3.StatObject(r.Context(), id); err == nil && info.ContentType != "" {
+	if info, err := api.s3.StatObject(r.Context(), s3client.UserImagesBucket, id); err == nil && info.ContentType != "" {
 		w.Header().Set("Content-Type", info.ContentType)
 	}
 

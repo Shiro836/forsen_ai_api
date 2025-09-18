@@ -367,7 +367,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 					go func() {
 						defer wg.Done()
 						// Fetch image bytes
-						obj, err := p.s3.GetObject(ctx, id)
+						obj, err := p.s3.GetObject(ctx, s3client.UserImagesBucket, id)
 						if err != nil {
 							logger.Warn("failed to fetch image from s3", "id", id, "err", err)
 							resultsCh <- res{id: id, ok: false}
