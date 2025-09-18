@@ -18,7 +18,6 @@ import (
 	"app/db"
 	"app/internal/app/api"
 	"app/internal/app/conns"
-	"app/internal/app/notifications"
 	"app/internal/app/nvidia"
 	"app/internal/app/processor"
 	"app/pkg/ai"
@@ -93,15 +92,13 @@ func main() {
 		log.Fatal("failed to init s3 client: ", err)
 	}
 
-	controlPanelNotifications := notifications.New()
-
-	processor := processor.NewProcessor(logger.WithGroup("processor"), llmModel, imageLlm, styleTts, whisper, db, ffmpeg, controlPanelNotifications, s3)
-
-	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), processor)
+	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
+	processor := processor.NewProcessor(logger.WithGroup("processor"), llmModel, imageLlm, styleTts, whisper, db, ffmpeg, connManager, s3)
+	conns.SetProcessor(connManager, processor)
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, controlPanelNotifications, twitchClient, styleTts, llmModel, db, s3)
+	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, twitchClient, styleTts, llmModel, db, s3)
 
 	router := api.NewRouter()
 

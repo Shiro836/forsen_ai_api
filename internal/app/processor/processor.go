@@ -17,7 +17,6 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
-	"app/internal/app/notifications"
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
@@ -42,10 +41,10 @@ type Processor struct {
 
 	s3 *s3client.Client
 
-	controlPanelNotifications *notifications.Client
+	connManager *conns.Manager
 }
 
-func NewProcessor(logger *slog.Logger, llmModel *llm.Client, imageLlm *llm.Client, styleTts *ai.StyleTTSClient, whisper *whisperx.Client, db *db.DB, ffmpeg *ffmpeg.Client, controlPanelNotifications *notifications.Client, s3 *s3client.Client) *Processor {
+func NewProcessor(logger *slog.Logger, llmModel *llm.Client, imageLlm *llm.Client, styleTts *ai.StyleTTSClient, whisper *whisperx.Client, db *db.DB, ffmpeg *ffmpeg.Client, connManager *conns.Manager, s3 *s3client.Client) *Processor {
 	return &Processor{
 		llmModel: llmModel,
 		imageLlm: imageLlm,
@@ -60,7 +59,7 @@ func NewProcessor(logger *slog.Logger, llmModel *llm.Client, imageLlm *llm.Clien
 
 		s3: s3,
 
-		controlPanelNotifications: controlPanelNotifications,
+		connManager: connManager,
 	}
 }
 
@@ -127,7 +126,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 						logger.Error("error updating message status", "err", err)
 					}
 
-					p.controlPanelNotifications.Notify(broadcaster.ID)
+					p.connManager.NotifyControlPanel(broadcaster.ID)
 
 				case conns.ShowImages:
 					msgID, err := uuid.Parse(upd.Data)
@@ -145,7 +144,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: &showImages})
 
-					p.controlPanelNotifications.Notify(broadcaster.ID)
+					p.connManager.NotifyControlPanel(broadcaster.ID)
 				case conns.HideImages:
 					msgID, err := uuid.Parse(upd.Data)
 					if err != nil {
@@ -162,7 +161,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: &showImages})
 
-					p.controlPanelNotifications.Notify(broadcaster.ID)
+					p.connManager.NotifyControlPanel(broadcaster.ID)
 				}
 			case <-ctx.Done():
 				return
@@ -212,7 +211,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				logger.Info("stored image ids with message", "ids", imageIDs)
 			}
 
-			p.controlPanelNotifications.Notify(broadcaster.ID)
+			p.connManager.NotifyControlPanel(broadcaster.ID)
 		}
 	}()
 
@@ -225,7 +224,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		}
 
 		if updated > 0 {
-			p.controlPanelNotifications.Notify(broadcaster.ID)
+			p.connManager.NotifyControlPanel(broadcaster.ID)
 		}
 
 		msg, err := p.db.GetNextMsg(ctx, broadcaster.ID)
@@ -254,7 +253,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return fmt.Errorf("error updating message status: %w", err)
 		}
 
-		p.controlPanelNotifications.Notify(broadcaster.ID)
+		p.connManager.NotifyControlPanel(broadcaster.ID)
 
 		if len(msg.TwitchMessage.RewardID) == 0 {
 			continue
@@ -511,7 +510,7 @@ The description should read like a clever commentary, not like someone talking a
 				logger.Error("error updating message data", "err", err)
 				continue
 			}
-			p.controlPanelNotifications.Notify(broadcaster.ID)
+			p.connManager.NotifyControlPanel(broadcaster.ID)
 
 			logger.Info("llm result", "result", llmResult)
 		case <-ctx.Done():

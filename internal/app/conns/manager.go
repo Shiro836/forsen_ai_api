@@ -3,6 +3,7 @@ package conns
 import (
 	"app/db"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -21,10 +22,12 @@ type Manager struct {
 
 	rwMutex sync.RWMutex
 
-	subCount       map[uuid.UUID]int
-	dataStreams    map[uuid.UUID][]chan *DataEvent
-	isClosed       map[uuid.UUID][]bool
-	updateEventsCh map[uuid.UUID]chan *Update
+	// track running user processors and allow targeted cancellation
+	runningUsers map[uuid.UUID]bool
+	userCancels  map[uuid.UUID]context.CancelFunc
+
+	// watermill in-memory pubsub for per-user data events
+	bus *Watermill
 
 	logger *slog.Logger
 }
@@ -35,13 +38,17 @@ func NewConnectionManager(ctx context.Context, logger *slog.Logger, processor Pr
 
 		processor: processor,
 
-		subCount:       make(map[uuid.UUID]int, 100),
-		dataStreams:    make(map[uuid.UUID][]chan *DataEvent, 100),
-		isClosed:       make(map[uuid.UUID][]bool, 100),
-		updateEventsCh: make(map[uuid.UUID]chan *Update, 100),
-
 		logger: logger,
+
+		bus:          NewWatermill(),
+		runningUsers: make(map[uuid.UUID]bool, 100),
+		userCancels:  make(map[uuid.UUID]context.CancelFunc, 100),
 	}
+}
+
+// SetProcessor allows late binding to avoid init cycles.
+func SetProcessor(m *Manager, processor Processor) {
+	m.processor = processor
 }
 
 type PromptImages struct {
@@ -97,154 +104,136 @@ func (et EventType) String() string {
 }
 
 type DataEvent struct {
-	EventType EventType
-	EventData []byte
+	EventType EventType `json:"type"`
+	EventData []byte    `json:"data"`
 }
 
 func (d *DataEvent) String() string {
 	return fmt.Sprintf("%s:%s", d.EventType.String(), string(d.EventData))
 }
 
-func (m *Manager) Subscribe(userID uuid.UUID) (<-chan *DataEvent, func()) {
-	m.rwMutex.Lock()
-	defer m.rwMutex.Unlock()
+func (m *Manager) topic(userID uuid.UUID) string {
+	return "user.events." + userID.String()
+}
 
-	m.subCount[userID]++
+func (m *Manager) controlTopic(userID uuid.UUID) string {
+	return "user.control." + userID.String()
+}
 
-	m.dataStreams[userID] = append(m.dataStreams[userID], make(chan *DataEvent))
-	m.isClosed[userID] = append(m.isClosed[userID], false)
+func (m *Manager) controlPanelTopic(userID uuid.UUID) string {
+	return "controlpanel." + userID.String()
+}
 
-	ind := len(m.dataStreams[userID]) - 1
-
-	return m.dataStreams[userID][ind], func() {
-		m.rwMutex.Lock()
-		defer m.rwMutex.Unlock()
-
-		m.subCount[userID]--
-
-		close(m.dataStreams[userID][ind])
-		m.isClosed[userID][ind] = true
-		if m.subCount[userID] == 0 {
-			delete(m.dataStreams, userID)
-			delete(m.isClosed, userID)
-		}
+func (m *Manager) publishControl(userID uuid.UUID, upd *Update) {
+	data, err := json.Marshal(upd)
+	if err != nil {
+		return
 	}
+	_ = m.bus.Publish(m.ctx, m.controlTopic(userID), data)
+}
+
+func (m *Manager) NotifyControlPanel(userID uuid.UUID) {
+	_ = m.bus.Publish(m.ctx, m.controlPanelTopic(userID), []byte("1"))
+}
+
+func (m *Manager) SubscribeControlPanel(ctx context.Context, userID uuid.UUID) chan struct{} {
+	events := make(chan struct{})
+	msgs, err := m.bus.Subscribe(ctx, m.controlPanelTopic(userID))
+	if err != nil {
+		close(events)
+		return events
+	}
+	go func() {
+		defer close(events)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-msgs:
+				if !ok {
+					return
+				}
+				msg.Ack()
+				select {
+				case events <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}()
+	return events
+}
+
+func (m *Manager) Subscribe(userID uuid.UUID) (<-chan *DataEvent, func()) {
+	// subscribe to watermill topic and adapt to DataEvent channel
+	out := make(chan *DataEvent, 64)
+
+	ctx, cancel := context.WithCancel(m.ctx)
+	msgs, err := m.bus.Subscribe(ctx, m.topic(userID))
+	if err != nil {
+		cancel()
+		close(out)
+		return out, func() {}
+	}
+
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-msgs:
+				if !ok {
+					return
+				}
+				var ev DataEvent
+				if err := json.Unmarshal(msg.Payload, &ev); err == nil {
+					select {
+					case out <- &ev:
+					default:
+					}
+				}
+				msg.Ack()
+			}
+		}
+	}()
+
+	return out, func() { cancel() }
 }
 
 func (m *Manager) TryWrite(userID uuid.UUID, event *DataEvent) bool {
-	wrote := false
-
-loop:
-	for i := 0; i < len(m.dataStreams[userID]); i++ {
-		select {
-		case <-m.ctx.Done():
-			return wrote
-		default:
-		}
-
-		for j := 0; j < 5; j++ {
-			cont_loop := false
-			func() {
-				m.rwMutex.RLock()
-				defer m.rwMutex.RUnlock()
-
-				if len(m.isClosed[userID]) <= i {
-					cont_loop = true
-					return
-				}
-
-				if m.isClosed[userID][i] {
-					cont_loop = true
-					return
-				}
-
-				select {
-				case m.dataStreams[userID][i] <- event:
-					wrote = true
-					cont_loop = true
-				case <-m.ctx.Done():
-					return
-				default:
-				}
-			}()
-			if cont_loop {
-				continue loop
-			}
-
-			time.Sleep(50 * time.Millisecond)
-		}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return false
 	}
-
-	return wrote
+	_ = m.bus.Publish(m.ctx, m.topic(userID), data)
+	return true
 }
 
 func (m *Manager) NotifyUpdateSettings(userID uuid.UUID) {
-	m.rwMutex.RLock()
-	defer m.rwMutex.RUnlock()
-
-	if ch, ok := m.updateEventsCh[userID]; ok {
-		select {
-		case ch <- &Update{
-			UpdateType: RestartProcessor,
-		}:
-		default:
-		}
-	}
+	m.publishControl(userID, &Update{UpdateType: RestartProcessor})
 }
 
 func (m *Manager) SkipMessage(userID uuid.UUID, msgID string) {
-	m.rwMutex.RLock()
-	defer m.rwMutex.RUnlock()
-
-	if ch, ok := m.updateEventsCh[userID]; ok {
-		select {
-		case ch <- &Update{
-			UpdateType: SkipMessage,
-			Data:       msgID,
-		}:
-		default:
-		}
-	}
+	m.publishControl(userID, &Update{UpdateType: SkipMessage, Data: msgID})
 }
 
 func (m *Manager) ShowImages(userID uuid.UUID, msgID string) {
-	m.rwMutex.RLock()
-	defer m.rwMutex.RUnlock()
-
-	if ch, ok := m.updateEventsCh[userID]; ok {
-		select {
-		case ch <- &Update{
-			UpdateType: ShowImages,
-			Data:       msgID,
-		}:
-		default:
-		}
-	}
+	m.publishControl(userID, &Update{UpdateType: ShowImages, Data: msgID})
 }
 
 func (m *Manager) HideImages(userID uuid.UUID, msgID string) {
-	m.rwMutex.RLock()
-	defer m.rwMutex.RUnlock()
-
-	if ch, ok := m.updateEventsCh[userID]; ok {
-		select {
-		case ch <- &Update{
-			UpdateType: HideImages,
-			Data:       msgID,
-		}:
-		default:
-		}
-	}
+	m.publishControl(userID, &Update{UpdateType: HideImages, Data: msgID})
 }
 
 func (m *Manager) DisableUser(userID uuid.UUID) {
 	m.rwMutex.Lock()
-	defer m.rwMutex.Unlock()
-
-	if ch, ok := m.updateEventsCh[userID]; ok {
-		close(ch)
-		delete(m.updateEventsCh, userID)
+	if cancel, ok := m.userCancels[userID]; ok {
+		cancel()
+		delete(m.userCancels, userID)
 	}
+	delete(m.runningUsers, userID)
+	m.rwMutex.Unlock()
 }
 
 func (m *Manager) HandleUser(user *db.User) {
@@ -253,57 +242,99 @@ func (m *Manager) HandleUser(user *db.User) {
 	logger.Debug("trying to unlock mutex for HandleUser")
 
 	m.rwMutex.Lock()
-	defer m.rwMutex.Unlock()
+	if m.runningUsers[user.ID] {
+		m.rwMutex.Unlock()
+		logger.Info("starting processor failed, already running")
+		return
+	}
+	// mark running and create per-user context
+	userCtx, cancel := context.WithCancel(m.ctx)
+	m.userCancels[user.ID] = cancel
+	m.runningUsers[user.ID] = true
+	m.rwMutex.Unlock()
 
-	if _, ok := m.updateEventsCh[user.ID]; !ok {
-		m.updateEventsCh[user.ID] = make(chan *Update)
+	logger.Info("starting processor")
 
-		updates := m.updateEventsCh[user.ID]
+	m.wg.Add(1)
+	go func() {
+		defer logger.Info("stopped processor")
+		defer m.wg.Done()
 
-		logger.Info("starting processor")
+		// subscribe to control updates via watermill and bridge to chan for processor
+		updates := make(chan *Update)
+		msgs, err := m.bus.Subscribe(userCtx, m.controlTopic(user.ID))
+		if err != nil {
+			logger.Error("failed to subscribe to control topic", "err", err)
+			close(updates)
+			return
+		}
 
-		m.wg.Add(1)
+		bridgeDone := make(chan struct{})
 		go func() {
-			defer logger.Info("stopped processor")
-			defer m.wg.Done()
-
-		loop:
+			defer close(bridgeDone)
+			defer close(updates)
 			for {
 				select {
-				case <-m.ctx.Done():
-					break loop
-				default:
-				}
-
-				if err := m.processor.Process(m.ctx, updates, func(event *DataEvent) bool {
-					return m.TryWrite(user.ID, event)
-				}, user); err != nil {
-					if errors.Is(err, ErrProcessingEnd) {
-						break loop
-					} else if errors.Is(err, ErrNoUser) {
+				case <-userCtx.Done():
+					return
+				case msg, ok := <-msgs:
+					if !ok {
+						return
+					}
+					var u Update
+					if err := json.Unmarshal(msg.Payload, &u); err == nil {
 						select {
-						case <-time.After(time.Second):
-						case <-m.ctx.Done():
-						}
-					} else {
-						logger.Error("processor Process error", "err", err)
-
-						select {
-						case <-time.After(10 * time.Second):
-						case <-m.ctx.Done():
+						case updates <- &u:
+						default:
 						}
 					}
-				}
-
-				select {
-				case <-time.After(time.Second):
-				case <-m.ctx.Done():
+					msg.Ack()
 				}
 			}
 		}()
-	} else {
-		logger.Info("starting processor failed, updates already exists")
-	}
+
+	loop:
+		for {
+			select {
+			case <-m.ctx.Done():
+				break loop
+			default:
+			}
+
+			if err := m.processor.Process(userCtx, updates, func(event *DataEvent) bool {
+				return m.TryWrite(user.ID, event)
+			}, user); err != nil {
+				if errors.Is(err, ErrProcessingEnd) {
+					break loop
+				} else if errors.Is(err, ErrNoUser) {
+					select {
+					case <-time.After(time.Second):
+					case <-m.ctx.Done():
+					}
+				} else {
+					logger.Error("processor Process error", "err", err)
+
+					select {
+					case <-time.After(10 * time.Second):
+					case <-m.ctx.Done():
+					}
+				}
+			}
+
+			select {
+			case <-time.After(time.Second):
+			case <-m.ctx.Done():
+			}
+		}
+
+		cancel()
+		<-bridgeDone
+
+		m.rwMutex.Lock()
+		delete(m.userCancels, user.ID)
+		delete(m.runningUsers, user.ID)
+		m.rwMutex.Unlock()
+	}()
 }
 
 func (m *Manager) Wait() {

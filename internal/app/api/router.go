@@ -10,7 +10,6 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
-	"app/internal/app/notifications"
 	"app/pkg/ai"
 	"app/pkg/llm"
 	"app/pkg/s3client"
@@ -32,8 +31,6 @@ type API struct {
 
 	connManager *conns.Manager
 
-	controlPanelNotifications *notifications.Client
-
 	styleTts *ai.StyleTTSClient
 	llm      *llm.Client
 
@@ -48,7 +45,7 @@ type API struct {
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 }
 
-func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, controlPanelNotifications *notifications.Client,
+func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, llm *llm.Client, db *db.DB, s3 *s3client.Client) *API {
 	return &API{
 		cfg: cfg,
@@ -56,8 +53,6 @@ func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager, contro
 		logger: logger,
 
 		connManager: connManager,
-
-		controlPanelNotifications: controlPanelNotifications,
 
 		twitchClient: twitchClient,
 

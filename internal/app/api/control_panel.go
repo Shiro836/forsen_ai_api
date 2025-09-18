@@ -220,7 +220,7 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 		wsClient.Close()
 	}()
 
-	events := api.controlPanelNotifications.SubscribeForNotification(r.Context(), targetUser.ID)
+	events := api.connManager.SubscribeControlPanel(r.Context(), targetUser.ID)
 
 	ticker := immediateticker.New(2 * time.Minute)
 	defer ticker.Stop()
