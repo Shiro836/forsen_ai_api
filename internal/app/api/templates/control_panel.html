@@ -155,6 +155,23 @@
                 }
             }
 
+			// Helper to render image visibility status below action buttons
+			function updateImagesStatus(id, showImages) {
+				const container = document.getElementById('images_status_' + id);
+				if (!container) {
+					return;
+				}
+				const isShown = showImages === true;
+				container.className = 'flex items-center pt-1';
+				const color = isShown ? '#16a34a' : '#dc2626';
+				container.innerHTML = '' +
+					'<svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none" style="color: ' + color + '">' +
+						'<path d="M1 12C1 12 5 5 12 5C19 5 23 12 23 12C23 12 19 19 12 19C5 19 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+						'<circle cx="12" cy="12" r="3" fill="currentColor"/>' +
+					'</svg>' +
+					'<div class="pl-2 text-sm">' + (isShown ? 'Images are shown' : 'Images are hidden') + '</div>';
+			}
+
             updates = msg['updates']
             for (let i = 0; i < updates.length; i++) {
                 action = updates[i]['action'];
@@ -179,16 +196,22 @@
                             row = table.insertRow(-1);
                             row.id = id;
 
-                            row.insertCell(-1).innerHTML = data['requested_by'];
-                            row.insertCell(-1).innerHTML = data['type'];
-                            row.insertCell(-1).innerHTML = data['char_name'];
-                            row.insertCell(-1).innerHTML = data['request'];
-                            row.insertCell(-1).innerHTML = data['response'];
-                            row.insertCell(-1).innerHTML = data['status'];
-                            row.insertCell(-1).innerHTML = "<button id='delete_" + id + "'>Delete</button><br><button id='show_" + id + "'>Show Images</button><br><button id='hide_" + id + "'>Hide Images</button>";
+                            row.insertCell(-1).textContent = data['requested_by'];
+                            row.insertCell(-1).textContent = data['type'];
+                            row.insertCell(-1).textContent = data['char_name'];
+                            row.insertCell(-1).textContent = data['request'];
+                            row.insertCell(-1).textContent = data['response'];
+                            row.insertCell(-1).textContent = data['status'];
+                            row.insertCell(-1).innerHTML = '<div class="flex flex-col space-y-1">' +
+                                '<button id="delete_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Delete</button>' +
+                                '<button id="show_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Show Images</button>' +
+                                '<button id="hide_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Hide Images</button>' +
+                                '<div id="images_status_' + id + '" class="flex items-center pt-1"></div>' +
+                            '</div>';
                             // Render images as <img> tags with absolute URLs in the last cell
                             let imagesCell = row.insertCell(-1);
                             renderImages(imagesCell, data['image_urls'], true);
+                            updateImagesStatus(id, data['show_images']);
 
                             for (let j = 0; j < 8; j++) {
                                 row.cells[j].className = '{{template "ui-border-clr"}} border-r border-t'
@@ -196,15 +219,21 @@
                             row.cells[7].className = '{{template "ui-border-clr"}} border-l border-t'
                         }
                         else {
-                            row.cells[0].innerHTML = data['requested_by'];
-                            row.cells[1].innerHTML = data['type'];
-                            row.cells[2].innerHTML = data['char_name'];
-                            row.cells[3].innerHTML = data['request'];
-                            row.cells[4].innerHTML = data['response'];
-                            row.cells[5].innerHTML = data['status'];
-                            row.cells[6].innerHTML = "<button id='delete_" + id + "'>Delete</button><br><button id='show_" + id + "'>Show Images</button><br><button id='hide_" + id + "'>Hide Images</button>";
+                            row.cells[0].textContent = data['requested_by'];
+                            row.cells[1].textContent = data['type'];
+                            row.cells[2].textContent = data['char_name'];
+                            row.cells[3].textContent = data['request'];
+                            row.cells[4].textContent = data['response'];
+                            row.cells[5].textContent = data['status'];
+                            row.cells[6].innerHTML = '<div class="flex flex-col space-y-1">' +
+                                '<button id="delete_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Delete</button>' +
+                                '<button id="show_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Show Images</button>' +
+                                '<button id="hide_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Hide Images</button>' +
+                                '<div id="images_status_' + id + '" class="flex items-center pt-1"></div>' +
+                            '</div>';
                             // Render images as <img> tags (relative URLs) in the last cell
                             renderImages(row.cells[7], data['image_urls'], false);
+                            updateImagesStatus(id, data['show_images']);
                         }
 
                         // Remove existing listeners before adding new ones to prevent duplicates

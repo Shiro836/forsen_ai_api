@@ -141,7 +141,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 						EventData: []byte(upd.Data),
 					})
 
-					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: true})
+					showImages := true
+
+					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: &showImages})
 
 					p.controlPanelNotifications.Notify(broadcaster.ID)
 				case conns.HideImages:
@@ -156,7 +158,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 						EventData: []byte(upd.Data),
 					})
 
-					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: false})
+					showImages := false
+
+					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: &showImages})
 
 					p.controlPanelNotifications.Notify(broadcaster.ID)
 				}
@@ -194,11 +198,13 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 			// logger.Info("ingest twitch msg", "from", msg.TwitchLogin, "reward", msg.RewardID)
 
+			showImages := false
+
 			_, err := p.db.PushMsg(ctx, broadcaster.ID, db.TwitchMessage{
 				TwitchLogin: msg.TwitchLogin,
 				Message:     msg.Message,
 				RewardID:    msg.RewardID,
-			}, &db.MessageData{ImageIDs: imageIDs, ShowImages: false})
+			}, &db.MessageData{ImageIDs: imageIDs, ShowImages: &showImages})
 			if err != nil {
 				logger.Error("error pushing message to db", "err", err)
 			}
@@ -324,7 +330,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 		if msgData, err := db.ParseMessageData(msg.Data); err == nil {
 			imageIDs = msgData.ImageIDs
-			showImages = msgData.ShowImages
+			showImages = msgData.ShowImages != nil && *msgData.ShowImages
 
 			logger.Info("parsed image ids from message data", "ids", imageIDs)
 		} else {

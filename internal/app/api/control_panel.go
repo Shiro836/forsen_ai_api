@@ -358,7 +358,7 @@ loop:
 
 					Status: dbMessage.Status.String(),
 
-					ShowImages: msgData.ShowImages,
+					ShowImages: msgData.ShowImages != nil && *msgData.ShowImages,
 					ImageURLs:  imageURLs,
 				})
 				if err != nil {
