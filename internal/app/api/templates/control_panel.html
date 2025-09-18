@@ -13,6 +13,9 @@
             </svg>
             <div class="pl-2">Disconnected</div>
         </div>
+        <div class="pl-16">
+            <button id="clean_overlay_btn" class="{{template "button-2"}} ml-4 px-3 py-1">Clean Overlay</button>
+        </div>
     </div>
     <div class="pt-6">
         <table class="table-auto w-full text-left text-sm border-collapse border-spacing-2">
@@ -81,6 +84,22 @@
         ws.onopen = function () {
             console.log('Socket is open!');
             set_connected_true();
+
+            // Bind clean overlay button on every successful connection (handles reconnects)
+            var cleanBtn = document.getElementById('clean_overlay_btn');
+            if (cleanBtn) {
+                cleanBtn.onclick = function () {
+                    try {
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                'action': 'clean_overlay'
+                            }));
+                        }
+                    } catch (e) {
+                        console.error('failed to send clean_overlay', e);
+                    }
+                };
+            }
 
             checkPageClosed = function() {
                 if (document.getElementById('control_panel_activity_checker') === null) {

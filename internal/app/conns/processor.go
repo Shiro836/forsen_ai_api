@@ -13,6 +13,7 @@ const (
 	SkipMessage
 	ShowImages
 	HideImages
+	CleanOverlay
 )
 
 type UpdateType int

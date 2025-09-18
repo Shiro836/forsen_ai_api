@@ -226,6 +226,10 @@ func (m *Manager) HideImages(userID uuid.UUID, msgID string) {
 	m.publishControl(userID, &Update{UpdateType: HideImages, Data: msgID})
 }
 
+func (m *Manager) CleanOverlay(userID uuid.UUID) {
+	m.publishControl(userID, &Update{UpdateType: CleanOverlay})
+}
+
 func (m *Manager) DisableUser(userID uuid.UUID) {
 	m.rwMutex.Lock()
 	if cancel, ok := m.userCancels[userID]; ok {

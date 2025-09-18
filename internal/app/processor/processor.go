@@ -162,6 +162,16 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 					p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: &showImages})
 
 					p.connManager.NotifyControlPanel(broadcaster.ID)
+				case conns.CleanOverlay:
+					// send empty text and image to clear overlay
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeText,
+						EventData: []byte(" "),
+					})
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeImage,
+						EventData: []byte(" "),
+					})
 				}
 			case <-ctx.Done():
 				return
