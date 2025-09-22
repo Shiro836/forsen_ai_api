@@ -96,6 +96,9 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Post("/images", http.HandlerFunc(api.imagesUpload))
 	router.Get("/images/{id}", http.HandlerFunc(api.imageGet))
 
+	// Public voices list (short names with images)
+	router.Get("/voices", api.navPublic(api.voicesPublic))
+
 	// START No perms routes
 
 	router.Get("/{twitch_login}", api.elemNoPermissions(api.obsOverlay))
@@ -126,6 +129,8 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Post("/characters/{character_id}/reward_tts", api.reward(db.TwitchRewardTTS))
 		router.Post("/characters/{character_id}/reward_ai", api.reward(db.TwitchRewardAI))
 
+		router.Post("/universal-tts/reward", http.HandlerFunc(api.universalTTSReward))
+
 		router.Post("/control/grant", http.HandlerFunc(api.controlPanelGrant))
 		router.Post("/control/revoke", http.HandlerFunc(api.controlPanelRevoke))
 
@@ -145,6 +150,8 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Post("/admin/remove_admin", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionAdmin)))
 
 		router.Post("/admin/add_relation", http.HandlerFunc(api.manageRelation(db.RelationTypeModerating)))
+
+		router.Post("/characters/{character_id}/admin/update_short_char_name", http.HandlerFunc(api.updateShortCharName))
 	})
 
 	router.Group(func(router chi.Router) {

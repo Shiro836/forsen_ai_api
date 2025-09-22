@@ -18,12 +18,14 @@ import (
 
 type charsElem struct {
 	Characters []*charElem
+	IsAdmin    bool
 }
 
 type charElem struct {
 	Card *db.Card
 
 	CanEdit bool
+	IsAdmin bool
 
 	TTSRewardCreated bool
 	AIRewardCreated  bool
@@ -71,10 +73,20 @@ func (api *API) characters(r *http.Request) template.HTML {
 	// }
 
 	chars := make([]*charElem, 0, len(charCards))
+	isAdmin := false
+	if perms, err := api.db.GetUserPermissions(r.Context(), user.ID, db.PermissionStatusGranted); err == nil {
+		for _, p := range perms {
+			if p == db.PermissionAdmin {
+				isAdmin = true
+				break
+			}
+		}
+	}
 	for _, charCard := range charCards {
 		chars = append(chars, &charElem{
 			Card:             charCard,
 			CanEdit:          user.ID == charCard.OwnerUserID,
+			IsAdmin:          isAdmin,
 			TTSRewardCreated: false,
 		})
 	}
@@ -82,6 +94,51 @@ func (api *API) characters(r *http.Request) template.HTML {
 	return getHtml("characters.html", &charsElem{
 		Characters: chars,
 	})
+}
+
+func (api *API) updateShortCharName(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+		return
+	}
+
+	characterIDStr := chi.URLParam(r, "character_id")
+	characterID, err := uuid.Parse(characterIDStr)
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusBadRequest,
+			ErrorMessage: "character_id is not a valid uuid",
+		})
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusBadRequest,
+			ErrorMessage: "failed to parse form",
+		})
+		return
+	}
+
+	var shortNamePtr *string
+	shortName := strings.TrimSpace(r.Form.Get("short_name"))
+	if shortName != "" {
+		shortNamePtr = &shortName
+	}
+
+	if err := api.db.SetShortCharName(r.Context(), characterID, shortNamePtr); err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: err.Error(),
+		})
+		return
+	}
+
+	_, _ = w.Write([]byte("Success"))
 }
 
 type characterPage struct {
@@ -495,4 +552,49 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, _ = w.Write(charImage)
+}
+
+type voicesListPage struct {
+	Items []voiceItem
+}
+
+type voiceItem struct {
+	ID   uuid.UUID
+	Name string
+}
+
+// voicesPublic renders a public page with all public short-named cards and their images
+func (api *API) voicesPublic(r *http.Request) template.HTML {
+	items, err := api.db.GetPublicShortNamedCards(r.Context())
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: err.Error(),
+		})
+	}
+
+	list := make([]voiceItem, 0, len(items))
+	for _, it := range items {
+		list = append(list, voiceItem{ID: it.ID, Name: it.ShortCharName})
+	}
+
+	return getHtml("voices.html", &voicesListPage{Items: list})
+}
+
+func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+		return
+	}
+
+	prompt := "Voices: " + r.Host + "/voices"
+
+	err := api.createReward(r.Context(), w, user, nil, "", db.TwitchRewardUniversalTTS, prompt)
+	if err != nil {
+		return
+	}
 }

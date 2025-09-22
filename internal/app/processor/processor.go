@@ -1,9 +1,8 @@
 package processor
 
-// use go interpreter
-
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"log/slog"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,11 +21,15 @@ import (
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
 	"app/pkg/s3client"
+	ttsprocessor "app/pkg/tts_processor"
 	"app/pkg/twitch"
 	"app/pkg/whisperx"
 
 	"github.com/google/uuid"
 )
+
+//go:embed sfx/*.mp3
+var embeddedSFX embed.FS
 
 type Processor struct {
 	logger *slog.Logger
@@ -78,7 +82,6 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeText,
 		EventData: []byte(" "),
-		// EventData: []byte("processor started"),
 	})
 
 	eventWriter(&conns.DataEvent{
@@ -163,7 +166,6 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 					p.connManager.NotifyControlPanel(broadcaster.ID)
 				case conns.CleanOverlay:
-					// send empty text and image to clear overlay
 					eventWriter(&conns.DataEvent{
 						EventType: conns.EventTypeText,
 						EventData: []byte(" "),
@@ -193,7 +195,6 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				continue
 			}
 
-			// Extract up to two image ids and store with the message on insert
 			imgMatches := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`).FindAllStringSubmatch(msg.Message, -1)
 			imageIDs := make([]string, 0, 2)
 			for _, m := range imgMatches {
@@ -269,12 +270,23 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			continue
 		}
 
-		charCard, rewardType, err := p.db.GetCharCardByTwitchReward(ctx, broadcaster.ID, msg.TwitchMessage.RewardID)
+		// Try to get any reward (character or universal) by Twitch reward ID
+		cardID, rewardType, err := p.db.GetRewardByTwitchReward(ctx, broadcaster.ID, msg.TwitchMessage.RewardID)
 		if err != nil {
 			if db.ErrCode(err) != db.ErrCodeNoRows {
-				logger.Error("error getting card by twitch reward", "err", err)
+				logger.Error("error getting reward by twitch reward", "err", err)
 			}
 			continue
+		}
+
+		// Get character card if this is a character-based reward
+		var charCard *db.Card
+		if cardID != nil {
+			charCard, err = p.db.GetCharCardByID(ctx, broadcaster.ID, *cardID)
+			if err != nil {
+				logger.Error("error getting character card", "err", err)
+				continue
+			}
 		}
 
 		if rewardType == db.TwitchRewardTTS {
@@ -308,6 +320,51 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			if err != nil {
 				fmt.Println(err)
 				logger.Error("error playing tts", "err", err)
+				return err
+			}
+
+			select {
+			case <-requestTtsDone:
+			case <-ctx.Done():
+				return nil
+			}
+
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeImage,
+				EventData: []byte(" "),
+			})
+
+			continue
+		}
+
+		if rewardType == db.TwitchRewardUniversalTTS {
+			// Universal TTS processing using tts_processor library
+			ttsMsg := replaceImageTagsForTTS(msg.TwitchMessage.Message)
+			filteredRequest := p.FilterText(ctx, broadcaster.ID, ttsMsg)
+
+			// Process the message with tts_processor
+			actions, err := p.processUniversalTTSMessage(ctx, filteredRequest, broadcaster.ID)
+			if err != nil {
+				logger.Error("error processing universal tts message", "err", err)
+				continue
+			}
+
+			func() {
+				skippedMsgIDsLock.Lock()
+				defer skippedMsgIDsLock.Unlock()
+
+				_, skipMsg = skippedMsgIDs[msg.ID]
+			}()
+
+			if skipMsg {
+				continue
+			}
+
+			// Play the processed TTS actions
+			requestTtsDone, err := p.playUniversalTTS(ctx, eventWriter, actions, msg.ID, &skippedMsgIDs, &skippedMsgIDsLock)
+			if err != nil {
+				fmt.Println(err)
+				logger.Error("error playing universal tts", "err", err)
 				return err
 			}
 
@@ -453,7 +510,6 @@ The description should read like a clever commentary, not like someone talking a
 			})
 		}
 
-		// For TTS of the incoming request, replace inline image tags with placeholders
 		ttsUserMsg := replaceImageTagsForTTS(msg.TwitchMessage.Message)
 		requestText := requester + " asked me: " + ttsUserMsg
 
@@ -483,10 +539,8 @@ The description should read like a clever commentary, not like someone talking a
 			return err
 		}
 
-		// Wait for image analysis to complete, then craft prompt and start text LLM while TTS plays
 		select {
 		case <-imageAnalysisDone:
-			// proceed with updatedMessage (may be unchanged if no images or analysis failed)
 		case <-ctx.Done():
 			return nil
 		}
@@ -578,7 +632,6 @@ The description should read like a clever commentary, not like someone talking a
 	}
 }
 
-// replaceImageTagsForTTS converts <img:{id}> occurrences to sequential placeholders image_1, image_2 in order of appearance
 func replaceImageTagsForTTS(s string) string {
 	re := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`)
 	idx := 0
@@ -595,12 +648,22 @@ type audioMsg struct {
 
 func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex) (<-chan struct{}, error) {
 	if textTimings == nil {
-		var err error
-
-		textTimings, err = p.alignTextToAudio(ctx, msg, audio)
+		audioLen, err := p.getAudioLength(ctx, audio)
 		if err != nil {
-			return nil, fmt.Errorf("error aligning text to audio: %w", err)
+			return nil, err
 		}
+
+		textTimings = append(textTimings, whisperx.Timiing{
+			Text:  msg,
+			Start: 0,
+			End:   audioLen,
+		})
+		// var err error
+
+		// textTimings, err = p.alignTextToAudio(ctx, msg, audio)
+		// if err != nil {
+		// 	return nil, fmt.Errorf("error aligning text to audio: %w", err)
+		// }
 	}
 
 	audioLen, err := p.getAudioLength(ctx, audio)
@@ -791,4 +854,229 @@ func (p *Processor) alignTextToAudio(ctx context.Context, text string, audio []b
 	timings[len(timings)-1].End = audioLen
 
 	return timings, nil
+}
+
+func (p *Processor) processUniversalTTSMessage(ctx context.Context, message string, userID uuid.UUID) ([]ttsprocessor.Action, error) {
+	// Get available voices, filters, and SFX from the database or configuration
+	// For now, we'll use simple placeholder functions
+	checkVoice := func(voice string) bool {
+		name := strings.TrimSpace(voice)
+		if len(name) == 0 {
+			return false
+		}
+		// Dynamically validate against DB: public short name must exist
+		_, _, err := p.db.GetVoiceReferenceByShortName(ctx, name)
+		return err == nil
+	}
+
+	checkFilter := func(filter string) bool {
+		// Filters are numeric IDs matching ffmpeg.FilterType values
+		if len(filter) == 0 {
+			return false
+		}
+		v, err := strconv.Atoi(filter)
+		if err != nil {
+			return false
+		}
+		return v >= 1 && v < int(ffmpeg.FilterLast)
+	}
+
+	checkSfx := func(sfx string) bool {
+		// SFX should correspond to an embedded file sfx/{name}.mp3
+		name := strings.TrimSpace(sfx)
+		if len(name) == 0 {
+			return false
+		}
+		if _, err := embeddedSFX.Open("sfx/" + name + ".mp3"); err != nil {
+			return false
+		}
+		return true
+	}
+
+	return ttsprocessor.ProcessMessage(message, checkVoice, checkFilter, checkSfx)
+}
+
+func (p *Processor) playUniversalTTS(ctx context.Context, eventWriter conns.EventWriter, actions []ttsprocessor.Action, msgID uuid.UUID, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex) (<-chan struct{}, error) {
+	combinedAudio, combinedText, combinedTimings, err := p.craftUniversalTTSAudio(ctx, actions)
+	if err != nil {
+		done := make(chan struct{})
+		close(done)
+		slog.Error("error crafting universal TTS audio", "err", err)
+		return done, err
+	}
+
+	return p.playTTS(ctx, eventWriter, combinedText, msgID, combinedAudio, combinedTimings, skippedMsgIDs, skippedMsgIDsLock)
+}
+
+func (p *Processor) craftUniversalTTSAudio(ctx context.Context, actions []ttsprocessor.Action) ([]byte, string, []whisperx.Timiing, error) {
+	var combinedAudio [][]byte
+	var combinedText strings.Builder
+	var combinedTimings []whisperx.Timiing
+	currentOffset := time.Duration(0)
+
+	concatPadding := 500 * time.Millisecond
+
+	defaultVoice := "tresh"
+
+	for _, action := range actions {
+		if action.Text != "" && action.Text != " " {
+			voice := action.Voice
+			if voice == "" {
+				voice = defaultVoice
+			}
+
+			_, voiceRef, err := p.getVoiceReference(ctx, voice)
+			if err != nil {
+				slog.Error("error getting voice reference", "err", err, "voice", action.Voice)
+				voiceRef = []byte{}
+			}
+
+			audio, timings, err := p.TTSWithTimings(ctx, action.Text, voiceRef)
+			if err != nil {
+				slog.Error("error generating TTS for universal action", "err", err, "text", action.Text)
+				continue
+			}
+
+			originalAudioLen, err := p.getAudioLength(ctx, audio)
+			if err != nil {
+				slog.Error("error getting audio length", "err", err)
+				continue
+			}
+
+			processedAudio, err := p.applyAudioEffects(ctx, audio, action.Filters)
+			if err != nil {
+				slog.Error("error applying audio effects", "err", err, "filters", action.Filters)
+
+				processedAudio = audio
+			}
+
+			processedAudioLen, err := p.getAudioLength(ctx, processedAudio)
+			if err != nil {
+				slog.Error("error getting audio length", "err", err)
+				continue
+			}
+
+			if originalAudioLen != 0 {
+				change := float64(processedAudioLen) / float64(originalAudioLen)
+
+				if change > 1.05 || change < 0.95 {
+					for i := range timings {
+						timings[i].Start = time.Duration(float64(timings[i].Start) * change)
+						timings[i].End = time.Duration(float64(timings[i].End) * change)
+					}
+				}
+			}
+
+			combinedAudio = append(combinedAudio, processedAudio)
+
+			if combinedText.Len() > 0 {
+				combinedText.WriteString(" ")
+			}
+			combinedText.WriteString(action.Text)
+
+			for i := range timings {
+				timings[i].Start += currentOffset
+				timings[i].End += currentOffset
+			}
+			combinedTimings = append(combinedTimings, timings...)
+
+			audioLen, err := p.getAudioLength(ctx, processedAudio)
+			if err != nil {
+				slog.Error("error getting audio length", "err", err)
+				continue
+			}
+
+			currentOffset += audioLen
+			currentOffset += concatPadding
+		}
+
+		if action.Sfx != "" {
+			sfxAudio, err := p.getSFX(action.Sfx)
+			if err != nil {
+				slog.Error("error generating SFX", "err", err, "sfx", action.Sfx)
+
+				if combinedText.Len() > 0 {
+					combinedText.WriteString(" ")
+				}
+				combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
+
+				continue
+			}
+
+			processedSFX, err := p.applyAudioEffects(ctx, sfxAudio, action.Filters)
+			if err != nil {
+				slog.Error("error applying audio effects to SFX", "err", err, "filters", action.Filters)
+
+				processedSFX = sfxAudio
+			}
+
+			combinedAudio = append(combinedAudio, processedSFX)
+
+			if combinedText.Len() > 0 {
+				combinedText.WriteString(" ")
+			}
+			combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
+
+			sfxLen, err := p.getAudioLength(ctx, processedSFX)
+			if err != nil {
+				slog.Error("error getting SFX length", "err", err)
+
+				continue
+			}
+
+			currentOffset += sfxLen
+		}
+	}
+
+	if len(combinedAudio) == 0 {
+		return nil, "", nil, fmt.Errorf("no audio generated from actions")
+	}
+
+	finalAudio, err := p.ffmpeg.ConcatenateAudio(ctx, concatPadding, combinedAudio...)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("error concatenating audio: %w", err)
+	}
+
+	return finalAudio, combinedText.String(), combinedTimings, nil
+}
+
+func (p *Processor) getVoiceReference(ctx context.Context, voice string) (uuid.UUID, []byte, error) {
+	if voice == "" {
+		return uuid.Nil, nil, fmt.Errorf("empty voice")
+	}
+	slog.Debug("voice reference requested", "voice", voice)
+
+	id, card, err := p.db.GetVoiceReferenceByShortName(ctx, voice)
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("failed to get voice reference for '%s': %w", voice, err)
+	}
+
+	return id, card.VoiceReference, nil
+}
+
+func (p *Processor) applyAudioEffects(ctx context.Context, audio []byte, filters []string) ([]byte, error) {
+	if len(filters) == 0 {
+		return audio, nil
+	}
+
+	processedAudio, err := p.ffmpeg.ApplyStringFilters(ctx, audio, filters)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply audio effects: %w", err)
+	}
+
+	return processedAudio, nil
+}
+
+func (p *Processor) getSFX(sfxName string) ([]byte, error) {
+	name := strings.TrimSpace(sfxName)
+	if len(name) == 0 {
+		return nil, fmt.Errorf("empty sfx name")
+	}
+
+	data, err := embeddedSFX.ReadFile("sfx/" + name + ".mp3")
+	if err != nil {
+		return nil, fmt.Errorf("sfx '%s' not found: %w", sfxName, err)
+	}
+
+	return data, nil
 }

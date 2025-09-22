@@ -1,0 +1,22 @@
+<div>
+    <div class="mb-4 space-x-4">
+		<div class="text-xl font-medium">
+			Default voice is tresh. Syntax is same as forsen tts but with different voices that are listed below.
+		</div>
+		<br />
+        <a class="underline text-xl font-medium text-blue-600 dark:text-blue-400" href="https://www.101soundboards.com/boards/34989-tts-sounds" target="_blank" rel="noopener noreferrer">sounds examples</a>
+		<br />
+        <a class="underline text-xl font-medium text-blue-600 dark:text-blue-400" href="https://www.101soundboards.com/boards/58761-tts-filters" target="_blank" rel="noopener noreferrer">filter examples</a>
+		<br />
+    </div>
+	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-6">
+		{{ range .Items }}
+		<div class="border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col items-center justify-center">
+			<div class="w-[100px] h-[100px] flex items-center justify-center overflow-hidden">
+				<img class="object-contain max-w-full max-h-full" src="/characters/{{ .ID }}/image" />
+			</div>
+			<div class="mt-2 text-center text-base font-semibold truncate w-52" title="{{ .Name }}">{{ .Name }}</div>
+		</div>
+		{{ end }}
+	</div>
+</div>

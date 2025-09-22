@@ -12,6 +12,12 @@
     {{ if not .AIRewardCreated}}
     <button class="row-start-11 row-end-12 col-start-10 col-end-12" hx-post="/characters/{{ .Card.ID }}/reward_ai">AI</button>
     {{ end }}
+    {{ if .IsAdmin }}
+    <form class="row-start-12 row-end-13 col-start-7 col-end-12 flex items-center gap-2" hx-post="/characters/{{ .Card.ID }}/admin/update_short_char_name" hx-target="closest div">
+        <input type="text" name="short_name" placeholder="Short name" value="{{ if .Card.ShortCharName.Valid }}{{ .Card.ShortCharName.String }}{{ end }}" class="border rounded px-1 py-0.5 w-full" />
+        <button type="submit" class="border rounded px-2 py-0.5">Save</button>
+    </form>
+    {{ end }}
 </div>
 
 {{ end }}

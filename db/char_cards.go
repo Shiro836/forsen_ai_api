@@ -5,8 +5,10 @@ import (
 	"app/pkg/tools"
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +21,8 @@ type Card struct {
 
 	Name        string
 	Description string
+
+	ShortCharName sql.NullString
 
 	Public  bool
 	Redeems int
@@ -47,6 +51,13 @@ type CardData struct {
 
 	ImageID string `json:"image_id,omitempty"`
 	VoiceID string `json:"voice_id,omitempty"`
+}
+
+// PublicShortName holds minimal data to render public short-named cards
+type PublicShortName struct {
+	ID            uuid.UUID
+	ShortCharName string
+	Data          *CardData
 }
 
 func (db *DB) GetCharImage(ctx context.Context, cardID uuid.UUID) ([]byte, error) {
@@ -84,6 +95,7 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 			cc.owner_user_id,
 			cc.name,
 			cc.description,
+            cc.short_char_name,
 			cc.public,
 			cc.redeems,
 			cc.updated_at,
@@ -98,6 +110,7 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 		&card.OwnerUserID,
 		&card.Name,
 		&card.Description,
+		&card.ShortCharName,
 		&card.Public,
 		&card.Redeems,
 		&card.UpdatedAt,
@@ -123,6 +136,7 @@ func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, userID uuid.
 			cc.owner_user_id,
 			cc.name,
 			cc.description,
+            cc.short_char_name,
 			cc.public,
 			cc.redeems,
 			cc.updated_at,
@@ -134,8 +148,9 @@ func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, userID uuid.
 	`, twitchRewardID).Scan(
 		&card.ID,
 		&card.OwnerUserID,
-		&card.Description,
 		&card.Name,
+		&card.Description,
+		&card.ShortCharName,
 		&card.Public,
 		&card.Redeems,
 		&card.UpdatedAt,
@@ -162,6 +177,7 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, t
 			cc.owner_user_id,
 			cc.name,
 			cc.description,
+            cc.short_char_name,
 			cc.public,
 			cc.redeems,
 			cc.updated_at,
@@ -177,8 +193,9 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, t
 	`, twitchRewardID, userID).Scan(
 		&card.ID,
 		&card.OwnerUserID,
-		&card.Description,
 		&card.Name,
+		&card.Description,
+		&card.ShortCharName,
 		&card.Public,
 		&card.Redeems,
 		&card.UpdatedAt,
@@ -339,6 +356,7 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 			owner_user_id,
 			name,
 			description,
+            short_char_name,
 			redeems,
 			public,
 			updated_at
@@ -369,6 +387,7 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 			&card.OwnerUserID,
 			&card.Name,
 			&card.Description,
+			&card.ShortCharName,
 			&card.Redeems,
 			&card.Public,
 			&card.UpdatedAt,
@@ -387,4 +406,85 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 	}
 
 	return cards, nil
+}
+
+func (db *DB) SetShortCharName(ctx context.Context, cardID uuid.UUID, shortName *string) error {
+	var arg any
+	if shortName == nil || strings.TrimSpace(*shortName) == "" {
+		arg = nil
+	} else {
+		arg = strings.TrimSpace(*shortName)
+	}
+
+	_, err := db.Exec(ctx, `
+        update char_cards set
+            short_char_name = $2,
+            updated_at = now()
+        where id = $1
+    `, cardID, arg)
+	if err != nil {
+		return fmt.Errorf("failed to set short_char_name for card %s: %w", cardID, err)
+	}
+
+	return nil
+}
+
+func (db *DB) GetVoiceReferenceByShortName(ctx context.Context, shortName string) (uuid.UUID, *CardData, error) {
+	shortName = strings.TrimSpace(shortName)
+	if shortName == "" {
+		return uuid.Nil, nil, fmt.Errorf("empty short_char_name")
+	}
+
+	var data *CardData
+	var id uuid.UUID
+	err := db.QueryRow(ctx, `
+        select cc.id, cc.data
+        from char_cards cc
+        where cc.short_char_name = $1
+          and cc.public = true
+        limit 1
+    `, shortName).Scan(&id, &data)
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("get voice by short name: %w", parseErr(err))
+	}
+
+	if data == nil {
+		return uuid.Nil, nil, fmt.Errorf("no data for short_char_name '%s'", shortName)
+	}
+
+	// Reuse helper to populate media from S3 when only IDs are present
+	db.populateCardDataMedia(ctx, data)
+
+	return id, data, nil
+}
+
+// GetPublicShortNamedCards returns public cards with a non-empty short_char_name
+func (db *DB) GetPublicShortNamedCards(ctx context.Context) ([]PublicShortName, error) {
+	rows, err := db.Query(ctx, `
+        select id, short_char_name, data
+        from char_cards
+        where public = true
+          and short_char_name is not null
+          and length(trim(short_char_name)) > 0
+        order by short_char_name asc
+    `)
+	if err != nil {
+		return nil, fmt.Errorf("get public short named cards: %w", err)
+	}
+	defer rows.Close()
+
+	var out []PublicShortName
+	for rows.Next() {
+		var rec PublicShortName
+		if err := rows.Scan(&rec.ID, &rec.ShortCharName, &rec.Data); err != nil {
+			return nil, fmt.Errorf("scan public short named cards: %w", err)
+		}
+		// populate media from S3 if necessary
+		db.populateCardDataMedia(ctx, rec.Data)
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate public short named cards: %w", err)
+	}
+	return out, nil
 }

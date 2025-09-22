@@ -42,6 +42,11 @@
             </div>
             <div class="pt-1 pb-1 w-full">
                 <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
+                    hx-get="/voices" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true">Voices</button>
+            </div>
+            <div class="pt-1 pb-1 w-full">
+                <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
                     hx-get="/control" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
                     hx-push-url="true">Control Panel</button>
             </div>

@@ -319,18 +319,50 @@ loop:
 				}
 			case db.MsgStatusCurrent, db.MsgStatusWait:
 				action = ActionUpsert
-				charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID)
-				if err != nil {
-					logger.Info("failed to get char card by twitch reward", "err", err) // might be non baj ai reward
-					continue
-				}
 
-				var rewardTypeStr string = "unknown"
-				switch rewardType {
-				case db.TwitchRewardTTS:
-					rewardTypeStr = "TTS"
-				case db.TwitchRewardAI:
-					rewardTypeStr = "AI"
+				// Resolve reward type and (optionally) character card
+				var (
+					charName      string
+					rewardTypeStr string = "unknown"
+				)
+
+				if charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID); err == nil {
+					// Standard path (AI/TTS tied to a character)
+					charName = charCard.Name
+					switch rewardType {
+					case db.TwitchRewardTTS:
+						rewardTypeStr = "TTS"
+					case db.TwitchRewardAI:
+						rewardTypeStr = "AI"
+					}
+				} else {
+					// Fallback: handle rewards without a character mapping (e.g., Universal TTS)
+					cardID, rewardType, err2 := api.db.GetRewardByTwitchReward(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID)
+					if err2 != nil {
+						logger.Info("failed to resolve reward by twitch reward", "err", err2)
+						continue
+					}
+
+					switch rewardType {
+					case db.TwitchRewardUniversalTTS:
+						rewardTypeStr = rewardType.String() // "BAJ TTS"
+						// no character card for universal TTS
+						charName = "-"
+					case db.TwitchRewardTTS:
+						// If TTS points to a specific character but earlier lookup failed, skip if cardID is nil
+						if cardID == nil {
+							logger.Info("tts reward has no card mapping; skipping")
+							continue
+						}
+						rewardTypeStr = "TTS"
+						charName = "-"
+					case db.TwitchRewardAI:
+						// AI should always have a character; skip if not resolvable
+						logger.Info("ai reward without resolvable character; skipping")
+						continue
+					default:
+						continue
+					}
 				}
 
 				msgData, err := db.ParseMessageData(dbMessage.Data)
@@ -353,7 +385,7 @@ loop:
 					RequestedBy: dbMessage.TwitchMessage.TwitchLogin,
 
 					Type:     rewardTypeStr,
-					CharName: charCard.Name,
+					CharName: charName,
 
 					Request:  dbMessage.TwitchMessage.Message,
 					Response: msgData.AIResponse,
