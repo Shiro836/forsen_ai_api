@@ -31,6 +31,8 @@ import (
 //go:embed sfx/*.mp3
 var embeddedSFX embed.FS
 
+const defaultTtsLimitSeconds = 80
+
 type Processor struct {
 	logger *slog.Logger
 
@@ -256,6 +258,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			return fmt.Errorf("error getting next message from db: %w", err)
 		}
 
+		userSettings, err := p.db.GetUserSettings(ctx, broadcaster.ID)
+		if err != nil {
+			logger.Warn("failed to get user settings, using defaults", "err", err)
+			userSettings = &db.UserSettings{} // Use empty settings with defaults
+		}
+
 		skipMsg := false
 
 		if err := p.db.UpdateMessageStatus(ctx, msg.ID, db.MsgStatusCurrent); err != nil {
@@ -297,7 +305,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 			// Replace any <img:{id}> tags with image_1, image_2 for TTS readability
 			ttsMsg := replaceImageTagsForTTS(msg.TwitchMessage.Message)
-			filteredRequest := p.FilterText(ctx, broadcaster.ID, ttsMsg)
+			filteredRequest := p.FilterText(ctx, userSettings, ttsMsg)
 
 			requestAudio, textTimings, err := p.TTSWithTimings(ctx, filteredRequest, charCard.Data.VoiceReference)
 			if err != nil {
@@ -316,7 +324,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				continue
 			}
 
-			requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequest, msg.ID, requestAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock)
+			requestTtsDone, err := p.playTTS(ctx, logger, eventWriter, filteredRequest, msg.ID, requestAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock, userSettings)
 			if err != nil {
 				fmt.Println(err)
 				logger.Error("error playing tts", "err", err)
@@ -340,10 +348,10 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		if rewardType == db.TwitchRewardUniversalTTS {
 			// Universal TTS processing using tts_processor library
 			ttsMsg := replaceImageTagsForTTS(msg.TwitchMessage.Message)
-			filteredRequest := p.FilterText(ctx, broadcaster.ID, ttsMsg)
+			filteredRequest := p.FilterText(ctx, userSettings, ttsMsg)
 
 			// Process the message with tts_processor
-			actions, err := p.processUniversalTTSMessage(ctx, filteredRequest, broadcaster.ID)
+			actions, err := p.processUniversalTTSMessage(ctx, filteredRequest)
 			if err != nil {
 				logger.Error("error processing universal tts message", "err", err)
 				continue
@@ -360,8 +368,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				continue
 			}
 
-			// Play the processed TTS actions
-			requestTtsDone, err := p.playUniversalTTS(ctx, eventWriter, actions, msg.ID, &skippedMsgIDs, &skippedMsgIDsLock)
+			requestTtsDone, err := p.playUniversalTTS(ctx, logger, eventWriter, actions, msg.ID, &skippedMsgIDs, &skippedMsgIDsLock, userSettings)
 			if err != nil {
 				fmt.Println(err)
 				logger.Error("error playing universal tts", "err", err)
@@ -513,7 +520,7 @@ The description should read like a clever commentary, not like someone talking a
 		ttsUserMsg := replaceImageTagsForTTS(msg.TwitchMessage.Message)
 		requestText := requester + " asked me: " + ttsUserMsg
 
-		filteredRequestText := p.FilterText(ctx, broadcaster.ID, requestText)
+		filteredRequestText := p.FilterText(ctx, userSettings, requestText)
 
 		requestAudio, textTimings, err := p.TTSWithTimings(ctx, filteredRequestText, charCard.Data.VoiceReference)
 		if err != nil {
@@ -532,7 +539,7 @@ The description should read like a clever commentary, not like someone talking a
 			continue
 		}
 
-		requestTtsDone, err := p.playTTS(ctx, eventWriter, filteredRequestText, msg.ID, requestAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock)
+		requestTtsDone, err := p.playTTS(ctx, logger, eventWriter, filteredRequestText, msg.ID, requestAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock, userSettings)
 		if err != nil {
 			fmt.Println(err)
 			logger.Error("error playing tts", "err", err)
@@ -581,7 +588,7 @@ The description should read like a clever commentary, not like someone talking a
 			return nil
 		}
 
-		filteredResponse := p.FilterText(ctx, broadcaster.ID, llmResult)
+		filteredResponse := p.FilterText(ctx, userSettings, llmResult)
 
 		responseTtsAudio, textTimings, err := p.TTSWithTimings(ctx, filteredResponse, charCard.Data.VoiceReference)
 		if err != nil {
@@ -612,7 +619,7 @@ The description should read like a clever commentary, not like someone talking a
 			continue
 		}
 
-		responseTtsDone, err := p.playTTS(ctx, eventWriter, filteredResponse, msg.ID, responseTtsAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock)
+		responseTtsDone, err := p.playTTS(ctx, logger, eventWriter, filteredResponse, msg.ID, responseTtsAudio, textTimings, &skippedMsgIDs, &skippedMsgIDsLock, userSettings)
 		if err != nil {
 			fmt.Println(err)
 			logger.Error("error playing tts", "err", err)
@@ -646,13 +653,25 @@ type audioMsg struct {
 	MsgID string `json:"msg_id"`
 }
 
-func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex) (<-chan struct{}, error) {
-	if textTimings == nil {
-		audioLen, err := p.getAudioLength(ctx, audio)
-		if err != nil {
-			return nil, err
-		}
+func (p *Processor) playTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex, userSettings *db.UserSettings) (<-chan struct{}, error) {
+	mp3Audio, err := p.ffmpeg.Ffmpeg2Mp3(ctx, audio)
+	if err == nil {
+		audio = mp3Audio
+	} else {
+		p.logger.Error("error converting audio to mp3", "err", err)
+	}
 
+	audio, err = p.cutTtsAudio(ctx, logger, userSettings, audio)
+	if err != nil {
+		p.logger.Warn("failed to cut TTS audio", "err", err)
+	}
+
+	audioLen, err := p.getAudioLength(ctx, audio)
+	if err != nil {
+		return nil, err
+	}
+
+	if textTimings == nil {
 		textTimings = append(textTimings, whisperx.Timiing{
 			Text:  msg,
 			Start: 0,
@@ -666,11 +685,6 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 		// }
 	}
 
-	audioLen, err := p.getAudioLength(ctx, audio)
-	if err != nil {
-		return nil, err
-	}
-
 	if len(textTimings) == 0 {
 		textTimings = append(textTimings, whisperx.Timiing{
 			Text:  msg,
@@ -679,13 +693,6 @@ func (p *Processor) playTTS(ctx context.Context, eventWriter conns.EventWriter, 
 		})
 	} else {
 		textTimings[len(textTimings)-1].End = audioLen
-	}
-
-	mp3Audio, err := p.ffmpeg.Ffmpeg2Mp3(ctx, audio)
-	if err == nil {
-		audio = mp3Audio
-	} else {
-		p.logger.Error("error converting audio to mp3", "err", err)
 	}
 
 	done := make(chan struct{})
@@ -766,24 +773,52 @@ func (p *Processor) TTSWithTimings(ctx context.Context, msg string, refAudio []b
 	return ttsResult, ttsSegments, nil
 }
 
-func (p *Processor) FilterText(ctx context.Context, broadcasterID uuid.UUID, text string) string {
+func (p *Processor) FilterText(ctx context.Context, userSettings *db.UserSettings, text string) string {
 	swears := GlobalSwears // regex patterns
 
-	userSettings, err := p.db.GetUserSettings(ctx, broadcasterID)
-	if err == nil && len(userSettings.Filters) != 0 {
+	if len(userSettings.Filters) != 0 {
 		swears = slices.Concat(swears, strings.Split(userSettings.Filters, ","))
 	}
 
 	for _, exp := range swears {
 		r, err := regexp.Compile("(?i)" + exp) // makes them case-insensitive by default
 		if err != nil {
-			p.logger.Warn(fmt.Sprintf("failed compiling reg expression '%s' for %s", exp, broadcasterID), "err", err)
+			p.logger.Warn(fmt.Sprintf("failed compiling reg expression '%s'", exp), "err", err)
 			continue
 		}
 		text = r.ReplaceAllString(text, "(filtered)")
 	}
 
 	return text
+}
+
+// cutTtsAudio cuts audio to the user's TTS limit if it exceeds the limit
+func (p *Processor) cutTtsAudio(ctx context.Context, logger *slog.Logger, userSettings *db.UserSettings, audio []byte) ([]byte, error) {
+	ttsLimit := userSettings.TtsLimit
+	if ttsLimit <= 0 {
+		ttsLimit = defaultTtsLimitSeconds
+	}
+
+	audioLen, err := p.getAudioLength(ctx, audio)
+	if err != nil {
+		p.logger.Warn("failed to get audio length for TTS cutting", "err", err)
+		return audio, nil
+	}
+
+	maxDuration := time.Duration(ttsLimit) * time.Second
+	if audioLen <= maxDuration {
+		return audio, nil
+	}
+
+	logger.Debug("cutting TTS audio to fit limit", "original_duration", audioLen, "max_duration", maxDuration)
+
+	cutAudio, err := p.ffmpeg.CutAudio(ctx, audio, maxDuration)
+	if err != nil {
+		logger.Warn("failed to cut audio, using original", "err", err)
+		return audio, nil
+	}
+
+	return cutAudio, nil
 }
 
 func (p *Processor) craftPrompt(char *db.Card, requester string, message string) (string, error) {
@@ -826,98 +861,105 @@ func (p *Processor) getAudioLength(ctx context.Context, data []byte) (time.Durat
 	return res.Duration, nil
 }
 
-func (p *Processor) alignTextToAudio(ctx context.Context, text string, audio []byte) ([]whisperx.Timiing, error) {
-	audioLen, err := p.getAudioLength(ctx, audio)
-	if err != nil {
-		return nil, err
-	}
+// func (p *Processor) alignTextToAudio(ctx context.Context, text string, audio []byte) ([]whisperx.Timiing, error) {
+// 	audioLen, err := p.getAudioLength(ctx, audio)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	timings, err := p.whisper.Align(ctx, text, audio, audioLen)
-	if err != nil {
-		return nil, fmt.Errorf("error aligning text to audio: %w", err)
-	}
+// 	timings, err := p.whisper.Align(ctx, text, audio, audioLen)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("error aligning text to audio: %w", err)
+// 	}
 
-	if len(timings) == 0 {
-		timings = append(timings, whisperx.Timiing{
-			Start: 0,
-			End:   audioLen,
-			Text:  text,
-		})
-	}
+// 	if len(timings) == 0 {
+// 		timings = append(timings, whisperx.Timiing{
+// 			Start: 0,
+// 			End:   audioLen,
+// 			Text:  text,
+// 		})
+// 	}
 
-	for _, timing := range timings {
-		if timing.End > audioLen {
-			timing.End = audioLen
-		}
-	}
+// 	for _, timing := range timings {
+// 		if timing.End > audioLen {
+// 			timing.End = audioLen
+// 		}
+// 	}
 
-	timings[len(timings)-1].End = audioLen
+// 	timings[len(timings)-1].End = audioLen
 
-	return timings, nil
-}
+// 	return timings, nil
+// }
 
-func (p *Processor) processUniversalTTSMessage(ctx context.Context, message string, userID uuid.UUID) ([]ttsprocessor.Action, error) {
-	// Get available voices, filters, and SFX from the database or configuration
-	// For now, we'll use simple placeholder functions
+func (p *Processor) processUniversalTTSMessage(ctx context.Context, message string) ([]ttsprocessor.Action, error) {
 	checkVoice := func(voice string) bool {
 		name := strings.TrimSpace(voice)
 		if len(name) == 0 {
 			return false
 		}
-		// Dynamically validate against DB: public short name must exist
+
 		_, _, err := p.db.GetVoiceReferenceByShortName(ctx, name)
+
 		return err == nil
 	}
 
 	checkFilter := func(filter string) bool {
-		// Filters are numeric IDs matching ffmpeg.FilterType values
 		if len(filter) == 0 {
 			return false
 		}
+
 		v, err := strconv.Atoi(filter)
 		if err != nil {
 			return false
 		}
+
 		return v >= 1 && v < int(ffmpeg.FilterLast)
 	}
 
 	checkSfx := func(sfx string) bool {
-		// SFX should correspond to an embedded file sfx/{name}.mp3
 		name := strings.TrimSpace(sfx)
 		if len(name) == 0 {
 			return false
 		}
+
 		if _, err := embeddedSFX.Open("sfx/" + name + ".mp3"); err != nil {
 			return false
 		}
+
 		return true
 	}
 
 	return ttsprocessor.ProcessMessage(message, checkVoice, checkFilter, checkSfx)
 }
 
-func (p *Processor) playUniversalTTS(ctx context.Context, eventWriter conns.EventWriter, actions []ttsprocessor.Action, msgID uuid.UUID, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex) (<-chan struct{}, error) {
-	combinedAudio, combinedText, combinedTimings, err := p.craftUniversalTTSAudio(ctx, actions)
+func (p *Processor) playUniversalTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, actions []ttsprocessor.Action, msgID uuid.UUID, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex, userSettings *db.UserSettings) (<-chan struct{}, error) {
+	combinedAudio, combinedText, combinedTimings, err := p.craftUniversalTTSAudio(ctx, logger, actions, userSettings)
 	if err != nil {
 		done := make(chan struct{})
 		close(done)
-		slog.Error("error crafting universal TTS audio", "err", err)
+		logger.Error("error crafting universal TTS audio", "err", err)
 		return done, err
 	}
 
-	return p.playTTS(ctx, eventWriter, combinedText, msgID, combinedAudio, combinedTimings, skippedMsgIDs, skippedMsgIDsLock)
+	return p.playTTS(ctx, logger, eventWriter, combinedText, msgID, combinedAudio, combinedTimings, skippedMsgIDs, skippedMsgIDsLock, userSettings)
 }
 
-func (p *Processor) craftUniversalTTSAudio(ctx context.Context, actions []ttsprocessor.Action) ([]byte, string, []whisperx.Timiing, error) {
+func (p *Processor) craftUniversalTTSAudio(ctx context.Context, logger *slog.Logger, actions []ttsprocessor.Action, userSettings *db.UserSettings) ([]byte, string, []whisperx.Timiing, error) {
 	var combinedAudio [][]byte
 	var combinedText strings.Builder
 	var combinedTimings []whisperx.Timiing
 	currentOffset := time.Duration(0)
 
 	concatPadding := 500 * time.Millisecond
-
 	defaultVoice := "tresh"
 
+	ttsLimit := userSettings.TtsLimit
+	if ttsLimit <= 0 {
+		ttsLimit = defaultTtsLimitSeconds
+	}
+	maxDuration := time.Duration(ttsLimit) * time.Second
+
+actions_loop:
 	for _, action := range actions {
 		if action.Text != "" && action.Text != " " {
 			voice := action.Voice
@@ -925,34 +967,34 @@ func (p *Processor) craftUniversalTTSAudio(ctx context.Context, actions []ttspro
 				voice = defaultVoice
 			}
 
-			_, voiceRef, err := p.getVoiceReference(ctx, voice)
+			_, voiceRef, err := p.getVoiceReference(ctx, logger, voice)
 			if err != nil {
-				slog.Error("error getting voice reference", "err", err, "voice", action.Voice)
+				logger.Error("error getting voice reference", "err", err, "voice", action.Voice)
 				voiceRef = []byte{}
 			}
 
 			audio, timings, err := p.TTSWithTimings(ctx, action.Text, voiceRef)
 			if err != nil {
-				slog.Error("error generating TTS for universal action", "err", err, "text", action.Text)
+				logger.Error("error generating TTS for universal action", "err", err, "text", action.Text)
 				continue
 			}
 
 			originalAudioLen, err := p.getAudioLength(ctx, audio)
 			if err != nil {
-				slog.Error("error getting audio length", "err", err)
+				logger.Error("error getting audio length", "err", err)
 				continue
 			}
 
-			processedAudio, err := p.applyAudioEffects(ctx, audio, action.Filters)
+			processedAudio, err := p.applyAudioEffects(ctx, audio, action.Filters...)
 			if err != nil {
-				slog.Error("error applying audio effects", "err", err, "filters", action.Filters)
+				logger.Error("error applying audio effects", "err", err, "filters", action.Filters)
 
 				processedAudio = audio
 			}
 
 			processedAudioLen, err := p.getAudioLength(ctx, processedAudio)
 			if err != nil {
-				slog.Error("error getting audio length", "err", err)
+				logger.Error("error getting audio length", "err", err)
 				continue
 			}
 
@@ -982,50 +1024,65 @@ func (p *Processor) craftUniversalTTSAudio(ctx context.Context, actions []ttspro
 
 			audioLen, err := p.getAudioLength(ctx, processedAudio)
 			if err != nil {
-				slog.Error("error getting audio length", "err", err)
+				logger.Error("error getting audio length", "err", err)
 				continue
 			}
 
 			currentOffset += audioLen
 			currentOffset += concatPadding
-		}
 
-		if action.Sfx != "" {
-			sfxAudio, err := p.getSFX(action.Sfx)
-			if err != nil {
-				slog.Error("error generating SFX", "err", err, "sfx", action.Sfx)
+			if currentOffset > maxDuration {
+				logger.Info("stopping universal TTS generation due to length limit", "current_duration", currentOffset, "max_duration", maxDuration)
+				break actions_loop
+			}
+
+			if action.Sfx != "" {
+				sfxAudio, err := p.getSFX(action.Sfx)
+				if err != nil {
+					logger.Error("error generating SFX", "err", err, "sfx", action.Sfx)
+
+					if combinedText.Len() > 0 {
+						combinedText.WriteString(" ")
+					}
+					combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
+
+					continue
+				}
+
+				processedSFX, err := p.applyAudioEffects(ctx, sfxAudio, action.Filters...)
+				if err != nil {
+					logger.Error("error applying audio effects to SFX", "err", err, "filters", action.Filters)
+
+					processedSFX = sfxAudio
+				}
+
+				combinedAudio = append(combinedAudio, processedSFX)
 
 				if combinedText.Len() > 0 {
 					combinedText.WriteString(" ")
 				}
 				combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
 
-				continue
+				sfxLen, err := p.getAudioLength(ctx, processedSFX)
+				if err != nil {
+					logger.Error("error getting SFX length", "err", err)
+
+					continue
+				}
+
+				currentOffset += sfxLen
+
+				if currentOffset > maxDuration {
+					logger.Info("stopping universal TTS generation due to length limit", "current_duration", currentOffset, "max_duration", maxDuration)
+					break actions_loop
+				}
 			}
-
-			processedSFX, err := p.applyAudioEffects(ctx, sfxAudio, action.Filters)
-			if err != nil {
-				slog.Error("error applying audio effects to SFX", "err", err, "filters", action.Filters)
-
-				processedSFX = sfxAudio
-			}
-
-			combinedAudio = append(combinedAudio, processedSFX)
-
-			if combinedText.Len() > 0 {
-				combinedText.WriteString(" ")
-			}
-			combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
-
-			sfxLen, err := p.getAudioLength(ctx, processedSFX)
-			if err != nil {
-				slog.Error("error getting SFX length", "err", err)
-
-				continue
-			}
-
-			currentOffset += sfxLen
 		}
+	}
+
+	for i := range combinedTimings {
+		combinedTimings[i].Start = min(combinedTimings[i].Start, maxDuration)
+		combinedTimings[i].End = min(combinedTimings[i].End, maxDuration)
 	}
 
 	if len(combinedAudio) == 0 {
@@ -1040,11 +1097,11 @@ func (p *Processor) craftUniversalTTSAudio(ctx context.Context, actions []ttspro
 	return finalAudio, combinedText.String(), combinedTimings, nil
 }
 
-func (p *Processor) getVoiceReference(ctx context.Context, voice string) (uuid.UUID, []byte, error) {
+func (p *Processor) getVoiceReference(ctx context.Context, logger *slog.Logger, voice string) (uuid.UUID, []byte, error) {
 	if voice == "" {
 		return uuid.Nil, nil, fmt.Errorf("empty voice")
 	}
-	slog.Debug("voice reference requested", "voice", voice)
+	logger.Debug("voice reference requested", "voice", voice)
 
 	id, card, err := p.db.GetVoiceReferenceByShortName(ctx, voice)
 	if err != nil {
@@ -1054,12 +1111,41 @@ func (p *Processor) getVoiceReference(ctx context.Context, voice string) (uuid.U
 	return id, card.VoiceReference, nil
 }
 
-func (p *Processor) applyAudioEffects(ctx context.Context, audio []byte, filters []string) ([]byte, error) {
+func (p *Processor) limitFilters(filters []string) []string {
+	const (
+		maxPerFilter = 3
+		maxTotal     = 15
+	)
+
+	if len(filters) == 0 {
+		return filters
+	}
+
+	filterCounts := make(map[string]int)
+	var limitedFilters []string
+
+	for _, filter := range filters {
+		if filterCounts[filter] < maxPerFilter {
+			filterCounts[filter]++
+			limitedFilters = append(limitedFilters, filter)
+
+			if len(limitedFilters) >= maxTotal {
+				break
+			}
+		}
+	}
+
+	return limitedFilters
+}
+
+func (p *Processor) applyAudioEffects(ctx context.Context, audio []byte, filters ...string) ([]byte, error) {
 	if len(filters) == 0 {
 		return audio, nil
 	}
 
-	processedAudio, err := p.ffmpeg.ApplyStringFilters(ctx, audio, filters)
+	limitedFilters := p.limitFilters(filters)
+
+	processedAudio, err := p.ffmpeg.ApplyStringFilters(ctx, audio, limitedFilters)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply audio effects: %w", err)
 	}

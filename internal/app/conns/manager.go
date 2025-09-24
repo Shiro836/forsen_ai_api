@@ -243,7 +243,7 @@ func (m *Manager) DisableUser(userID uuid.UUID) {
 func (m *Manager) HandleUser(user *db.User) {
 	logger := m.logger.With("user", user.TwitchLogin)
 
-	logger.Debug("trying to unlock mutex for HandleUser")
+	// logger.Debug("trying to unlock mutex for HandleUser")
 
 	m.rwMutex.Lock()
 	if m.runningUsers[user.ID] {

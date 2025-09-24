@@ -37,6 +37,9 @@ func TestFfprobePath(t *testing.T) {
 //go:embed okayeg_ref.wav
 var audio []byte
 
+//go:embed okayeg_ref.mp3
+var audioMp3 []byte
+
 func TestFfprobe(t *testing.T) {
 	assert := require.New(t)
 	client := ffmpeg.New(&ffmpeg.Config{
@@ -267,5 +270,118 @@ func TestConcatenateAudio4FilesWithPadding(t *testing.T) {
 	os.MkdirAll("tmp", 0755)
 	// Save the result for inspection
 	err = os.WriteFile("tmp/concatenated_4_with_padding.mp3", result, 0644)
+	assert.NoError(err)
+}
+
+func TestCutAudio(t *testing.T) {
+	// Skip test if reference file doesn't exist
+	if _, err := os.Stat("okayeg_ref.mp3"); os.IsNotExist(err) {
+		t.Skip("reference audio file not found")
+	}
+
+	assert := require.New(t)
+	client := ffmpeg.New(&ffmpeg.Config{
+		TmpDir: "/tmp",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get original duration for comparison
+	originalDuration, err := client.FfprobePath(ctx, "okayeg_ref.mp3")
+	assert.NoError(err)
+
+	// Test cutting to half the original duration
+	cutDuration := originalDuration.Duration / 2
+	cutAudio, err := client.CutAudio(ctx, audioMp3, cutDuration)
+	assert.NoError(err)
+	assert.NotEmpty(cutAudio)
+
+	// Check duration of cut result using ffprobe
+	cutResultDuration, err := client.Ffprobe(ctx, cutAudio)
+	assert.NoError(err)
+
+	// The cut audio should be approximately half the original duration
+	tolerance := 200 * time.Millisecond // Allow 200ms tolerance for cutting precision
+	assert.InDelta(float64(cutDuration.Milliseconds()), float64(cutResultDuration.Duration.Milliseconds()), float64(tolerance.Milliseconds()))
+
+	// Create tmp directory if it doesn't exist
+	os.MkdirAll("tmp", 0755)
+	// Save the result for inspection
+	err = os.WriteFile("tmp/cut_audio.mp3", cutAudio, 0644)
+	assert.NoError(err)
+}
+
+func TestCutAudioLongerThanOriginal(t *testing.T) {
+	// Skip test if reference file doesn't exist
+	if _, err := os.Stat("okayeg_ref.mp3"); os.IsNotExist(err) {
+		t.Skip("reference audio file not found")
+	}
+
+	assert := require.New(t)
+	client := ffmpeg.New(&ffmpeg.Config{
+		TmpDir: "/tmp",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get original duration for comparison
+	originalDuration, err := client.FfprobePath(ctx, "okayeg_ref.mp3")
+	assert.NoError(err)
+
+	// Test cutting to longer than original duration (should return original)
+	cutDuration := originalDuration.Duration * 2
+	cutAudio, err := client.CutAudio(ctx, audioMp3, cutDuration)
+	assert.NoError(err)
+	assert.NotEmpty(cutAudio)
+
+	// Check duration of cut result using ffprobe
+	cutResultDuration, err := client.Ffprobe(ctx, cutAudio)
+	assert.NoError(err)
+
+	// The cut audio should be the same as original since we're cutting to longer duration
+	tolerance := 200 * time.Millisecond // Allow 200ms tolerance
+	assert.InDelta(float64(originalDuration.Duration.Milliseconds()), float64(cutResultDuration.Duration.Milliseconds()), float64(tolerance.Milliseconds()))
+
+	// Create tmp directory if it doesn't exist
+	os.MkdirAll("tmp", 0755)
+	// Save the result for inspection
+	err = os.WriteFile("tmp/cut_audio_longer.mp3", cutAudio, 0644)
+	assert.NoError(err)
+}
+
+func TestCutAudioVeryShort(t *testing.T) {
+	// Skip test if reference file doesn't exist
+	if _, err := os.Stat("okayeg_ref.mp3"); os.IsNotExist(err) {
+		t.Skip("reference audio file not found")
+	}
+
+	assert := require.New(t)
+	client := ffmpeg.New(&ffmpeg.Config{
+		TmpDir: "/tmp",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Test cutting to a very short duration (1 second)
+	cutDuration := 1 * time.Second
+	cutAudio, err := client.CutAudio(ctx, audioMp3, cutDuration)
+	assert.NoError(err)
+	assert.NotEmpty(cutAudio)
+
+	// Check duration of cut result using ffprobe
+	cutResultDuration, err := client.Ffprobe(ctx, cutAudio)
+	assert.NoError(err)
+
+	// The cut audio should be approximately 1 second
+	tolerance := 200 * time.Millisecond // Allow 200ms tolerance
+	assert.InDelta(float64(cutDuration.Milliseconds()), float64(cutResultDuration.Duration.Milliseconds()), float64(tolerance.Milliseconds()))
+
+	// Create tmp directory if it doesn't exist
+	os.MkdirAll("tmp", 0755)
+	// Save the result for inspection
+	err = os.WriteFile("tmp/cut_audio_short.mp3", cutAudio, 0644)
 	assert.NoError(err)
 }

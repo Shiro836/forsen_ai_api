@@ -166,7 +166,7 @@ func (api *API) NewRouter() *chi.Mux {
 			cmds := [][]string{
 				// {"sudo", "systemctl", "restart", "lexi"},
 				// {"sudo", "systemctl", "restart", "style"},
-				{"docker", "restart", "whisper-api"},
+				// {"docker", "restart", "whisper-api"},
 			}
 			for _, cmdArgs := range cmds {
 				cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)

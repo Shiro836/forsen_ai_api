@@ -167,6 +167,7 @@ func (db *DB) GetUserBySession(ctx context.Context, session string) (*User, erro
 type UserSettings struct {
 	Filters        string        `json:"filters"`
 	RequestTimeout time.Duration `json:"requestTimeout"`
+	TtsLimit       int           `json:"tts_limit"` // Maximum TTS audio length in seconds
 }
 
 func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {

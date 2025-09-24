@@ -1,6 +1,7 @@
 package ffmpeg
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -140,6 +141,40 @@ func (c *Client) ConcatenateAudio(ctx context.Context, padding time.Duration, au
 	output, err := os.ReadFile(outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read concatenated output file: %w", err)
+	}
+
+	return output, nil
+}
+
+func (c *Client) CutAudio(ctx context.Context, data []byte, maxDuration time.Duration) ([]byte, error) {
+	inputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
+	outputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString()+".mp3")
+
+	defer os.Remove(inputPath)
+	defer os.Remove(outputPath)
+
+	err := os.WriteFile(inputPath, data, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("write input file: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-i", inputPath,
+		"-t", fmt.Sprintf("%.3f", maxDuration.Seconds()),
+		"-c", "copy", // Copy without re-encoding for speed
+		"-y", // Overwrite output file
+		outputPath)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to run ffmpeg cut: %w, stderr: %s", err, stderr.String())
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read cut output file: %w", err)
 	}
 
 	return output, nil

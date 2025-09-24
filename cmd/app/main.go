@@ -24,6 +24,7 @@ import (
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
 	"app/pkg/s3client"
+	"app/pkg/slg"
 	"app/pkg/twitch"
 	"app/pkg/whisperx"
 
@@ -69,8 +70,8 @@ func main() {
 	influxWriter := influxDBClient.WriteAPI(cfg.InfluxDB.Org, cfg.InfluxDB.Bucket)
 	defer influxWriter.Flush()
 
-	// logger := slog.New(&slg.InfluxDBHandler{InfluxDBWriter: influxWriter})
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	logger := slog.New(&slg.InfluxDBHandler{InfluxDBWriter: influxWriter})
+	// logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	slog.SetDefault(logger)
 

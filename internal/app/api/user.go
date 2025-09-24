@@ -4,10 +4,12 @@ import (
 	"app/pkg/ctxstore"
 	"html/template"
 	"net/http"
+	"strconv"
 )
 
 type filters struct {
-	Filters string
+	Filters  string
+	TtsLimit int
 }
 
 func (api *API) filters(r *http.Request) template.HTML {
@@ -28,7 +30,8 @@ func (api *API) filters(r *http.Request) template.HTML {
 	}
 
 	return getHtml("filters.html", &filters{
-		Filters: settings.Filters,
+		Filters:  settings.Filters,
+		TtsLimit: settings.TtsLimit,
 	})
 }
 
@@ -58,6 +61,18 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	settings.Filters = r.Form.Get("filters")
+
+	// Parse tts_limit from form
+	ttsLimitStr := r.Form.Get("tts_limit")
+	if ttsLimitStr != "" {
+		ttsLimit, err := strconv.Atoi(ttsLimitStr)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("invalid tts_limit value: " + err.Error()))
+			return
+		}
+		settings.TtsLimit = ttsLimit
+	}
 
 	err = api.db.UpdateUserData(r.Context(), user.ID, settings)
 	if err != nil {

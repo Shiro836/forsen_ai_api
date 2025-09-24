@@ -1,5 +1,9 @@
 <div>
-  <form id="uploadForm" hx-post="/images" hx-target="#images_result" hx-swap="innerHTML" enctype="multipart/form-data">
+  <div class="text-xl font-medium">
+    AI can react to images in prompt. Upload image here and copy code that looks like &lt;img:sdfns&gt; and then paste it in prompt.
+  </div>
+  <br />
+  <form class="pt-6" id="uploadForm" hx-post="/images" hx-target="#images_result" hx-swap="innerHTML" enctype="multipart/form-data">
     <div class="flex flex-col justify-start pt-6 pl-6">
       <div class="flex flex-col flex-grow justify-start w-[25rem]">
         <div class="flex items-center pb-2">
