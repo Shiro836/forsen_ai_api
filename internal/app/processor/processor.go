@@ -31,8 +31,6 @@ import (
 //go:embed sfx/*.mp3
 var embeddedSFX embed.FS
 
-const defaultTtsLimitSeconds = 80
-
 type Processor struct {
 	logger *slog.Logger
 
@@ -357,7 +355,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			filteredRequest := p.FilterText(ctx, userSettings, ttsMsg)
 
 			// Process the message with tts_processor
-			actions, err := p.processUniversalTTSMessage(ctx, filteredRequest)
+			actions, err := p.processUniversalTTSMessage(ctx, filteredRequest, userSettings)
 			if err != nil {
 				logger.Error("error processing universal tts message", "err", err)
 				continue
@@ -829,9 +827,9 @@ func (p *Processor) FilterText(ctx context.Context, userSettings *db.UserSetting
 
 // cutTtsAudio cuts audio to the user's TTS limit if it exceeds the limit
 func (p *Processor) cutTtsAudio(ctx context.Context, logger *slog.Logger, userSettings *db.UserSettings, audio []byte) ([]byte, error) {
-	ttsLimit := userSettings.TtsLimit
-	if ttsLimit <= 0 {
-		ttsLimit = defaultTtsLimitSeconds
+	ttsLimit := db.DefaultTtsLimitSeconds // Default to 80 seconds
+	if userSettings.TtsLimit != nil {
+		ttsLimit = *userSettings.TtsLimit
 	}
 
 	audioLen, err := p.getAudioLength(ctx, audio)
@@ -926,7 +924,7 @@ func (p *Processor) getAudioLength(ctx context.Context, data []byte) (time.Durat
 // 	return timings, nil
 // }
 
-func (p *Processor) processUniversalTTSMessage(ctx context.Context, message string) ([]ttsprocessor.Action, error) {
+func (p *Processor) processUniversalTTSMessage(ctx context.Context, message string, userSettings *db.UserSettings) ([]ttsprocessor.Action, error) {
 	checkVoice := func(voice string) bool {
 		name := strings.TrimSpace(voice)
 		if len(name) == 0 {
@@ -968,7 +966,30 @@ func (p *Processor) processUniversalTTSMessage(ctx context.Context, message stri
 		return true
 	}
 
-	return ttsprocessor.ProcessMessage(message, checkVoice, checkFilter, checkSfx)
+	actions, err := ttsprocessor.ProcessMessage(message, checkVoice, checkFilter, checkSfx)
+	if err != nil {
+		return nil, err
+	}
+
+	maxSfxCount := db.DefaultMaxSfxCount
+	if userSettings.MaxSfxCount != nil {
+		maxSfxCount = *userSettings.MaxSfxCount
+	}
+
+	sfxCount := 0
+	var limitedActions []ttsprocessor.Action
+
+	for _, action := range actions {
+		if action.Sfx != "" && maxSfxCount != 0 {
+			if sfxCount >= maxSfxCount {
+				continue
+			}
+			sfxCount++
+		}
+		limitedActions = append(limitedActions, action)
+	}
+
+	return limitedActions, nil
 }
 
 func (p *Processor) playUniversalTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, actions []ttsprocessor.Action, msgID uuid.UUID, skippedMsgIDs *map[uuid.UUID]struct{}, skippedMsgIDsLock *sync.Mutex, userSettings *db.UserSettings) (<-chan struct{}, error) {
@@ -992,9 +1013,9 @@ func (p *Processor) craftUniversalTTSAudio(ctx context.Context, logger *slog.Log
 	concatPadding := 500 * time.Millisecond
 	defaultVoice := "tresh"
 
-	ttsLimit := userSettings.TtsLimit
-	if ttsLimit <= 0 {
-		ttsLimit = defaultTtsLimitSeconds
+	ttsLimit := db.DefaultTtsLimitSeconds // Default to 80 seconds
+	if userSettings.TtsLimit != nil {
+		ttsLimit = *userSettings.TtsLimit
 	}
 	maxDuration := time.Duration(ttsLimit) * time.Second
 

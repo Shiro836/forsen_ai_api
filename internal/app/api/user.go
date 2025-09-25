@@ -1,6 +1,7 @@
 package api
 
 import (
+	"app/db"
 	"app/pkg/ctxstore"
 	"html/template"
 	"net/http"
@@ -8,8 +9,9 @@ import (
 )
 
 type filters struct {
-	Filters  string
-	TtsLimit int
+	Filters     string
+	TtsLimit    int
+	MaxSfxCount int
 }
 
 func (api *API) filters(r *http.Request) template.HTML {
@@ -29,9 +31,20 @@ func (api *API) filters(r *http.Request) template.HTML {
 		})
 	}
 
+	ttsLimit := db.DefaultTtsLimitSeconds
+	if settings.TtsLimit != nil && *settings.TtsLimit > 0 {
+		ttsLimit = *settings.TtsLimit
+	}
+
+	maxSfxCount := db.DefaultMaxSfxCount
+	if settings.MaxSfxCount != nil {
+		maxSfxCount = *settings.MaxSfxCount
+	}
+
 	return getHtml("filters.html", &filters{
-		Filters:  settings.Filters,
-		TtsLimit: settings.TtsLimit,
+		Filters:     settings.Filters,
+		TtsLimit:    ttsLimit,
+		MaxSfxCount: maxSfxCount,
 	})
 }
 
@@ -62,7 +75,6 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 
 	settings.Filters = r.Form.Get("filters")
 
-	// Parse tts_limit from form
 	ttsLimitStr := r.Form.Get("tts_limit")
 	if ttsLimitStr != "" {
 		ttsLimit, err := strconv.Atoi(ttsLimitStr)
@@ -71,7 +83,18 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("invalid tts_limit value: " + err.Error()))
 			return
 		}
-		settings.TtsLimit = ttsLimit
+		settings.TtsLimit = &ttsLimit
+	}
+
+	maxSfxCountStr := r.Form.Get("max_sfx_count")
+	if maxSfxCountStr != "" {
+		maxSfxCount, err := strconv.Atoi(maxSfxCountStr)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("invalid max_sfx_count value: " + err.Error()))
+			return
+		}
+		settings.MaxSfxCount = &maxSfxCount
 	}
 
 	err = api.db.UpdateUserData(r.Context(), user.ID, settings)
