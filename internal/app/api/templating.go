@@ -115,8 +115,13 @@ type permissionRequest struct {
 }
 
 type modPage struct {
-	Requests  []permissionRequest
-	Streamers []permissionRequest
+	Requests    []permissionRequest
+	Streamers   []permissionRequest
+	DeniedUsers []permissionRequest
+}
+
+type adminPage struct {
+	Mods []permissionRequest
 }
 
 type homePage struct {

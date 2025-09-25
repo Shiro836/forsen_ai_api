@@ -164,29 +164,31 @@ func (db *DB) RequestAccess(ctx context.Context, user *User, permission Permissi
 	return nil
 }
 
-func (db *DB) HasPermission(ctx context.Context, twitchUserID int, permission Permission) (bool, error) {
-	var tmp int
+func (db *DB) HasPermission(ctx context.Context, twitchUserID int, permission Permission) (bool, PermissionStatus, error) {
+	var status PermissionStatus
 
 	err := db.QueryRow(ctx, `
 		SELECT
-			1
+			status
 		FROM permissions
 		WHERE
 			twitch_user_id = $1
 		AND
 			permission = $2
-		AND
-			status = $3
-	`, twitchUserID, permission, PermissionStatusGranted).Scan(&tmp)
+	`, twitchUserID, permission).Scan(&status)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
+			return false, status, nil
 		}
 
-		return false, fmt.Errorf("failed to check permission: %w", err)
+		return false, status, fmt.Errorf("failed to check permission: %w", err)
 	}
 
-	return true, nil
+	if status == PermissionStatusGranted {
+		return true, status, nil
+	}
+
+	return false, status, nil
 }
 
 func (db *DB) AddPermission(ctx context.Context, initiator *User, targetTwitchUserID int, targetTwitchLogin string, permission Permission) error {
@@ -194,7 +196,7 @@ func (db *DB) AddPermission(ctx context.Context, initiator *User, targetTwitchUs
 		return fmt.Errorf("invalid permission: %d", permission)
 	}
 
-	if hasPerm, err := db.HasPermission(ctx, targetTwitchUserID, permission); err != nil {
+	if hasPerm, _, err := db.HasPermission(ctx, targetTwitchUserID, permission); err != nil {
 		return err
 	} else if hasPerm {
 		return nil
@@ -202,13 +204,13 @@ func (db *DB) AddPermission(ctx context.Context, initiator *User, targetTwitchUs
 
 	switch permission {
 	case PermissionAdmin, PermissionMod:
-		if hasAdmin, err := db.HasPermission(ctx, initiator.TwitchUserID, PermissionAdmin); err != nil {
+		if hasAdmin, _, err := db.HasPermission(ctx, initiator.TwitchUserID, PermissionAdmin); err != nil {
 			return err
 		} else if !hasAdmin {
 			return fmt.Errorf("%s doesn't have required permission: %s", initiator.TwitchLogin, PermissionAdmin.String())
 		}
 	case PermissionStreamer:
-		if hasMod, err := db.HasPermission(ctx, initiator.TwitchUserID, PermissionMod); err != nil {
+		if hasMod, _, err := db.HasPermission(ctx, initiator.TwitchUserID, PermissionMod); err != nil {
 			return err
 		} else if !hasMod {
 			return fmt.Errorf("%s doesn't have required permission: %s", initiator.TwitchLogin, PermissionMod.String())
@@ -237,19 +239,19 @@ func (db *DB) RemovePermission(ctx context.Context, initiator *User, targetTwitc
 		return fmt.Errorf("invalid permission: %d", permission)
 	}
 
-	if hasPerm, err := db.HasPermission(ctx, targetTwitchUserID, permission); err != nil {
+	if hasPerm, status, err := db.HasPermission(ctx, targetTwitchUserID, permission); err != nil {
 		return err
-	} else if !hasPerm {
+	} else if !hasPerm && status == PermissionStatusDenied {
 		return nil
 	}
 
 	switch permission {
 	case PermissionMod:
-		if hasAdmin, err := db.HasPermission(ctx, initiator.TwitchUserID, PermissionAdmin); err != nil || !hasAdmin {
+		if hasAdmin, _, err := db.HasPermission(ctx, initiator.TwitchUserID, PermissionAdmin); err != nil || !hasAdmin {
 			return fmt.Errorf("%s doesn't have required permission: %s", initiator.TwitchLogin, PermissionAdmin.String())
 		}
 	case PermissionStreamer:
-		if hasMod, err := db.HasPermission(ctx, initiator.TwitchUserID, PermissionMod); err != nil || !hasMod {
+		if hasMod, _, err := db.HasPermission(ctx, initiator.TwitchUserID, PermissionMod); err != nil || !hasMod {
 			return fmt.Errorf("%s doesn't have required permission: %s", initiator.TwitchLogin, PermissionMod.String())
 		}
 	default:
@@ -272,4 +274,44 @@ func (db *DB) RemovePermission(ctx context.Context, initiator *User, targetTwitc
 	}
 
 	return nil
+}
+
+func (db *DB) GetUsersWithDeniedPermission(ctx context.Context, permission Permission) ([]*User, error) {
+	if !IsValidPermission(permission) {
+		return nil, fmt.Errorf("invalid permission: %d", permission)
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT
+			u.id,
+			u.twitch_login,
+			u.twitch_user_id,
+			u.twitch_refresh_token,
+			u.twitch_access_token
+		FROM users u
+		JOIN permissions p ON p.twitch_user_id = u.twitch_user_id
+		WHERE p.permission = $1
+		AND p.status = $2
+		ORDER BY u.twitch_login
+	`, permission, PermissionStatusDenied)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users with denied permission: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		var user User
+		err := rows.Scan(&user.ID, &user.TwitchLogin, &user.TwitchUserID, &user.TwitchRefreshToken, &user.TwitchAccessToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan users with denied permission: %w", err)
+		}
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan users with denied permission: %w", err)
+	}
+
+	return users, nil
 }

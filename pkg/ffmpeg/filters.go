@@ -178,7 +178,7 @@ func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, b
 				[reverse] [1] afir=dry=10:wet=10 [afirich];
 				[afirich] areverse [afirichreverse];
 				[0] adelay=1000|1000 [dry];
-				[dry] [afirichreverse] amix=inputs=2:weights=5 10 [out];
+				[dry] [afirichreverse] amix=inputs=2:weights=10 5 [out];
 			`
 		default:
 			filterComplex = "[0] [1] afir=dry=10:wet=10 [reverb]; [0] [reverb] amix=inputs=2:weights=10 1 [out]"

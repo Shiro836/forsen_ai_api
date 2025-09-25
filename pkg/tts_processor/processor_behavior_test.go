@@ -1,6 +1,7 @@
 package ttsprocessor
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -706,4 +707,42 @@ func BenchmarkProcessMessage_Long(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = ProcessMessage(message, checkVoice, checkFilter, checkSfx)
 	}
+}
+
+func TestFilterPop(t *testing.T) {
+	checkVoice, checkFilter, checkSfx := createMockValidators()
+	message := "{9} [166] [166] {.} cancer: Oh! Sorry about that mr. bast, I dropped my plates. {9} [166] OH! OH! OH! OH! OH! OH! OH!"
+
+	actions, err := ProcessMessage(message, checkVoice, checkFilter, checkSfx)
+
+	fmt.Println(actions)
+
+	require.NoError(t, err)
+	assert.Equal(t, []Action{
+		{
+			Filters: []string{"9"},
+			Sfx:     "166",
+		},
+		{
+			Filters: []string{"9"},
+			Sfx:     "166",
+		},
+		{
+			Filters: []string{"9"},
+			Sfx:     ".",
+		},
+		{
+			Filters: []string{"9"},
+			Voice:   "cancer",
+			Text:    " Oh! Sorry about that mr. bast, I dropped my plates. ",
+		},
+		{
+			Filters: []string{"9"},
+			Sfx:     "166",
+		},
+		{
+			Filters: []string{"9"},
+			Text:    "OH! OH! OH! OH! OH! OH! OH!",
+		},
+	}, actions)
 }

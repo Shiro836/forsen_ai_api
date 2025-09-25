@@ -298,6 +298,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		}
 
 		if rewardType == db.TwitchRewardTTS {
+			// Increment TTS redeems for the character
+			if charCard != nil {
+				if err := p.db.IncrementCharTTSRedeems(ctx, charCard.ID); err != nil {
+					logger.Warn("failed to increment tts_redeems", "err", err)
+				}
+			}
 			eventWriter(&conns.DataEvent{
 				EventType: conns.EventTypeImage,
 				EventData: []byte("/characters/" + charCard.ID.String() + "/image"),
@@ -357,6 +363,28 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				continue
 			}
 
+			// Increment TTS redeems once per unique referenced voice
+			uniqueVoiceIDs := make(map[uuid.UUID]struct{})
+			for _, action := range actions {
+				if strings.TrimSpace(action.Text) == "" {
+					continue
+				}
+				voice := action.Voice
+				if voice == "" {
+					voice = "tresh"
+				}
+				if voiceID, _, vErr := p.getVoiceReference(ctx, logger, voice); vErr == nil {
+					uniqueVoiceIDs[voiceID] = struct{}{}
+				} else {
+					logger.Debug("voice not found for increment", "voice", voice, "err", vErr)
+				}
+			}
+			for voiceID := range uniqueVoiceIDs {
+				if err := p.db.IncrementCharTTSRedeems(ctx, voiceID); err != nil {
+					logger.Warn("failed to increment universal tts redeems", "voice_id", voiceID, "err", err)
+				}
+			}
+
 			func() {
 				skippedMsgIDsLock.Lock()
 				defer skippedMsgIDsLock.Unlock()
@@ -392,6 +420,13 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		if rewardType != db.TwitchRewardAI {
 			logger.Error("unexpected reward type", "reward_type", rewardType)
 			continue
+		}
+
+		// Increment AI redeems for the character
+		if charCard != nil {
+			if err := p.db.IncrementCharRedeems(ctx, charCard.ID); err != nil {
+				logger.Warn("failed to increment ai redeems", "err", err)
+			}
 		}
 
 		requester := msg.TwitchMessage.TwitchLogin
@@ -904,6 +939,10 @@ func (p *Processor) processUniversalTTSMessage(ctx context.Context, message stri
 	}
 
 	checkFilter := func(filter string) bool {
+		if filter == "." {
+			return true
+		}
+
 		if len(filter) == 0 {
 			return false
 		}
@@ -1035,47 +1074,47 @@ actions_loop:
 				logger.Info("stopping universal TTS generation due to length limit", "current_duration", currentOffset, "max_duration", maxDuration)
 				break actions_loop
 			}
+		}
 
-			if action.Sfx != "" {
-				sfxAudio, err := p.getSFX(action.Sfx)
-				if err != nil {
-					logger.Error("error generating SFX", "err", err, "sfx", action.Sfx)
-
-					if combinedText.Len() > 0 {
-						combinedText.WriteString(" ")
-					}
-					combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
-
-					continue
-				}
-
-				processedSFX, err := p.applyAudioEffects(ctx, sfxAudio, action.Filters...)
-				if err != nil {
-					logger.Error("error applying audio effects to SFX", "err", err, "filters", action.Filters)
-
-					processedSFX = sfxAudio
-				}
-
-				combinedAudio = append(combinedAudio, processedSFX)
+		if action.Sfx != "" {
+			sfxAudio, err := p.getSFX(action.Sfx)
+			if err != nil {
+				logger.Error("error generating SFX", "err", err, "sfx", action.Sfx)
 
 				if combinedText.Len() > 0 {
 					combinedText.WriteString(" ")
 				}
 				combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
 
-				sfxLen, err := p.getAudioLength(ctx, processedSFX)
-				if err != nil {
-					logger.Error("error getting SFX length", "err", err)
+				continue
+			}
 
-					continue
-				}
+			processedSFX, err := p.applyAudioEffects(ctx, sfxAudio, action.Filters...)
+			if err != nil {
+				logger.Error("error applying audio effects to SFX", "err", err, "filters", action.Filters)
 
-				currentOffset += sfxLen
+				processedSFX = sfxAudio
+			}
 
-				if currentOffset > maxDuration {
-					logger.Info("stopping universal TTS generation due to length limit", "current_duration", currentOffset, "max_duration", maxDuration)
-					break actions_loop
-				}
+			combinedAudio = append(combinedAudio, processedSFX)
+
+			if combinedText.Len() > 0 {
+				combinedText.WriteString(" ")
+			}
+			combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
+
+			sfxLen, err := p.getAudioLength(ctx, processedSFX)
+			if err != nil {
+				logger.Error("error getting SFX length", "err", err)
+
+				continue
+			}
+
+			currentOffset += sfxLen
+
+			if currentOffset > maxDuration {
+				logger.Info("stopping universal TTS generation due to length limit", "current_duration", currentOffset, "max_duration", maxDuration)
+				break actions_loop
 			}
 		}
 	}

@@ -188,7 +188,25 @@ func (api *API) requestPermissions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) admin(r *http.Request) template.HTML {
-	return getHtml("admin.html", nil)
+	modUsers, err := api.db.GetUsersPermissions(r.Context(), db.PermissionMod, db.PermissionStatusGranted)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: fmt.Sprintf("db get mods err: %v", err),
+		})
+	}
+
+	mods := make([]permissionRequest, 0, len(modUsers))
+	for _, user := range modUsers {
+		mods = append(mods, permissionRequest{
+			Login:  user.TwitchLogin,
+			UserID: user.ID,
+		})
+	}
+
+	return getHtml("admin.html", &adminPage{
+		Mods: mods,
+	})
 }
 
 func (api *API) mod(r *http.Request) template.HTML {
@@ -224,8 +242,25 @@ func (api *API) mod(r *http.Request) template.HTML {
 		})
 	}
 
+	deniedUsers, err := api.db.GetUsersWithDeniedPermission(r.Context(), db.PermissionStreamer)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: fmt.Sprintf("db get denied users err: %v", err),
+		})
+	}
+
+	denied := make([]permissionRequest, 0, len(deniedUsers))
+	for _, user := range deniedUsers {
+		denied = append(denied, permissionRequest{
+			Login:  user.TwitchLogin,
+			UserID: user.ID,
+		})
+	}
+
 	return getHtml("mod.html", &modPage{
-		Requests:  requests,
-		Streamers: approved,
+		Requests:    requests,
+		Streamers:   approved,
+		DeniedUsers: denied,
 	})
 }

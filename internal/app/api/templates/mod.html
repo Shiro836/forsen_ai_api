@@ -36,6 +36,24 @@
                     </div>
                 </div>
             </div>
+            <div class="flex flex-col pt-16">
+                <div class="pb-1 font-medium">Denied Streamer Access</div>
+                <div class="text-xs">most cuz of no affil or partnr</div>
+                <div class="border py-3 px-3 {{template "ui-border-clr"}}">
+                    <div class="flex flex-col">
+                        {{ range .DeniedUsers }}
+                        <div class="flex items-center pt-3">
+                            <div class="w-36">{{ .Login }}</div>
+                            <div class="flex flex-grow justify-end" id="denied_user_id_{{ .UserID }}">
+                                <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/add_streamer" hx-vals='{"user_id": "{{ .UserID }}"}' hx-target="#denied_user_id_{{ .UserID }}">Grant</button>
+                            </div>
+                        </div>
+                        {{ else }}
+                        <div class="flex flex-col items-center w-72">No denied users</div>
+                        {{ end }}
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="flex flex-col pl-32">
             <div class="flex flex-col">

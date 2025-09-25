@@ -37,4 +37,23 @@
             <div class="pt-4" id="permission_result_2"></div>
         </div>
     </div>
+    <div class="flex pt-8">
+        <div class="flex flex-col pl-4">
+            <div class="pb-1 font-medium">Current Moderators</div>
+            <div class="border py-3 px-3 {{template "ui-border-clr"}}">
+                <div class="flex flex-col">
+                    {{ range .Mods }}
+                    <div class="flex items-center pt-3">
+                        <div class="w-36">{{ .Login }}</div>
+                        <div class="flex flex-grow justify-end" id="mod_user_id_{{ .UserID }}">
+                            <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/admin/remove_mod" hx-vals='{"twitch_login": "{{ .Login }}"}' hx-target="#mod_user_id_{{ .UserID }}">Revoke</button>
+                        </div>
+                    </div>
+                    {{ else }}
+                    <div class="flex flex-col items-center w-72">No moderators</div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
 </div>

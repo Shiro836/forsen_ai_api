@@ -31,7 +31,7 @@ func (api *API) obsOverlay(r *http.Request) template.HTML {
 		})
 	}
 
-	if hasPerm, err := api.db.HasPermission(r.Context(), twitchUser.TwitchUserID, db.PermissionStreamer); err != nil {
+	if hasPerm, _, err := api.db.HasPermission(r.Context(), twitchUser.TwitchUserID, db.PermissionStreamer); err != nil {
 		return getHtml("error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
 			ErrorMessage: "failed to check permission",
@@ -71,7 +71,7 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if hasPerm, err := api.db.HasPermission(r.Context(), user.TwitchUserID, db.PermissionStreamer); err != nil {
+	if hasPerm, _, err := api.db.HasPermission(r.Context(), user.TwitchUserID, db.PermissionStreamer); err != nil {
 		logger.Error("failed to check permission", "err", err)
 
 		w.WriteHeader(http.StatusInternalServerError)

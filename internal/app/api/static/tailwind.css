@@ -692,6 +692,10 @@ video {
   grid-column-end: 9;
 }
 
+.row-start-10 {
+  grid-row-start: 10;
+}
+
 .row-start-11 {
   grid-row-start: 11;
 }
@@ -724,8 +728,17 @@ video {
   grid-row-end: 7;
 }
 
+.row-end-9 {
+  grid-row-end: 9;
+}
+
 .-m-6 {
   margin: -1.5rem;
+}
+
+.mx-2 {
+  margin-left: 0.5rem;
+  margin-right: 0.5rem;
 }
 
 .mx-auto {

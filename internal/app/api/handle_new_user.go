@@ -14,7 +14,7 @@ func (api *API) handleNewUser(ctx context.Context, user *db.User) error {
 	api.workersLock.Lock()
 	defer api.workersLock.Unlock()
 
-	if has, err := api.db.HasPermission(ctx, user.TwitchUserID, db.PermissionStreamer); err != nil {
+	if has, _, err := api.db.HasPermission(ctx, user.TwitchUserID, db.PermissionStreamer); err != nil {
 		return fmt.Errorf("failed to check if user has permission: %w", err)
 	} else if !has {
 		return nil

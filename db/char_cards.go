@@ -24,8 +24,9 @@ type Card struct {
 
 	ShortCharName sql.NullString
 
-	Public  bool
-	Redeems int
+	Public     bool
+	Redeems    int
+	TTSRedeems int
 
 	UpdatedAt time.Time
 	CreatedAt time.Time
@@ -98,6 +99,7 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
             cc.short_char_name,
 			cc.public,
 			cc.redeems,
+			cc.tts_redeems,
 			cc.updated_at,
 			cc.data
 		from char_cards cc
@@ -113,6 +115,7 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 		&card.ShortCharName,
 		&card.Public,
 		&card.Redeems,
+		&card.TTSRedeems,
 		&card.UpdatedAt,
 		&card.Data,
 	)
@@ -139,6 +142,7 @@ func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, userID uuid.
             cc.short_char_name,
 			cc.public,
 			cc.redeems,
+			cc.tts_redeems,
 			cc.updated_at,
 			cc.data,
 			rb.reward_type
@@ -153,6 +157,7 @@ func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, userID uuid.
 		&card.ShortCharName,
 		&card.Public,
 		&card.Redeems,
+		&card.TTSRedeems,
 		&card.UpdatedAt,
 		&card.Data,
 		&rewardType,
@@ -180,6 +185,7 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, t
             cc.short_char_name,
 			cc.public,
 			cc.redeems,
+			cc.tts_redeems,
 			cc.updated_at,
 			cc.data,
 			rb.reward_type
@@ -198,6 +204,7 @@ func (db *DB) GetCharCardByTwitchReward(ctx context.Context, userID uuid.UUID, t
 		&card.ShortCharName,
 		&card.Public,
 		&card.Redeems,
+		&card.TTSRedeems,
 		&card.UpdatedAt,
 		&card.Data,
 		&rewardType,
@@ -358,6 +365,7 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 			description,
             short_char_name,
 			redeems,
+			tts_redeems,
 			public,
 			updated_at
 			-- data -- very heavy
@@ -389,6 +397,7 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 			&card.Description,
 			&card.ShortCharName,
 			&card.Redeems,
+			&card.TTSRedeems,
 			&card.Public,
 			&card.UpdatedAt,
 			// &card.Data,
@@ -426,6 +435,32 @@ func (db *DB) SetShortCharName(ctx context.Context, cardID uuid.UUID, shortName 
 		return fmt.Errorf("failed to set short_char_name for card %s: %w", cardID, err)
 	}
 
+	return nil
+}
+
+func (db *DB) IncrementCharRedeems(ctx context.Context, cardID uuid.UUID) error {
+	_, err := db.Exec(ctx, `
+		update char_cards set
+			redeems = redeems + 1,
+			updated_at = now()
+		where id = $1
+	`, cardID)
+	if err != nil {
+		return fmt.Errorf("failed to increment redeems for card %s: %w", cardID, err)
+	}
+	return nil
+}
+
+func (db *DB) IncrementCharTTSRedeems(ctx context.Context, cardID uuid.UUID) error {
+	_, err := db.Exec(ctx, `
+		update char_cards set
+			tts_redeems = tts_redeems + 1,
+			updated_at = now()
+		where id = $1
+	`, cardID)
+	if err != nil {
+		return fmt.Errorf("failed to increment tts_redeems for card %s: %w", cardID, err)
+	}
 	return nil
 }
 

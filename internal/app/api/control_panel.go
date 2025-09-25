@@ -46,7 +46,7 @@ func (api *API) controlPanelMenu(r *http.Request) template.HTML {
 
 	panels := make([]PanelData, 0, len(relations)+1)
 
-	hasPerm, err := api.db.HasPermission(r.Context(), user.TwitchUserID, db.PermissionStreamer)
+	hasPerm, _, err := api.db.HasPermission(r.Context(), user.TwitchUserID, db.PermissionStreamer)
 	if err != nil {
 		return getHtml("error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
