@@ -1009,6 +1009,7 @@ func (p *Processor) craftUniversalTTSAudio(ctx context.Context, logger *slog.Log
 	var combinedText strings.Builder
 	var combinedTimings []whisperx.Timiing
 	currentOffset := time.Duration(0)
+	sfxAccumulated := time.Duration(0)
 
 	concatPadding := 500 * time.Millisecond
 	defaultVoice := "tresh"
@@ -1018,6 +1019,13 @@ func (p *Processor) craftUniversalTTSAudio(ctx context.Context, logger *slog.Log
 		ttsLimit = *userSettings.TtsLimit
 	}
 	maxDuration := time.Duration(ttsLimit) * time.Second
+
+	// Total SFX duration limit (0 = unlimited)
+	sfxTotalLimit := db.DefaultSfxTotalLimit
+	if userSettings.SfxTotalLimit != nil {
+		sfxTotalLimit = *userSettings.SfxTotalLimit
+	}
+	maxSfxDuration := time.Duration(sfxTotalLimit) * time.Second
 
 actions_loop:
 	for _, action := range actions {
@@ -1117,13 +1125,6 @@ actions_loop:
 				processedSFX = sfxAudio
 			}
 
-			combinedAudio = append(combinedAudio, processedSFX)
-
-			if combinedText.Len() > 0 {
-				combinedText.WriteString(" ")
-			}
-			combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
-
 			sfxLen, err := p.getAudioLength(ctx, processedSFX)
 			if err != nil {
 				logger.Error("error getting SFX length", "err", err)
@@ -1131,6 +1132,32 @@ actions_loop:
 				continue
 			}
 
+			// Enforce total SFX duration limit (if > 0). If the SFX would exceed the limit, cut it to fit.
+			if maxSfxDuration > 0 && sfxAccumulated+sfxLen > maxSfxDuration {
+				remaining := maxSfxDuration - sfxAccumulated
+				if remaining <= 0 {
+					logger.Info("skipping SFX due to total SFX length limit (no remaining budget)", "sfx", action.Sfx, "accumulated", sfxAccumulated, "max_sfx_duration", maxSfxDuration)
+					continue
+				}
+
+				cutSFX, err := p.ffmpeg.CutAudio(ctx, processedSFX, remaining)
+				if err != nil {
+					logger.Warn("failed to cut SFX to fit total limit; skipping SFX", "err", err)
+					continue
+				}
+
+				processedSFX = cutSFX
+				sfxLen = remaining
+			}
+
+			combinedAudio = append(combinedAudio, processedSFX)
+
+			if combinedText.Len() > 0 {
+				combinedText.WriteString(" ")
+			}
+			combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
+
+			sfxAccumulated += sfxLen
 			currentOffset += sfxLen
 
 			if currentOffset > maxDuration {

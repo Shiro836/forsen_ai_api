@@ -11,6 +11,7 @@ import (
 const (
 	DefaultTtsLimitSeconds = 80
 	DefaultMaxSfxCount     = 10
+	DefaultSfxTotalLimit   = 20 // seconds; total SFX duration per universal TTS message (0 = unlimited)
 )
 
 type User struct {
@@ -172,8 +173,9 @@ func (db *DB) GetUserBySession(ctx context.Context, session string) (*User, erro
 type UserSettings struct {
 	Filters        string        `json:"filters"`
 	RequestTimeout time.Duration `json:"requestTimeout"`
-	TtsLimit       *int          `json:"tts_limit,omitempty"`     // Maximum TTS audio length in seconds (nil = not set, 0 = use default 80s)
-	MaxSfxCount    *int          `json:"max_sfx_count,omitempty"` // Maximum number of SFX that can be used in a single TTS message (nil = not set, 0 = unlimited)
+	TtsLimit       *int          `json:"tts_limit,omitempty"`       // Maximum TTS audio length in seconds (nil = not set, 0 = use default 80s)
+	MaxSfxCount    *int          `json:"max_sfx_count,omitempty"`   // Maximum number of SFX that can be used in a single TTS message (nil = not set, 0 = unlimited)
+	SfxTotalLimit  *int          `json:"sfx_total_limit,omitempty"` // Maximum cumulative SFX duration in seconds per universal TTS message (nil = not set, 0 = unlimited; default 20s)
 }
 
 func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {
@@ -212,6 +214,11 @@ func (db *DB) GetUserSettings(ctx context.Context, userID uuid.UUID) (*UserSetti
 	if settings.MaxSfxCount == nil {
 		defaultMaxSfxCount := DefaultMaxSfxCount
 		settings.MaxSfxCount = &defaultMaxSfxCount // Default to 10 SFX per message
+	}
+
+	if settings.SfxTotalLimit == nil {
+		defaultSfxTotal := DefaultSfxTotalLimit
+		settings.SfxTotalLimit = &defaultSfxTotal // Default to 20 seconds total SFX
 	}
 
 	return &settings, nil

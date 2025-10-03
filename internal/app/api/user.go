@@ -9,9 +9,10 @@ import (
 )
 
 type filters struct {
-	Filters     string
-	TtsLimit    int
-	MaxSfxCount int
+	Filters       string
+	TtsLimit      int
+	MaxSfxCount   int
+	SfxTotalLimit int
 }
 
 func (api *API) filters(r *http.Request) template.HTML {
@@ -41,10 +42,16 @@ func (api *API) filters(r *http.Request) template.HTML {
 		maxSfxCount = *settings.MaxSfxCount
 	}
 
+	sfxTotalLimit := db.DefaultSfxTotalLimit
+	if settings.SfxTotalLimit != nil {
+		sfxTotalLimit = *settings.SfxTotalLimit
+	}
+
 	return getHtml("filters.html", &filters{
-		Filters:     settings.Filters,
-		TtsLimit:    ttsLimit,
-		MaxSfxCount: maxSfxCount,
+		Filters:       settings.Filters,
+		TtsLimit:      ttsLimit,
+		MaxSfxCount:   maxSfxCount,
+		SfxTotalLimit: sfxTotalLimit,
 	})
 }
 
@@ -95,6 +102,17 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		settings.MaxSfxCount = &maxSfxCount
+	}
+
+	sfxTotalLimitStr := r.Form.Get("sfx_total_limit")
+	if sfxTotalLimitStr != "" {
+		sfxTotalLimit, err := strconv.Atoi(sfxTotalLimitStr)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("invalid sfx_total_limit value: " + err.Error()))
+			return
+		}
+		settings.SfxTotalLimit = &sfxTotalLimit
 	}
 
 	err = api.db.UpdateUserData(r.Context(), user.ID, settings)
