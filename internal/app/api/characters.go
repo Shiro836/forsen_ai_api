@@ -29,6 +29,8 @@ type charElem struct {
 
 	TTSRewardCreated bool
 	AIRewardCreated  bool
+
+	Author string
 }
 
 func (api *API) characters(r *http.Request) template.HTML {
@@ -83,11 +85,17 @@ func (api *API) characters(r *http.Request) template.HTML {
 		}
 	}
 	for _, charCard := range charCards {
+		author := ""
+		if owner, err := api.db.GetUserByID(r.Context(), charCard.OwnerUserID); err == nil && owner != nil {
+			author = owner.TwitchLogin
+		}
+
 		chars = append(chars, &charElem{
 			Card:             charCard,
 			CanEdit:          user.ID == charCard.OwnerUserID,
 			IsAdmin:          isAdmin,
 			TTSRewardCreated: false,
+			Author:           author,
 		})
 	}
 

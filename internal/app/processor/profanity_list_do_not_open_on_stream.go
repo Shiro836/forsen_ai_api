@@ -2,18 +2,19 @@ package processor
 
 var GlobalSwears = []string{
 	// Race
-	`\bn+i+g+(a+|e+r+)s*\b`,
-	`\bn[i1]gg.*\b`,
-	`\bnegros?\b`,
+	`n+i+g+(a+|e+r+)s*`,
+	`n[i1]g+`,
+	`negros?`,
 	`knee ?grows?`,
 	`knee ?gears?`,
 	`\bcoon\b`,
 	`jig+ers?`,
 	`wig+ers?`,
+	`n[iey1]+(?:\s*|[-_])*?(?:g+|j+)[aeiouy]*(?:r+|y+)?s*`,
 	// --
 	`chinks?`,
 	`zipperheads?`,
-	`\bgooks?\b`,
+	`gooks?`,
 	// --
 	`wetbacks?`,
 	// --
@@ -21,13 +22,13 @@ var GlobalSwears = []string{
 	`heeb`,
 	`hebe`,
 	`hymie`,
-	`\bgoys?\b`,
+	`goys?`,
 	// --
 	`gusanos?`,
 
 	// Identity
-	`fag+s?`,
 	`(\bfag+s?\b|fag+ots?)`,
+	`fag+s?`,
 	`tran+(y|ie)s?`,
 	`troons?`,
 	`shemales?`,

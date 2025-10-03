@@ -14,6 +14,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/jritsema/gotoolbox v0.10.0
 	github.com/minio/minio-go/v7 v7.0.95
+	github.com/mozillazg/go-unidecode v0.2.0
 	github.com/nicklaw5/helix/v2 v2.31.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2

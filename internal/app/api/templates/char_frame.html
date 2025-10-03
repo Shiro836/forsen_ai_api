@@ -2,7 +2,10 @@
 
 <div class="grid grid-rows-12 grid-cols-12 w-full h-full overflow-hidden">
     <img class="col-start-2 col-end-7 row-start-2 row-end-7 object-contain max-h-full" src="/characters/{{ .Card.ID }}/image"></img>
-    <div class="col-start-1 col-end-13 row-start-8 row-end-9 text-xl text-center">{{ .Card.Name }}</div>
+    <div class="col-start-1 col-end-13 row-start-7 row-end-9 text-xl text-center truncate px-2">{{ .Card.Name }}</div>
+    {{ if .Author }}
+    <div class="col-start-1 col-end-13 row-start-9 row-end-10 text-xs/tight text-center text-gray-600 dark:text-gray-300 truncate px-2" title="{{ .Author }}">by {{ .Author }}</div>
+    {{ end }}
     <div class="col-start-1 col-end-13 row-start-10 row-end-11 text-sm text-center">
         <span title="AI redeems">{{ .Card.Redeems }}</span>
         <span class="mx-2"></span>

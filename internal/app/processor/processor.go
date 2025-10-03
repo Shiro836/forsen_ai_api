@@ -26,6 +26,7 @@ import (
 	"app/pkg/whisperx"
 
 	"github.com/google/uuid"
+	"github.com/mozillazg/go-unidecode"
 )
 
 //go:embed sfx/*.mp3
@@ -194,6 +195,8 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 			if len(msg.RewardID) == 0 {
 				continue
 			}
+
+			msg.Message = unidecode.Unidecode(msg.Message)
 
 			imgMatches := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`).FindAllStringSubmatch(msg.Message, -1)
 			imageIDs := make([]string, 0, 2)
@@ -621,6 +624,8 @@ The description should read like a clever commentary, not like someone talking a
 			return nil
 		}
 
+		llmResult = unidecode.Unidecode(llmResult)
+
 		filteredResponse := p.FilterText(ctx, userSettings, llmResult)
 
 		responseTtsAudio, textTimings, err := p.TTSWithTimings(ctx, filteredResponse, charCard.Data.VoiceReference)
@@ -798,7 +803,7 @@ func (p *Processor) playTTS(ctx context.Context, logger *slog.Logger, eventWrite
 }
 
 func (p *Processor) TTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
-	ttsResult, ttsSegments, err := p.styleTts.TTS(ctx, msg, refAudio)
+	ttsResult, ttsSegments, err := p.styleTts.TTS(ctx, unidecode.Unidecode(msg), refAudio)
 	if err != nil {
 		return nil, nil, err
 	}

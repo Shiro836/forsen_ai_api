@@ -11,9 +11,8 @@
 - [x] Security features (added control panel sharing and fixed filters, so I guess it's done)
 - [x] Add images to chars
 - [x] Tune LLM
-- [ ] Switch to metavoice TTS or Mars5 TTS or something better
-- [ ] Add more chars
-- [ ] Train TTS on more voices
+- [ ] Obiwan voice
+- [ ] AI talking to each other
 
 ## Bugs
 - [x] Fix show image not working sometimes and not working when request is not active yet
