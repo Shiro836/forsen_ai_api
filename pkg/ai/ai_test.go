@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:embed refs/witcher_low.wav
+//go:embed refs/okayeg_ref.wav
 var audioRef []byte
 
 func TestStyleTTS(t *testing.T) {
@@ -26,7 +26,7 @@ func TestStyleTTS(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	res, err := client.TTS(ctx, "hello world", audioRef)
+	res, _, err := client.TTS(ctx, "hello world", audioRef)
 	assert.NoError(err)
 
 	err = os.WriteFile("res/res.wav", res, 0644)

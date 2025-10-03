@@ -1184,14 +1184,37 @@ func (p *Processor) limitFilters(filters []string) []string {
 	filterCounts := make(map[string]int)
 	var limitedFilters []string
 
-	for _, filter := range filters {
-		if filterCounts[filter] < maxPerFilter {
-			filterCounts[filter]++
-			limitedFilters = append(limitedFilters, filter)
+	// Only allow a single spatial/panning filter among 13..16
+	spatialUsed := false
+	spatialSet := map[string]struct{}{
+		"13": {}, // right_side
+		"14": {}, // left_side
+		"15": {}, // left_to_right
+		"16": {}, // right_to_left
+	}
+	isSpatial := func(filter string) bool {
+		_, ok := spatialSet[filter]
+		return ok
+	}
 
-			if len(limitedFilters) >= maxTotal {
-				break
-			}
+	for _, filter := range filters {
+		if isSpatial(filter) && spatialUsed {
+			continue
+		}
+
+		if filterCounts[filter] >= maxPerFilter {
+			continue
+		}
+
+		filterCounts[filter]++
+		if isSpatial(filter) {
+			spatialUsed = true
+		}
+
+		limitedFilters = append(limitedFilters, filter)
+
+		if len(limitedFilters) >= maxTotal {
+			break
 		}
 	}
 

@@ -537,6 +537,9 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Encourage caching for repeated visits
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+
 	if len(charImage) == 0 {
 		img, err := staticFS.ReadFile("static/doctorWTF.png")
 		if err != nil {
@@ -547,6 +550,7 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(img)
 		return
 	}

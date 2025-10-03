@@ -54,11 +54,9 @@ type CardData struct {
 	VoiceID string `json:"voice_id,omitempty"`
 }
 
-// PublicShortName holds minimal data to render public short-named cards
 type PublicShortName struct {
 	ID            uuid.UUID
 	ShortCharName string
-	Data          *CardData
 }
 
 func (db *DB) GetCharImage(ctx context.Context, cardID uuid.UUID) ([]byte, error) {
@@ -333,7 +331,6 @@ type GetChatCardsParams struct {
 	SortBy     CharCardSortBy
 }
 
-// populateCardDataMedia loads media bytes from S3 if IDs are present and inline bytes are empty
 func (db *DB) populateCardDataMedia(ctx context.Context, data *CardData) {
 	if db.s3 == nil || data == nil {
 		return
@@ -400,7 +397,6 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 			&card.TTSRedeems,
 			&card.Public,
 			&card.UpdatedAt,
-			// &card.Data,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan char card: %w", err)
@@ -487,16 +483,14 @@ func (db *DB) GetVoiceReferenceByShortName(ctx context.Context, shortName string
 		return uuid.Nil, nil, fmt.Errorf("no data for short_char_name '%s'", shortName)
 	}
 
-	// Reuse helper to populate media from S3 when only IDs are present
 	db.populateCardDataMedia(ctx, data)
 
 	return id, data, nil
 }
 
-// GetPublicShortNamedCards returns public cards with a non-empty short_char_name
 func (db *DB) GetPublicShortNamedCards(ctx context.Context) ([]PublicShortName, error) {
 	rows, err := db.Query(ctx, `
-        select id, short_char_name, data
+        select id, short_char_name
         from char_cards
         where public = true
           and short_char_name is not null
@@ -511,11 +505,9 @@ func (db *DB) GetPublicShortNamedCards(ctx context.Context) ([]PublicShortName, 
 	var out []PublicShortName
 	for rows.Next() {
 		var rec PublicShortName
-		if err := rows.Scan(&rec.ID, &rec.ShortCharName, &rec.Data); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.ShortCharName); err != nil {
 			return nil, fmt.Errorf("scan public short named cards: %w", err)
 		}
-		// populate media from S3 if necessary
-		db.populateCardDataMedia(ctx, rec.Data)
 		out = append(out, rec)
 	}
 	if err := rows.Err(); err != nil {

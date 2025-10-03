@@ -1,9 +1,11 @@
 <div class="flex">
     <div id="tabs" class="flex flex-col justify-start border-r {{template "ui-border-clr"}} tab-list pr-2 pb-6 pt-2">
+        {{ if .IsAuthenticated }}
         <div class="pt-1 pb-1 w-full">
             <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4" hx-get="/"
                 hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Home</button>
         </div>
+        {{ end }}
         {{ if .IsStreamer }}
         <div class="pt-1 pb-1 w-full">
             <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
@@ -45,11 +47,13 @@
                     hx-get="/voices" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
                     hx-push-url="true">Voices</button>
             </div>
+            {{ if .IsAuthenticated }}
             <div class="pt-1 pb-1 w-full">
                 <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
                     hx-get="/control" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
                     hx-push-url="true">Control Panel</button>
             </div>
+            {{ end }}
         </div>
     </div>
     <div id="tab-content" class="flex flex-grow pl-10 pt-6">

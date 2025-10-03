@@ -102,9 +102,10 @@ type noPermissionsPage struct {
 }
 
 type navPage struct {
-	IsStreamer bool
-	IsMod      bool
-	IsAdmin    bool
+	IsStreamer      bool
+	IsMod           bool
+	IsAdmin         bool
+	IsAuthenticated bool
 
 	Content template.HTML
 }
@@ -165,6 +166,10 @@ func (api *API) navPublic(getContent func(r *http.Request) template.HTML) http.H
 		}
 
 		if user != nil {
+			navPage.IsAuthenticated = true
+		}
+
+		if user != nil {
 			userPermissions, err := api.db.GetUserPermissions(r.Context(), user.ID, db.PermissionStatusGranted)
 			if err != nil {
 				submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
@@ -209,8 +214,10 @@ func (api *API) nav(getContent func(r *http.Request) template.HTML) http.Handler
 		}
 
 		navPage := &navPage{
-			Content: getContent(r),
+			Content:         getContent(r),
+			IsAuthenticated: true,
 		}
+
 		for _, permission := range userPermissions {
 			switch permission {
 			case db.PermissionStreamer:

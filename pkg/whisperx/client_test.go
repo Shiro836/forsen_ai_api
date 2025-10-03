@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:embed refs/witcher_low.wav
+//go:embed refs/okayeg_ref.wav
 var audio []byte
 
 func TestAlign(t *testing.T) {
