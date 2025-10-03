@@ -21,7 +21,8 @@
 - [x] Make better images guide 
 - [x] Show response when state of prompt image changes and show image visibility state
 - [x] Move all static files(images and voice references) from postgres to minio
-- [ ] Full switch from production version to beta
+- [x] Full switch from production version to beta
+- [ ] Refactor fundamental flaw in applying background filters. They only work on single audio/sfx right now. But they should be applied on full concatenated audio until filter is popped. Same goes for left to right/right to left filter.
 
 
 FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN FORSEN 
