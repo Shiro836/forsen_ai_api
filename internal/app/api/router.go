@@ -136,6 +136,7 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/filters", api.nav(api.filters))
 		router.Post("/filters", api.updateFilters)
+		router.Post("/token/regenerate", http.HandlerFunc(api.regenerateToken))
 	})
 
 	router.Group(func(router chi.Router) {

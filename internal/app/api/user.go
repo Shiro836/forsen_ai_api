@@ -13,6 +13,7 @@ type filters struct {
 	TtsLimit      int
 	MaxSfxCount   int
 	SfxTotalLimit int
+	Token         string
 }
 
 func (api *API) filters(r *http.Request) template.HTML {
@@ -52,7 +53,28 @@ func (api *API) filters(r *http.Request) template.HTML {
 		TtsLimit:      ttsLimit,
 		MaxSfxCount:   maxSfxCount,
 		SfxTotalLimit: sfxTotalLimit,
+		Token:         settings.Token,
 	})
+}
+
+func (api *API) regenerateToken(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+		return
+	}
+
+	token, err := api.db.GenerateUserToken(r.Context(), user.ID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("failed to generate token"))
+		return
+	}
+
+	// Return full token only in response body; UI will mask display
+	w.Header().Set("Content-Type", "text/plain")
+	_, _ = w.Write([]byte(token))
 }
 
 func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -176,6 +178,7 @@ type UserSettings struct {
 	TtsLimit       *int          `json:"tts_limit,omitempty"`       // Maximum TTS audio length in seconds (nil = not set, 0 = use default 80s)
 	MaxSfxCount    *int          `json:"max_sfx_count,omitempty"`   // Maximum number of SFX that can be used in a single TTS message (nil = not set, 0 = unlimited)
 	SfxTotalLimit  *int          `json:"sfx_total_limit,omitempty"` // Maximum cumulative SFX duration in seconds per universal TTS message (nil = not set, 0 = unlimited; default 20s)
+	Token          string        `json:"token,omitempty"`
 }
 
 func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {
@@ -190,6 +193,57 @@ func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *Us
 	}
 
 	return nil
+}
+
+// GenerateUserToken sets a new API token in user's settings and persists it.
+func (db *DB) GenerateUserToken(ctx context.Context, userID uuid.UUID) (string, error) {
+	settings, err := db.GetUserSettings(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("failed to load settings: %w", err)
+	}
+
+	token, err := generateToken()
+	if err != nil {
+		return "", err
+	}
+
+	settings.Token = token
+
+	if err := db.UpdateUserData(ctx, userID, settings); err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+// generateToken returns a 10-char token using allowed chars only: 4-9 and a-z
+func generateToken() (string, error) {
+	const length = 10
+	const letters = "abcdefghijklmnopqrstuvwxyz456789"
+
+	b := make([]byte, length)
+	for i := 0; i < length; i++ {
+		n, err := randInt(len(letters))
+		if err != nil {
+			return "", fmt.Errorf("generate token: %w", err)
+		}
+		b[i] = letters[n]
+	}
+	return string(b), nil
+}
+
+// randInt returns crypto-strong random int in [0, max)
+func randInt(max int) (int, error) {
+	if max <= 0 {
+		return 0, fmt.Errorf("invalid max")
+	}
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0, err
+	}
+	// Use uint64 to avoid modulo bias concerns at this scale
+	v := binary.LittleEndian.Uint64(b[:])
+	return int(v % uint64(max)), nil
 }
 
 func (db *DB) GetUserSettings(ctx context.Context, userID uuid.UUID) (*UserSettings, error) {

@@ -14,6 +14,8 @@ const (
 	ShowImages
 	HideImages
 	CleanOverlay
+	SkipCurrent
+	ShowImagesCurrent
 )
 
 type UpdateType int

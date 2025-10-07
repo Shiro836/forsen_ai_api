@@ -93,6 +93,9 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	skippedMsgIDs := make(map[uuid.UUID]struct{})
 	skippedMsgIDsLock := sync.Mutex{}
 
+	currentMsgID := uuid.Nil
+	currentMsgIDLock := sync.Mutex{}
+
 	go func() {
 		defer cancel()
 
@@ -104,6 +107,19 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				}
 
 				logger.Info("processor signal recieved", "upd_signal", upd)
+
+				// shared token check for current-only actions
+				checkToken := func(tok string) bool {
+					if len(tok) == 0 {
+						return false
+					}
+					settings, err := p.db.GetUserSettings(ctx, broadcaster.ID)
+					if err != nil {
+						logger.Warn("failed to get user settings for token check", "err", err)
+						return false
+					}
+					return tok == settings.Token && len(settings.Token) != 0
+				}
 				switch upd.UpdateType {
 				case conns.RestartProcessor:
 					return
@@ -175,6 +191,64 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 						EventType: conns.EventTypeImage,
 						EventData: []byte(" "),
 					})
+				case conns.SkipCurrent:
+					token := upd.Data
+					if !checkToken(token) {
+						logger.Warn("invalid token for SkipCurrent")
+						continue
+					}
+
+					var targetUUID uuid.UUID
+					func() {
+						currentMsgIDLock.Lock()
+						defer currentMsgIDLock.Unlock()
+						targetUUID = currentMsgID
+					}()
+
+					if targetUUID != uuid.Nil {
+						func() {
+							skippedMsgIDsLock.Lock()
+							defer skippedMsgIDsLock.Unlock()
+							skippedMsgIDs[targetUUID] = struct{}{}
+						}()
+
+						eventWriter(&conns.DataEvent{
+							EventType: conns.EventTypeSkip,
+							EventData: []byte(targetUUID.String()),
+						})
+
+						if err := p.db.UpdateMessageStatus(ctx, targetUUID, db.MsgStatusDeleted); err != nil {
+							logger.Error("error updating message status", "err", err)
+						}
+
+						p.connManager.NotifyControlPanel(broadcaster.ID)
+					}
+				case conns.ShowImagesCurrent:
+					token := upd.Data
+					if !checkToken(token) {
+						logger.Warn("invalid token for ShowImagesCurrent")
+						continue
+					}
+
+					var targetUUID uuid.UUID
+					func() {
+						currentMsgIDLock.Lock()
+						defer currentMsgIDLock.Unlock()
+						targetUUID = currentMsgID
+					}()
+
+					if targetUUID != uuid.Nil {
+						eventWriter(&conns.DataEvent{
+							EventType: conns.EventTypeShowImages,
+							EventData: []byte(targetUUID.String()),
+						})
+
+						showImages := true
+
+						p.db.UpdateMessageData(ctx, targetUUID, &db.MessageData{ShowImages: &showImages})
+
+						p.connManager.NotifyControlPanel(broadcaster.ID)
+					}
 				}
 			case <-ctx.Done():
 				return
@@ -272,6 +346,12 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 
 			return fmt.Errorf("error updating message status: %w", err)
 		}
+
+		func() {
+			currentMsgIDLock.Lock()
+			defer currentMsgIDLock.Unlock()
+			currentMsgID = msg.ID
+		}()
 
 		p.connManager.NotifyControlPanel(broadcaster.ID)
 
@@ -819,6 +899,8 @@ func (p *Processor) FilterText(ctx context.Context, userSettings *db.UserSetting
 	}
 
 	for _, exp := range swears {
+		exp = strings.TrimSpace(exp)
+
 		r, err := regexp.Compile("(?i)" + exp) // makes them case-insensitive by default
 		if err != nil {
 			p.logger.Warn(fmt.Sprintf("failed compiling reg expression '%s'", exp), "err", err)

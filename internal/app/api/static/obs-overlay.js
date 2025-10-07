@@ -1,5 +1,8 @@
 let serverConnection;
 let audioContext;
+let currentToken = "";
+let token = "";
+let isCapturingToken = false;
 
 document.documentElement.addEventListener('click', () => {
     if (audioContext.state === 'suspended') {
@@ -8,6 +11,68 @@ document.documentElement.addEventListener('click', () => {
 
     if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+});
+
+const startKey = '0';
+const endKey = '1';
+
+const skipKey = '2';
+const showImagesKey = '3';
+
+let skipHandler = null;
+let showImagesHandler = null;
+
+function sendSkip() {
+    console.log('skip requested');
+    if (skipHandler) {
+        skipHandler();
+    }
+}
+
+function sendShowImages() {
+    console.log('show images requested');
+    if (showImagesHandler) {
+        showImagesHandler();
+    }
+}
+
+window.addEventListener('keydown', (event) => {
+    const key = event.key;
+
+    if (key === skipKey) {
+        sendSkip();
+
+        return;
+    }
+
+    if (key === showImagesKey) {
+        sendShowImages();
+
+        return;
+    }
+
+    if (key === startKey) {
+        currentToken = "";
+        isCapturingToken = true;
+        console.log('Started capturing token');
+
+        return;
+    }
+
+    if (key === endKey) {
+        if (isCapturingToken) {
+            isCapturingToken = false;
+            token = currentToken; // Save the complete token
+            console.log('Token captured:', token);
+        }
+
+        return;
+    }
+
+    if (isCapturingToken && key.length === 1) {
+        currentToken += key;
+        console.log('Token so far:', currentToken);
     }
 });
 
@@ -141,12 +206,12 @@ async function pageReady() {
     function skip(msg_id) {
         console.log('skip requested for:', msg_id);
         console.log('current audio sources:', audio_sources);
-        
+
         pending_skips.add(msg_id);
 
         const src = audio_sources.get(msg_id);
         if (src) {
-            try { src.stop(); } catch (e) {}
+            try { src.stop(); } catch (e) { }
             audio_sources.delete(msg_id);
             updateText(" ");
             set_image("");
@@ -157,6 +222,28 @@ async function pageReady() {
         ws = new WebSocket(`wss://${window.location.host + "/ws" + window.location.pathname}`);
         ws.binaryType = 'arraybuffer'
 
+        ws.onopen = function () {
+            console.log('Socket is open!');
+
+            if (!skipHandler) {
+                skipHandler = function () {
+                    ws.send(JSON.stringify({
+                        'action': 'skip',
+                        'token': token
+                    }));
+                };
+            }
+
+            if (!showImagesHandler) {
+                showImagesHandler = function () {
+                    ws.send(JSON.stringify({
+                        'action': 'show_images',
+                        'token': token
+                    }));
+                };
+            }
+        };
+
         ws.onerror = function (err) {
             console.error('Socket encountered error: ', err.message, 'Closing socket');
             ws.close();
@@ -165,12 +252,19 @@ async function pageReady() {
         ws.onclose = function (e) {
             console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
 
-            // stop all current audio to avoid orphan playback
+            if (skipHandler) {
+                skipHandler = null;
+            }
+
+            if (showImagesHandler) {
+                showImagesHandler = null;
+            }
+
             for (const [id, src] of audio_sources.entries()) {
-                try { src.stop(); } catch (err) {}
+                try { src.stop(); } catch (err) { }
                 audio_sources.delete(id);
             }
-            // clear UI
+
             updateText(" ");
             set_image("");
 
@@ -205,11 +299,11 @@ async function pageReady() {
                     try {
                         const payload = JSON.parse(dataStr);
                         currentImageURLs = Array.isArray(payload.image_ids) ? payload.image_ids.map(id => `/images/${id}`) : [];
-                        // Reset visibility per-message; default to false if missing
+
                         console.log('showImages', payload.show_images);
                         showImages = !!payload.show_images;
                         console.log('showImages', showImages);
-                        // Optionally track msg id if provided later; default to null now
+
                         renderPromptImages();
                     } catch (e) {
                         console.error('failed to parse prompt_image payload', e);
@@ -217,10 +311,11 @@ async function pageReady() {
                     break
                 case 'show_images':
                     msgID = dataStr;
-                    // msg data is message id to show for; no-op for id since overlay only shows current
+
                     if (currentMsgId !== msgID) {
                         return;
                     }
+
                     showImages = true;
                     renderPromptImages();
                     break
@@ -242,7 +337,7 @@ async function pageReady() {
                     break;
             }
         };
-        // clear any pending skip markers on a fresh connection
+
         pending_skips.clear();
     }
 

@@ -18,6 +18,15 @@
                 <textarea type="text" rows="2" id="filters" name="filters" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="kurwa,matka,pierdole" autocomplete="off">{{ .Filters }}</textarea>
                 
                 <div class="flex items-center pb-2 pt-12">
+                    <label>API Token</label>
+                </div>
+                <div class="flex items-center space-x-2 flex-nowrap">
+                    <input id="api_token_input" type="text" readonly value="{{ .Token }}" class="w-full {{template "input-class"}} py-2 px-4 items-center blur-sm select-all" autocomplete="off">
+                    <button type="button" class='{{template "button-2"}} py-2 px-4 copy-button whitespace-nowrap' data-clipboard-text='{{ .Token }}'>Copy</button>
+                    <button type="button" class='{{template "button-2"}} py-2 px-4 whitespace-nowrap' hx-post="/token/regenerate" hx-swap="none" hx-on::after-request="document.getElementById('api_token_input').value = event.detail.xhr.responseText; this.previousElementSibling.setAttribute('data-clipboard-text', event.detail.xhr.responseText)">New Token</button>
+                </div>
+
+                <div class="flex items-center pb-2 pt-12">
                     <label for="tts_limit">TTS Limit (seconds)</label>
                     <div class="has-tooltip pl-2">
                         <span class='tooltip text-xs ml-12 -mt-8'>Maximum length of TTS audio in seconds. <br>This affects TTS, BAJ TTS, and AI request prompt length(not response).</span>

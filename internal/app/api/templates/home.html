@@ -65,4 +65,22 @@
         <li>Go to "Hotkeys" tab</li>
         <li>Find "Hide {source name}" and "Show {source name}" hotkeys and set them to your desired keybinds</li>
     </ul>
+    <div class="pt-12 text-xl font-medium">
+        Setup global hotkeys to skip and show images
+    </div>
+    <ul class="pt-6 space-y-6 list-inside list-disc">
+        <li>Download the OBS Lua script <a class="underline" target="_blank" href="https://github.com/Shiro836/forsen_ai_api/blob/main/obs_script.lua">obs_script.lua</a> and add it in OBS: Tools → Scripts → “+” → select the file.</li>
+        <li>In the script properties:
+            <ul class="list-disc list-inside pl-6 space-y-2">
+                <li>Select your BAJ AI Browser Source in the <b>Browser Source</b> dropdown.</li>
+                <li>Paste your <b>Token</b> from the <button class="underline" hx-get="/filters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Settings page</button>.</li>
+            </ul>
+        </li>
+        <li>Assign two global hotkeys in OBS Settings → Hotkeys:
+            <ul class="list-disc list-inside pl-6 space-y-2">
+                <li><b>BAJ_AI_SKIP</b> — skips the current request.</li>
+                <li><b>BAJ_AI_SHOW_IMAGE</b> — approves and shows prompt images for the current request.</li>
+            </ul>
+        </li>
+    </ul>
 </div>

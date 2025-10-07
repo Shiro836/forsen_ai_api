@@ -5,6 +5,7 @@ import (
 	"app/internal/app/conns"
 	"app/pkg/ws"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -48,6 +49,11 @@ func (api *API) obsOverlay(r *http.Request) template.HTML {
 	}{
 		TwitchLogin: twitchLogin,
 	})
+}
+
+type obsAction struct {
+	Action string `json:"action"`
+	Token  string `json:"token"`
 }
 
 func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +114,36 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	dataCh, unsubscribe := api.connManager.Subscribe(user.ID)
 	defer unsubscribe()
+
+	// READ FROM WS
+	go func() {
+		defer wsClient.Close()
+		for {
+			msg, err := wsClient.Read()
+			if err != nil {
+				if !errors.Is(err, ws.ErrClosed) {
+					logger.Error("failed to read from ws", "err", err)
+				}
+
+				break
+			}
+
+			var upd *obsAction
+			err = json.Unmarshal(msg.Message, &upd)
+			if err != nil {
+				logger.Error("failed to unmarshal message from ws", "err", err)
+			}
+
+			switch upd.Action {
+			case "skip":
+				api.connManager.SkipCurrent(user.ID, upd.Token)
+			case "show_images":
+				api.connManager.ShowImagesCurrent(user.ID, upd.Token)
+			default:
+				logger.Error("unknown action", "action", upd.Action)
+			}
+		}
+	}()
 
 	t := time.NewTicker(3 * time.Second)
 	defer t.Stop()

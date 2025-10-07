@@ -105,6 +105,20 @@
         });
     </script>
 
+    <script>
+        function initClipboardButtons() {
+            try {
+                if (window.ClipboardJS) {
+                    new ClipboardJS('.copy-button');
+                }
+            } catch (e) {}
+        }
+        // Initialize on first load
+        initClipboardButtons();
+        // Re-initialize after HTMX swaps (fragments replace content)
+        document.addEventListener('htmx:afterSwap', initClipboardButtons);
+    </script>
+
     {{ if .LogoutButton }}
     <script>
         document.getElementById("logout").addEventListener("click", function() {
