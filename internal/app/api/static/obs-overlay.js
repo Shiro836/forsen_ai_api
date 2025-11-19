@@ -127,12 +127,27 @@ async function pageReady() {
     }
 
     let currentResponse = "";
+    let typewriterTimeoutId = null;
+    let stopTypewriter = false;
+
     function updateText(responseText) {
-        if (!responseText) textBox.innerHTML = ""
+        // Clear any pending typewriter
+        if (typewriterTimeoutId) {
+            clearTimeout(typewriterTimeoutId);
+            typewriterTimeoutId = null;
+        }
+        stopTypewriter = false;
+
+        const textBox = document.getElementById("text_box");
+
+        if (!responseText) {
+            textBox.innerHTML = "";
+            currentResponse = "";
+            return;
+        }
 
         let text = responseText;
         const responseBox = document.getElementById("response_box");
-        const textBox = document.getElementById("text_box");
 
         if (responseText.startsWith(currentResponse)) {
             text = responseText.slice(currentResponse.length);
@@ -144,21 +159,24 @@ async function pageReady() {
         const args = text.split(" ");
         let i = 0;
         const typeWriter = () => {
-            if (i < args.length) {
-                let word = args[i];
-                if (args.length > i + 1) {
-                    word += ' ';
-                }
-
-                const wordEl = document.createElement("span");
-                wordEl.innerText = word;
-                textBox.appendChild(wordEl);
-                responseBox.style.height = textBox.clientHeight + "px";
-                responseBox.scrollTo({ top: responseBox.scrollHeight });
-
-                i++;
-                setTimeout(typeWriter, 200);
+            if (stopTypewriter || i >= args.length) {
+                typewriterTimeoutId = null;
+                return;
             }
+
+            let word = args[i];
+            if (args.length > i + 1) {
+                word += ' ';
+            }
+
+            const wordEl = document.createElement("span");
+            wordEl.innerText = word;
+            textBox.appendChild(wordEl);
+            responseBox.style.height = textBox.clientHeight + "px";
+            responseBox.scrollTo({ top: responseBox.scrollHeight });
+
+            i++;
+            typewriterTimeoutId = setTimeout(typeWriter, 200);
         }
         typeWriter();
     }
@@ -208,14 +226,21 @@ async function pageReady() {
         console.log('current audio sources:', audio_sources);
 
         pending_skips.add(msg_id);
+        stopTypewriter = true;
+        if (typewriterTimeoutId) {
+            clearTimeout(typewriterTimeoutId);
+            typewriterTimeoutId = null;
+        }
 
         const src = audio_sources.get(msg_id);
         if (src) {
             try { src.stop(); } catch (e) { }
             audio_sources.delete(msg_id);
-            updateText(" ");
-            set_image("");
         }
+
+        // Always clean up text and image
+        updateText(" ");
+        set_image("");
     }
 
     function connect() {
@@ -286,7 +311,19 @@ async function pageReady() {
 
             switch (msg.type) {
                 case 'text':
-                    updateText(dataStr);
+                    // Empty or space text - just stop typewriter and clear
+                    if (!dataStr || dataStr.trim() === '') {
+                        stopTypewriter = true;
+                        if (typewriterTimeoutId) {
+                            clearTimeout(typewriterTimeoutId);
+                            typewriterTimeoutId = null;
+                        }
+                        const textBox = document.getElementById("text_box");
+                        textBox.innerHTML = "";
+                        currentResponse = "";
+                    } else {
+                        updateText(dataStr);
+                    }
                     break
                 case 'audio':
                     dataJson = JSON.parse(dataStr);

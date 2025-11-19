@@ -102,6 +102,29 @@ func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error
 	return &msg, nil
 }
 
+func (db *DB) GetMessageByID(ctx context.Context, msgID uuid.UUID) (*Message, error) {
+	msg := Message{}
+
+	err := db.QueryRow(ctx, `
+		select
+			id,
+			user_id,
+			status,
+			updated,
+			msg,
+			data
+		from
+			msg_queue
+		where
+			id = $1
+	`, msgID).Scan(&msg.ID, &msg.UserID, &msg.Status, &msg.Updated, &msg.TwitchMessage, &msg.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message by id: %w", parseErr(err))
+	}
+
+	return &msg, nil
+}
+
 func (db *DB) CleanQueue(ctx context.Context) error {
 	_, err := db.Exec(ctx, `
 		delete from
