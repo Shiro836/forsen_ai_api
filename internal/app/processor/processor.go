@@ -452,7 +452,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 				}
 				voice := action.Voice
 				if voice == "" {
-					voice = "tresh"
+					voice = "obiwan"
 				}
 				if voiceID, _, vErr := p.getVoiceReference(ctx, logger, voice); vErr == nil {
 					uniqueVoiceIDs[voiceID] = struct{}{}
@@ -883,7 +883,7 @@ func (p *Processor) playTTS(ctx context.Context, logger *slog.Logger, eventWrite
 }
 
 func (p *Processor) TTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
-	ttsResult, ttsSegments, err := p.styleTts.TTS(ctx, unidecode.Unidecode(msg), refAudio)
+	ttsResult, ttsSegments, err := p.styleTts.TTS(ctx, unidecode.Unidecode(strings.ToLower(msg)), refAudio)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1099,7 +1099,7 @@ func (p *Processor) craftUniversalTTSAudio(ctx context.Context, logger *slog.Log
 	sfxAccumulated := time.Duration(0)
 
 	concatPadding := 500 * time.Millisecond
-	defaultVoice := "tresh"
+	defaultVoice := "obiwan"
 
 	ttsLimit := db.DefaultTtsLimitSeconds // Default to 80 seconds
 	if userSettings.TtsLimit != nil {

@@ -16,7 +16,7 @@ type Config struct {
 
 	LLM      llm.Config        `yaml:"llm"`
 	ImageLLM llm.Config        `yaml:"image_llm"`
-	StyleTTS ai.StyleTTSConfig `yaml:"style_tts"`
+	StyleTTS ai.StyleTTSConfig `yaml:"tts"`
 	Whisper  whisperx.Config   `yaml:"whisper"`
 
 	Twitch twitch.Config `yaml:"twitch"`
