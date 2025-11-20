@@ -104,7 +104,7 @@ func main() {
 	db.AttachS3Client(s3)
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
-	
+
 	// 1. Create Service (Shared Dependencies)
 	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpeg, styleTts, whisper, llmModel, imageLlm, connManager)
 
@@ -120,7 +120,7 @@ func main() {
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, twitchClient, styleTts, llmModel, db, s3)
+	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, twitchClient, styleTts, llmModel, db, s3, ttsHandler, aiHandler)
 
 	router := api.NewRouter()
 

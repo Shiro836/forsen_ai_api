@@ -1,10 +1,12 @@
 {{ block "char_frame" . }}
 
 <div class="grid grid-rows-12 grid-cols-12 w-full h-full overflow-hidden">
-    <img class="col-start-2 col-end-7 row-start-2 row-end-7 object-contain max-h-full" src="/characters/{{ .Card.ID }}/image"></img>
+    <img class="col-start-2 col-end-7 row-start-2 row-end-7 object-contain max-h-full"
+        src="/characters/{{ .Card.ID }}/image"></img>
     <div class="col-start-1 col-end-13 row-start-7 row-end-9 text-xl text-center truncate px-2">{{ .Card.Name }}</div>
     {{ if .Author }}
-    <div class="col-start-1 col-end-13 row-start-9 row-end-10 text-xs/tight text-center text-gray-600 dark:text-gray-300 truncate px-2" title="{{ .Author }}">by {{ .Author }}</div>
+    <div class="col-start-1 col-end-13 row-start-9 row-end-10 text-xs/tight text-center text-gray-600 dark:text-gray-300 truncate px-2"
+        title="{{ .Author }}">by {{ .Author }}</div>
     {{ end }}
     <div class="col-start-1 col-end-13 row-start-10 row-end-11 text-sm text-center">
         <span title="AI redeems">{{ .Card.Redeems }}</span>
@@ -12,17 +14,25 @@
         <span title="TTS redeems">{{ .Card.TTSRedeems }}</span>
     </div>
     {{ if .CanEdit }}
-    <button  class="row-start-11 row-end-12 col-start-2 col-end-4" hx-get="/characters/{{ .Card.ID }}" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Edit</button>
+    <button class="row-start-11 row-end-12 col-start-2 col-end-4" hx-get="/characters/{{ .Card.ID }}"
+        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Edit</button>
     {{ end }}
+    <button class="row-start-11 row-end-12 col-start-4 col-end-6" hx-get="/characters/{{ .Card.ID }}/try"
+        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Try</button>
     {{ if not .TTSRewardCreated}}
-    <button class="row-start-11 row-end-12 col-start-7 col-end-9" hx-post="/characters/{{ .Card.ID }}/reward_tts">TTS</button>
+    <button class="row-start-11 row-end-12 col-start-7 col-end-9"
+        hx-post="/characters/{{ .Card.ID }}/reward_tts">TTS</button>
     {{ end }}
     {{ if not .AIRewardCreated}}
-    <button class="row-start-11 row-end-12 col-start-10 col-end-12" hx-post="/characters/{{ .Card.ID }}/reward_ai">AI</button>
+    <button class="row-start-11 row-end-12 col-start-10 col-end-12"
+        hx-post="/characters/{{ .Card.ID }}/reward_ai">AI</button>
     {{ end }}
     {{ if .IsAdmin }}
-    <form class="row-start-12 row-end-13 col-start-7 col-end-12 flex items-center gap-2" hx-post="/characters/{{ .Card.ID }}/admin/update_short_char_name" hx-target="closest div">
-        <input type="text" name="short_name" placeholder="Short name" value="{{ if .Card.ShortCharName.Valid }}{{ .Card.ShortCharName.String }}{{ end }}" class="border rounded px-1 py-0.5 w-full" />
+    <form class="row-start-2 row-end-3 col-start-7 col-end-12 flex items-center gap-2"
+        hx-post="/characters/{{ .Card.ID }}/admin/update_short_char_name" hx-target="closest div">
+        <input type="text" name="short_name" placeholder="Short name"
+            value="{{ if .Card.ShortCharName.Valid }}{{ .Card.ShortCharName.String }}{{ end }}"
+            class="border rounded px-1 py-0.5 w-full" />
         <button type="submit" class="border rounded px-2 py-0.5">Save</button>
     </form>
     {{ end }}

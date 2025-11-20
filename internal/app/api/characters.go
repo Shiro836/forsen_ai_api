@@ -2,7 +2,13 @@ package api
 
 import (
 	"app/db"
+	"app/internal/app/conns"
+	"app/internal/app/processor"
 	"app/pkg/ctxstore"
+	"app/pkg/ws"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -11,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -608,5 +615,224 @@ func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {
 	err := api.createReward(r.Context(), w, user, nil, "", db.TwitchRewardUniversalTTS, prompt)
 	if err != nil {
 		return
+	}
+}
+
+// tryCharacter serves the try page for testing a character
+func (api *API) tryCharacter(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not logged in",
+		})
+	}
+
+	characterIDStr := chi.URLParam(r, "character_id")
+	characterID, err := uuid.Parse(characterIDStr)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusBadRequest,
+			ErrorMessage: "character_id is not a valid uuid",
+		})
+	}
+
+	card, err := api.db.GetCharCardByID(r.Context(), user.ID, characterID)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: err.Error(),
+		})
+	}
+
+	// Check if user can access this character (owns it or it's public)
+	if card.OwnerUserID != user.ID && !card.Public {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusForbidden,
+			ErrorMessage: "You don't have access to this character",
+		})
+	}
+
+	return getHtml("try_character.html", &struct {
+		CharacterID   uuid.UUID
+		CharacterName string
+	}{
+		CharacterID:   characterID,
+		CharacterName: card.Name,
+	})
+}
+
+type tryAction struct {
+	Action string `json:"action"`
+	Text   string `json:"text"`
+}
+
+// tryCharacterWS handles WebSocket connections for the try page
+func (api *API) tryCharacterWS(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("not authorized"))
+		return
+	}
+
+	characterIDStr := chi.URLParam(r, "character_id")
+	characterID, err := uuid.Parse(characterIDStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("invalid character_id"))
+		return
+	}
+
+	logger := api.logger.With("user", user.TwitchLogin, "character_id", characterID)
+
+	card, err := api.db.GetCharCardByID(r.Context(), user.ID, characterID)
+	if err != nil {
+		logger.Error("failed to get character card", "err", err)
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("character not found"))
+		return
+	}
+
+	// Check permissions
+	if card.OwnerUserID != user.ID && !card.Public {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("access denied"))
+		return
+	}
+
+	logger.Info("received websocket connection request")
+
+	wsConn, err := ws.Upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.Error("failed to upgrade to websocket connection", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	wsClient, done := ws.NewWsClient(wsConn)
+	defer func() {
+		logger.Info("closing websocket connection")
+		wsClient.Close()
+	}()
+
+	logger.Info("websocket connection established")
+
+	// Get user settings
+	userSettings, err := api.db.GetUserSettings(r.Context(), user.ID)
+	if err != nil {
+		logger.Warn("failed to get user settings, using defaults", "err", err)
+		userSettings = &db.UserSettings{}
+	}
+
+	// Channel for sending events to websocket
+	eventCh := make(chan *conns.DataEvent, 100)
+	defer close(eventCh)
+
+	// Event writer for handlers (must match conns.EventWriter signature)
+	eventWriter := conns.EventWriter(func(event *conns.DataEvent) bool {
+		select {
+		case eventCh <- event:
+			return true
+		default:
+			logger.Warn("event channel full, dropping event")
+			return false
+		}
+	})
+	// Context for handler execution
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// READ FROM WS
+	go func() {
+		defer cancel()
+		for {
+			msg, err := wsClient.Read()
+			if err != nil {
+				if !errors.Is(err, ws.ErrClosed) {
+					logger.Error("failed to read from ws", "err", err)
+				}
+				break
+			}
+
+			var action *tryAction
+			err = json.Unmarshal(msg.Message, &action)
+			if err != nil {
+				logger.Error("failed to unmarshal message from ws", "err", err)
+				continue
+			}
+
+			if action.Text == "" {
+				logger.Warn("empty text in action")
+				continue
+			}
+
+			logger.Info("processing try action", "action", action.Action, "text", action.Text)
+
+			// Create a new message ID for this test
+			msgID := uuid.New()
+
+			// Create processor state
+			state := processor.NewProcessorState()
+			state.SetCurrent(msgID)
+
+			input := processor.InteractionInput{
+				Requester:    "Demo User",
+				Message:      action.Text,
+				Character:    card,
+				UserSettings: userSettings,
+				MsgID:        msgID.String(),
+				State:        state,
+			}
+
+			// Execute handler in goroutine
+			go func(act string) {
+				defer state.SetCurrent(uuid.Nil)
+
+				var handlerErr error
+				switch act {
+				case "tts":
+					handlerErr = api.ttsHandler.Handle(ctx, input, eventWriter)
+				case "ai":
+					handlerErr = api.aiHandler.Handle(ctx, input, eventWriter)
+				default:
+					logger.Error("unknown action", "action", act)
+					return
+				}
+
+				if handlerErr != nil {
+					logger.Error("handler error", "action", act, "err", handlerErr)
+				}
+			}(action.Action)
+		}
+	}()
+
+	// WRITE TO WS
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+loop:
+	for {
+		select {
+		case <-done:
+			break loop
+		case <-ctx.Done():
+			break loop
+		case <-ticker.C:
+			if err := sendData(wsClient, conns.EventTypePing.String(), []byte("ping")); err != nil {
+				logger.Error("failed to send ping to ws conn", "err", err)
+				break loop
+			}
+		case event, ok := <-eventCh:
+			if !ok {
+				logger.Info("event channel closed")
+				break loop
+			}
+
+			if err := sendData(wsClient, event.EventType.String(), event.EventData); err != nil {
+				logger.Error("failed to send data to ws conn", "err", err)
+				break loop
+			}
+		}
 	}
 }

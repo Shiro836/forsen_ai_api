@@ -10,6 +10,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
+	"app/internal/app/processor"
 	"app/pkg/ai"
 	"app/pkg/llm"
 	"app/pkg/s3client"
@@ -42,11 +43,16 @@ type API struct {
 
 	cfg *Config
 
+	// Handlers for try feature
+	ttsHandler processor.InteractionHandler
+	aiHandler  processor.InteractionHandler
+
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 }
 
 func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager,
-	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, llm *llm.Client, db *db.DB, s3 *s3client.Client) *API {
+	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, llm *llm.Client, db *db.DB, s3 *s3client.Client,
+	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler) *API {
 	return &API{
 		cfg: cfg,
 
@@ -62,6 +68,9 @@ func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager,
 		db: db,
 
 		s3: s3,
+
+		ttsHandler: ttsHandler,
+		aiHandler:  aiHandler,
 	}
 }
 
@@ -120,6 +129,9 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/characters/{character_id}", api.nav(api.character))
 		router.Post("/characters/{character_id}", api.upsertCharacter)
+
+		router.Get("/characters/{character_id}/try", api.nav(api.tryCharacter))
+		router.Get("/ws/characters/{character_id}/try", api.tryCharacterWS)
 
 		router.Get("/new_message_example/{id}", api.elem(api.newMessageExample))
 
