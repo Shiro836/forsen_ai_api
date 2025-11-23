@@ -2,14 +2,18 @@
     <div class="flex">
         <div class="pr-16">Control panel of {{ .User.TwitchLogin }}</div>
         <div class="flex hidden" id="connected_indicator">
-            <svg class="items-center" xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
-                <path d="M4 12.6111L8.92308 17.5L20 6.5" stroke="#32CD32" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg class="items-center" xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24"
+                fill="none">
+                <path d="M4 12.6111L8.92308 17.5L20 6.5" stroke="#32CD32" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
             </svg>
             <div class="pl-2">Connected</div>
         </div>
         <div class="flex" id="disconnected_indicator">
             <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none">
-                <path d="M6.99486 7.00636C6.60433 7.39689 6.60433 8.03005 6.99486 8.42058L10.58 12.0057L6.99486 15.5909C6.60433 15.9814 6.60433 16.6146 6.99486 17.0051C7.38538 17.3956 8.01855 17.3956 8.40907 17.0051L11.9942 13.4199L15.5794 17.0051C15.9699 17.3956 16.6031 17.3956 16.9936 17.0051C17.3841 16.6146 17.3841 15.9814 16.9936 15.5909L13.4084 12.0057L16.9936 8.42059C17.3841 8.03007 17.3841 7.3969 16.9936 7.00638C16.603 6.61585 15.9699 6.61585 15.5794 7.00638L11.9942 10.5915L8.40907 7.00636C8.01855 6.61584 7.38538 6.61584 6.99486 7.00636Z" fill="#DE3163"/>
+                <path
+                    d="M6.99486 7.00636C6.60433 7.39689 6.60433 8.03005 6.99486 8.42058L10.58 12.0057L6.99486 15.5909C6.60433 15.9814 6.60433 16.6146 6.99486 17.0051C7.38538 17.3956 8.01855 17.3956 8.40907 17.0051L11.9942 13.4199L15.5794 17.0051C15.9699 17.3956 16.6031 17.3956 16.9936 17.0051C17.3841 16.6146 17.3841 15.9814 16.9936 15.5909L13.4084 12.0057L16.9936 8.42059C17.3841 8.03007 17.3841 7.3969 16.9936 7.00638C16.603 6.61585 15.9699 6.61585 15.5794 7.00638L11.9942 10.5915L8.40907 7.00636C8.01855 6.61584 7.38538 6.61584 6.99486 7.00636Z"
+                    fill="#DE3163" />
             </svg>
             <div class="pl-2">Disconnected</div>
         </div>
@@ -21,28 +25,28 @@
         <table class="table-auto w-full text-left text-sm border-collapse border-spacing-2">
             <thead>
                 <tr>
-                    <th scope="col" class='px-8 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                    <th scope="col" class='px-8 {{template "ui-border-clr"}} px-10 border-r border-b relative'>
                         Requested By
                     </th>
-                    <th scope="col" class='px-4 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                    <th scope="col" class='px-4 {{template "ui-border-clr"}} px-10 border-r border-b relative'>
                         Type
                     </th>
-                    <th scope="col" class='px-8 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                    <th scope="col" class='px-8 {{template "ui-border-clr"}} px-10 border-r border-b relative'>
                         Char Name
                     </th>
-                    <th scope="col" class='px-20 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                    <th scope="col" class='px-20 {{template "ui-border-clr"}} px-10 border-r border-b relative'>
                         Request
                     </th>
-                    <th scope="col" class='px-20 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                    <th scope="col" class='px-20 {{template "ui-border-clr"}} px-10 border-r border-b relative'>
                         Response
                     </th>
-                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-r border-b relative'>
                         Status
                     </th>
-                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-b'>
+                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-b relative'>
                         Actions
                     </th>
-                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-r border-b'>
+                    <th scope="col" class='px-6 {{template "ui-border-clr"}} px-10 border-r border-b relative'>
                         Images
                     </th>
                 </tr>
@@ -55,6 +59,7 @@
         <div id="control_panel_activity_checker"></div>
     </div>
 </div>
+
 
 <script>
     function set_connected_true() {
@@ -101,7 +106,7 @@
                 };
             }
 
-            checkPageClosed = function() {
+            checkPageClosed = function () {
                 if (document.getElementById('control_panel_activity_checker') === null) {
                     console.log('detected that page is closed, closing socket');
                     ws.close();
@@ -174,22 +179,22 @@
                 }
             }
 
-			// Helper to render image visibility status below action buttons
-			function updateImagesStatus(id, showImages) {
-				const container = document.getElementById('images_status_' + id);
-				if (!container) {
-					return;
-				}
-				const isShown = showImages === true;
-				container.className = 'flex items-center pt-1';
-				const color = isShown ? '#16a34a' : '#dc2626';
-				container.innerHTML = '' +
-					'<svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none" style="color: ' + color + '">' +
-						'<path d="M1 12C1 12 5 5 12 5C19 5 23 12 23 12C23 12 19 19 12 19C5 19 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-						'<circle cx="12" cy="12" r="3" fill="currentColor"/>' +
-					'</svg>' +
-					'<div class="pl-2 text-sm">' + (isShown ? 'Images are shown' : 'Images are hidden') + '</div>';
-			}
+            // Helper to render image visibility status below action buttons
+            function updateImagesStatus(id, showImages) {
+                const container = document.getElementById('images_status_' + id);
+                if (!container) {
+                    return;
+                }
+                const isShown = showImages === true;
+                container.className = 'flex items-center pt-1';
+                const color = isShown ? '#16a34a' : '#dc2626';
+                container.innerHTML = '' +
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24" fill="none" style="color: ' + color + '">' +
+                    '<path d="M1 12C1 12 5 5 12 5C19 5 23 12 23 12C23 12 19 19 12 19C5 19 1 12 1 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+                    '<circle cx="12" cy="12" r="3" fill="currentColor"/>' +
+                    '</svg>' +
+                    '<div class="pl-2 text-sm">' + (isShown ? 'Images are shown' : 'Images are hidden') + '</div>';
+            }
 
             updates = msg['updates']
             for (let i = 0; i < updates.length; i++) {
@@ -218,15 +223,15 @@
                             row.insertCell(-1).textContent = data['requested_by'];
                             row.insertCell(-1).textContent = data['type'];
                             row.insertCell(-1).textContent = data['char_name'];
-                            row.insertCell(-1).textContent = data['request'];
-                            row.insertCell(-1).textContent = data['response'];
+                            row.insertCell(-1).innerHTML = '<div class="break-words max-w-[400px]">' + data['request'] + '</div>';
+                            row.insertCell(-1).innerHTML = '<div class="break-words max-w-[400px]">' + data['response'] + '</div>';
                             row.insertCell(-1).textContent = data['status'];
                             row.insertCell(-1).innerHTML = '<div class="flex flex-col space-y-1">' +
                                 '<button id="delete_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Delete</button>' +
                                 '<button id="show_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Show Images</button>' +
                                 '<button id="hide_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Hide Images</button>' +
                                 '<div id="images_status_' + id + '" class="flex items-center pt-1"></div>' +
-                            '</div>';
+                                '</div>';
                             // Render images as <img> tags with absolute URLs in the last cell
                             let imagesCell = row.insertCell(-1);
                             renderImages(imagesCell, data['image_urls'], true);
@@ -241,15 +246,15 @@
                             row.cells[0].textContent = data['requested_by'];
                             row.cells[1].textContent = data['type'];
                             row.cells[2].textContent = data['char_name'];
-                            row.cells[3].textContent = data['request'];
-                            row.cells[4].textContent = data['response'];
+                            row.cells[3].innerHTML = '<div class="break-words max-w-[400px]">' + data['request'] + '</div>';
+                            row.cells[4].innerHTML = '<div class="break-words max-w-[400px]">' + data['response'] + '</div>';
                             row.cells[5].textContent = data['status'];
                             row.cells[6].innerHTML = '<div class="flex flex-col space-y-1">' +
                                 '<button id="delete_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Delete</button>' +
                                 '<button id="show_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Show Images</button>' +
                                 '<button id="hide_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Hide Images</button>' +
                                 '<div id="images_status_' + id + '" class="flex items-center pt-1"></div>' +
-                            '</div>';
+                                '</div>';
                             // Render images as <img> tags (relative URLs) in the last cell
                             renderImages(row.cells[7], data['image_urls'], false);
                             updateImagesStatus(id, data['show_images']);
@@ -259,33 +264,33 @@
                         const deleteBtn = document.getElementById('delete_' + id);
                         const showBtn = document.getElementById('show_' + id);
                         const hideBtn = document.getElementById('hide_' + id);
-                        
+
                         // Clone elements to remove all event listeners
                         const newDeleteBtn = deleteBtn.cloneNode(true);
                         const newShowBtn = showBtn.cloneNode(true);
                         const newHideBtn = hideBtn.cloneNode(true);
-                        
+
                         // Replace elements with clean clones
                         deleteBtn.parentNode.replaceChild(newDeleteBtn, deleteBtn);
                         showBtn.parentNode.replaceChild(newShowBtn, showBtn);
                         hideBtn.parentNode.replaceChild(newHideBtn, hideBtn);
-                        
+
                         // Add fresh event listeners
-                        newDeleteBtn.addEventListener('click', function() {
+                        newDeleteBtn.addEventListener('click', function () {
                             ws.send(JSON.stringify({
                                 'id': id,
                                 'action': 'delete',
                             }));
                         });
 
-                        newShowBtn.addEventListener('click', function() {
+                        newShowBtn.addEventListener('click', function () {
                             ws.send(JSON.stringify({
                                 'id': id,
                                 'action': 'show_images',
                             }));
                         });
-                        
-                        newHideBtn.addEventListener('click', function() {
+
+                        newHideBtn.addEventListener('click', function () {
                             ws.send(JSON.stringify({
                                 'id': id,
                                 'action': 'hide_images',
@@ -301,4 +306,48 @@
     }
 
     connect();
+
+    // Initialize ColumnResizer
+    function initColumnResizer() {
+        const table = document.querySelector('table');
+        console.log('Initializing ColumnResizer. Table found:', !!table, 'ColumnResizer object:', ColumnResizer);
+
+        if (table && typeof ColumnResizer !== 'undefined') {
+            // Handle webpack default export if present
+            const Resizer = ColumnResizer.default || ColumnResizer;
+            try {
+                // Check if already initialized to avoid duplicates if called multiple times
+                if (table.classList.contains('grip-resizable')) {
+                    console.log('ColumnResizer already initialized');
+                    return;
+                }
+
+                new Resizer(table, {
+                    resizeMode: 'overflow', // Allow independent column resizing
+                    liveDrag: true,
+                    draggingClass: 'resizing',
+                    minWidth: 30,
+                    removePadding: false // Keep existing Tailwind padding
+                });
+                console.log('ColumnResizer initialized successfully');
+            } catch (e) {
+                console.error('Failed to initialize ColumnResizer:', e);
+            }
+        } else {
+            console.log('ColumnResizer not ready yet');
+        }
+    }
+
+    // Run immediately (for HTMX swaps where script is executed)
+    initColumnResizer();
+
+    // Also listen for HTMX swaps to re-init if needed (though the script re-runs on swap usually)
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        initColumnResizer();
+    });
+
+    // Fallback for initial page load if script runs before DOM (unlikely at bottom of body but good safety)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initColumnResizer);
+    }
 </script>

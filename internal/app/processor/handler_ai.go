@@ -16,7 +16,6 @@ import (
 	"app/pkg/s3client"
 
 	"github.com/google/uuid"
-	"github.com/mozillazg/go-unidecode"
 )
 
 type AIHandler struct {
@@ -223,7 +222,7 @@ The description should read like a clever commentary, not like someone talking a
 		return nil
 	}
 
-	llmResult = unidecode.Unidecode(llmResult)
+	// llmResult = unidecode.Unidecode(llmResult)
 	filteredResponse := h.service.FilterText(ctx, input.UserSettings, llmResult)
 
 	responseTtsAudio, textTimings, err := h.service.TTSWithTimings(ctx, filteredResponse, input.Character.Data.VoiceReference)

@@ -34,6 +34,14 @@ type Card struct {
 	Data *CardData
 }
 
+// CharacterBasicInfo represents minimal character information for detection
+type CharacterBasicInfo struct {
+	ID          uuid.UUID
+	Name        string
+	ShortName   string
+	Description string
+}
+
 type MessageExample struct {
 	Request  string `json:"request"`
 	Response string `json:"response"`
@@ -512,6 +520,37 @@ func (db *DB) GetPublicShortNamedCards(ctx context.Context) ([]PublicShortName, 
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate public short named cards: %w", err)
+	}
+	return out, nil
+}
+
+// GetAllCharacterBasicInfo returns basic info for all public characters for detection
+func (db *DB) GetAllCharacterBasicInfo(ctx context.Context) ([]CharacterBasicInfo, error) {
+	rows, err := db.Query(ctx, `
+        select
+			id,
+			name,
+			coalesce(short_char_name, ''),
+			coalesce(description, '')
+        from char_cards
+        where public = true
+        order by name asc
+    `)
+	if err != nil {
+		return nil, fmt.Errorf("get all character basic info: %w", err)
+	}
+	defer rows.Close()
+
+	var out []CharacterBasicInfo
+	for rows.Next() {
+		var char CharacterBasicInfo
+		if err := rows.Scan(&char.ID, &char.Name, &char.ShortName, &char.Description); err != nil {
+			return nil, fmt.Errorf("scan character basic info: %w", err)
+		}
+		out = append(out, char)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate character basic info: %w", err)
 	}
 	return out, nil
 }

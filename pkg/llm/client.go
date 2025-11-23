@@ -59,11 +59,13 @@ type Message struct {
 
 // ChatRequest represents the request payload for chat completions
 type ChatRequest struct {
-	Model     string    `json:"model"`
-	Messages  []Message `json:"messages"`
-	MaxTokens int       `json:"max_tokens"`
-	MinTokens int       `json:"min_tokens"`
-	Stop      []string  `json:"stop,omitempty"`
+	Model       string          `json:"model"`
+	Messages    []Message       `json:"messages"`
+	MaxTokens   int             `json:"max_tokens"`
+	MinTokens   int             `json:"min_tokens"`
+	Stop        []string        `json:"stop,omitempty"`
+	GuidedJSON  json.RawMessage `json:"guided_json,omitempty"`
+	Temperature *float64        `json:"temperature,omitempty"`
 }
 
 // ChatResponse represents the response from the chat completions API
@@ -236,6 +238,30 @@ func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 		}
 	}
 	return longest, nil
+}
+
+func (c *Client) AskGuided(ctx context.Context, messages []Message, schema json.RawMessage) (string, error) {
+	zeroTemp := 0.0
+
+	req := &ChatRequest{
+		Model:       c.cfg.Model,
+		Messages:    messages,
+		MaxTokens:   c.cfg.MaxTokens,
+		MinTokens:   c.cfg.MinTokens,
+		GuidedJSON:  schema,
+		Temperature: &zeroTemp,
+	}
+
+	resp, err := c.reqChat(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to do guided chat request: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices returned from AI")
+	}
+
+	return resp.Choices[0].Message.Content, nil
 }
 
 func (c *Client) reqChat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {

@@ -17,7 +17,6 @@ import (
 	"app/pkg/whisperx"
 
 	"github.com/google/uuid"
-	"github.com/mozillazg/go-unidecode"
 )
 
 type audioMsg struct {
@@ -26,7 +25,8 @@ type audioMsg struct {
 }
 
 func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
-	ttsResult, ttsSegments, err := s.styleTtsRaw.TTS(ctx, unidecode.Unidecode(strings.ToLower(msg)), refAudio)
+	ttsResult, ttsSegments, err := s.styleTtsRaw.TTS(ctx, strings.ToLower(msg), refAudio)
+	// ttsResult, ttsSegments, err := s.styleTtsRaw.TTS(ctx, unidecode.Unidecode(strings.ToLower(msg)), refAudio)
 	if err != nil {
 		return nil, nil, err
 	}

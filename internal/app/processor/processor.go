@@ -15,7 +15,6 @@ import (
 	"app/pkg/twitch"
 
 	"github.com/google/uuid"
-	"github.com/mozillazg/go-unidecode"
 )
 
 //go:embed sfx/*.mp3
@@ -352,7 +351,7 @@ func (p *Processor) ingestTwitchMessages(ctx context.Context, broadcaster *db.Us
 			continue
 		}
 
-		msg.Message = unidecode.Unidecode(msg.Message)
+		// msg.Message = unidecode.Unidecode(msg.Message)
 
 		imgMatches := imgRegex.FindAllStringSubmatch(msg.Message, -1)
 		imageIDs := make([]string, 0, 2)
