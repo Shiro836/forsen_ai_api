@@ -11,7 +11,8 @@ import (
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
-	_ "image/png"
+
+	// _ "image/png"
 	imgpng "image/png"
 
 	"github.com/disintegration/imaging"
