@@ -65,6 +65,27 @@ func (db *DB) AddRelation(ctx context.Context, relation *Relation) (uuid.UUID, e
 	return id, nil
 }
 
+func (db *DB) RemoveRelation(ctx context.Context, relation *Relation) error {
+	_, err := db.Exec(ctx, `
+		DELETE FROM relations
+		WHERE
+			twitch_user_id_1 = $1
+		AND
+			twitch_user_id_2 = $2
+		AND
+			relation_type = $3
+	`,
+		relation.TwitchUserID1,
+		relation.TwitchUserID2,
+		relation.RelationType,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to remove relation: %w", err)
+	}
+
+	return nil
+}
+
 func (db *DB) GetRelations(ctx context.Context, user *User, relationType RelationType) ([]Relation, error) {
 	if relationType == RelationTypeAny {
 		panic("not implemented")

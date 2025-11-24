@@ -160,7 +160,8 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Post("/admin/add_admin", http.HandlerFunc(api.managePermission(permissionActionAdd, db.PermissionAdmin)))
 		router.Post("/admin/remove_admin", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionAdmin)))
 
-		router.Post("/admin/add_relation", http.HandlerFunc(api.manageRelation(db.RelationTypeModerating)))
+		router.Post("/admin/add_relation", http.HandlerFunc(api.manageRelation(permissionActionAdd, db.RelationTypeModerating)))
+		router.Post("/admin/remove_relation", http.HandlerFunc(api.manageRelation(permissionActionRemove, db.RelationTypeModerating)))
 
 		router.Post("/characters/{character_id}/admin/update_short_char_name", http.HandlerFunc(api.updateShortCharName))
 	})

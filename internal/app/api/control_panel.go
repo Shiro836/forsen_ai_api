@@ -591,7 +591,84 @@ func (api *API) controlPanelGrant(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) controlPanelRevoke(w http.ResponseWriter, r *http.Request) {
-	_, _ = w.Write([]byte("not implemented"))
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("unauthorized"))
+		return
+	}
+
+	targetLogin := r.FormValue("twitch_login")
+	if len(targetLogin) == 0 {
+		targetLogin = r.FormValue("twitch_login_2")
+	}
+	if len(targetLogin) == 0 {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusBadRequest,
+			ErrorMessage: "No user provided",
+		})
+
+		return
+	}
+
+	twitchAPI, err := api.twitchClient.NewHelixClient(user.TwitchAccessToken, user.TwitchRefreshToken) // TODO: generalize this
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "twitch client err: " + err.Error(),
+		})
+
+		return
+	}
+
+	resp, err := twitchAPI.GetUsers(&helix.UsersParams{
+		Logins: []string{
+			targetLogin,
+		},
+	})
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
+		})
+
+		return
+	}
+	if resp == nil || len(resp.Data.Users) == 0 {
+		_, _ = w.Write([]byte("user not found"))
+
+		return
+	}
+
+	targetUserID, err := strconv.Atoi(resp.Data.Users[0].ID)
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
+		})
+
+		return
+	}
+
+	err = api.db.RemoveRelation(r.Context(), &db.Relation{
+		TwitchLogin1:  targetLogin,
+		TwitchUserID1: targetUserID,
+
+		TwitchLogin2:  user.TwitchLogin,
+		TwitchUserID2: user.TwitchUserID,
+
+		RelationType: db.RelationTypeModerating,
+	})
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: fmt.Sprintf("failed to remove relation: %v", err),
+		})
+
+		return
+	}
+
+	_, _ = w.Write([]byte("success"))
 }
 
 // add any relation

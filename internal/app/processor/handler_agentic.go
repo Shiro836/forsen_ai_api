@@ -102,7 +102,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 
 	appendHistoryTurn(&history, firstCard.Name, initialPlan.FirstMessageText)
 
-	currentTurn, err := h.buildAgenticTurn(ctx, firstSpeakerID, firstCard, initialPlan.FirstMessageText)
+	currentTurn, err := h.buildAgenticTurn(ctx, firstSpeakerID, firstCard, input.UserSettings, initialPlan.FirstMessageText)
 	if err != nil {
 		logger.Error("failed to prepare initial agentic turn", "err", err)
 		return fmt.Errorf("failed to prepare initial agentic turn: %w", err)
@@ -127,7 +127,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 		var nextTurn *agenticTurn
 
 		if turn+1 < MaxAgenticTurns {
-			nextTurn, err = h.prepareNextAgenticTurn(ctx, input.Message, &history, charNames, charCards, nameToID)
+			nextTurn, err = h.prepareNextAgenticTurn(ctx, input.Message, &history, charNames, charCards, nameToID, input.UserSettings)
 			if err != nil {
 				logger.Error("failed to prepare next agentic turn", "err", err)
 				select {
@@ -163,12 +163,14 @@ type agenticTurn struct {
 	timings   []whisperx.Timiing
 }
 
-func (h *AgenticHandler) buildAgenticTurn(ctx context.Context, speakerID uuid.UUID, card *db.Card, text string) (*agenticTurn, error) {
+func (h *AgenticHandler) buildAgenticTurn(ctx context.Context, speakerID uuid.UUID, card *db.Card, userSettings *db.UserSettings, text string) (*agenticTurn, error) {
 	if card == nil {
 		return nil, fmt.Errorf("nil character card for speaker %s", speakerID)
 	}
 
-	audio, timings, err := h.service.TTSWithTimings(ctx, text, card.Data.VoiceReference)
+	filteredText := h.service.FilterText(ctx, userSettings, text)
+
+	audio, timings, err := h.service.TTSWithTimings(ctx, filteredText, card.Data.VoiceReference)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate TTS for %s: %w", card.Name, err)
 	}
@@ -176,7 +178,7 @@ func (h *AgenticHandler) buildAgenticTurn(ctx context.Context, speakerID uuid.UU
 	return &agenticTurn{
 		speakerID: speakerID,
 		card:      card,
-		text:      text,
+		text:      filteredText,
 		audio:     audio,
 		timings:   timings,
 	}, nil
@@ -189,6 +191,7 @@ func (h *AgenticHandler) prepareNextAgenticTurn(
 	charNames []string,
 	charCards map[uuid.UUID]*db.Card,
 	nameToID map[string]uuid.UUID,
+	userSettings *db.UserSettings,
 ) (*agenticTurn, error) {
 	nextSpeakerName, err := h.planner.SelectNextSpeaker(ctx, scenario, *history, charNames)
 	if err != nil {
@@ -221,7 +224,7 @@ func (h *AgenticHandler) prepareNextAgenticTurn(
 
 	appendHistoryTurn(history, nextCard.Name, response)
 
-	turn, err := h.buildAgenticTurn(ctx, nextSpeakerID, nextCard, response)
+	turn, err := h.buildAgenticTurn(ctx, nextSpeakerID, nextCard, userSettings, response)
 	if err != nil {
 		return nil, err
 	}

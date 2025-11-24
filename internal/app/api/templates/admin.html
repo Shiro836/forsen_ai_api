@@ -8,10 +8,12 @@
                     <input type="text" id="twitch_login_2" name="twitch_login_2" class="w-full {{template "input-class"}} py-2 px-4 items-center w-full" placeholder="forsen" autocomplete="off"></input>
                     <div class="flex pt-4 justify-start font-bold">
                         <div>
-                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/add_mod" hx-include="[name='twitch_login_2']" hx-target="#permission_result">Grant</button>
+                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/add_mod"
+                                hx-include="[name='twitch_login_2']" hx-target="#permission_result">Grant</button>
                         </div>
                         <div class="flex-grow pl-8">
-                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/remove_mod" hx-include="[name='twitch_login_2']" hx-target="#permission_result">Revoke</button>
+                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/remove_mod"
+                                hx-include="[name='twitch_login_2']" hx-target="#permission_result">Revoke</button>
                         </div>
                     </div>
                 </div>
@@ -23,18 +25,51 @@
             <div class="border py-3 px-3 {{template "ui-border-clr"}}">
                 <div class="flex flex-col w-72">
                     <label for="twitch_login" class="pb-2">Twitch Username</label>
-                    <input type="text" id="twitch_login" name="twitch_login" class="w-full {{template "input-class"}} py-2 px-4 items-center w-full" placeholder="forsen" autocomplete="off"></input>
+                    <input type="text" id="twitch_login" name="twitch_login" class="w-full {{template "input-class"}}
+                        py-2 px-4 items-center w-full" placeholder="forsen" autocomplete="off"></input>
                     <div class="flex pt-4 justify-start font-bold" hx-ext="path-params">
                         <div>
-                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/add_admin" hx-include="[name='twitch_login']" hx-target="#permission_result_2">Grant</button>
+                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/add_admin"
+                                hx-include="[name='twitch_login']" hx-target="#permission_result_2">Grant</button>
                         </div>
                         <div class="flex-grow pl-8">
-                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/remove_admin" hx-include="[name='twitch_login']" hx-target="#permission_result_2">Revoke</button>
+                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/remove_admin"
+                                hx-include="[name='twitch_login']" hx-target="#permission_result_2">Revoke</button>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="pt-4" id="permission_result_2"></div>
+        </div>
+    </div>
+    <div class="flex pt-8">
+        <div class="flex flex-col pl-4">
+            <div class="pb-1 font-medium">Manage Control Panel Access</div>
+            <div class="border py-3 px-3 {{template "ui-border-clr"}}">
+                <div class="flex flex-col w-96">
+                    <label for="from_user" class="pb-2">Grant Access To (User)</label>
+                    <input type="text" id="from_user" name="from_user" class="w-full {{template "input-class"}} py-2
+                        px-4 items-center w-full" placeholder="forsen" autocomplete="off"></input>
+
+                    <label for="to_user" class="pt-4 pb-2">For Channel (User)</label>
+                    <input type="text" id="to_user" name="to_user" class="w-full {{template "input-class"}} py-2 px-4
+                        items-center w-full" placeholder="jaskuz" autocomplete="off"></input>
+
+                    <div class="flex pt-4 justify-start font-bold">
+                        <div>
+                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/add_relation"
+                                hx-include="[name='from_user'],[name='to_user']"
+                                hx-target="#relation_result">Grant</button>
+                        </div>
+                        <div class="flex-grow pl-8">
+                            <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/admin/remove_relation"
+                                hx-include="[name='from_user'],[name='to_user']"
+                                hx-target="#relation_result">Revoke</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="pt-4" id="relation_result"></div>
         </div>
     </div>
     <div class="flex pt-8">
@@ -46,7 +81,9 @@
                     <div class="flex items-center pt-3">
                         <div class="w-36">{{ .Login }}</div>
                         <div class="flex flex-grow justify-end" id="mod_user_id_{{ .UserID }}">
-                            <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/admin/remove_mod" hx-vals='{"twitch_login": "{{ .Login }}"}' hx-target="#mod_user_id_{{ .UserID }}">Revoke</button>
+                            <button class="w-24 py-1 px-4 {{template "button-2"}}" hx-post="/admin/remove_mod"
+                                hx-vals='{"twitch_login": "{{ .Login }}"}'
+                                hx-target="#mod_user_id_{{ .UserID }}">Revoke</button>
                         </div>
                     </div>
                     {{ else }}

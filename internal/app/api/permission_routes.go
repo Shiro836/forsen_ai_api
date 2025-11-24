@@ -199,7 +199,7 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 	}
 }
 
-func (api *API) manageRelation(relationType db.RelationType) http.HandlerFunc {
+func (api *API) manageRelation(action permissionAction, relationType db.RelationType) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		initiatorUser := ctxstore.GetUser(r.Context())
 		if initiatorUser == nil {
@@ -208,6 +208,114 @@ func (api *API) manageRelation(relationType db.RelationType) http.HandlerFunc {
 			return
 		}
 
-		panic("finish me")
+		fromUserLogin := r.FormValue("from_user")
+		toUserLogin := r.FormValue("to_user")
+
+		if len(fromUserLogin) == 0 || len(toUserLogin) == 0 {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusBadRequest,
+				ErrorMessage: "Both users must be provided",
+			})
+
+			return
+		}
+
+		twitchAPI, err := api.twitchClient.NewHelixClient(initiatorUser.TwitchAccessToken, initiatorUser.TwitchRefreshToken)
+		if err != nil {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: "twitch client err: " + err.Error(),
+			})
+
+			return
+		}
+
+		// Get both users
+		resp, err := twitchAPI.GetUsers(&helix.UsersParams{
+			Logins: []string{
+				fromUserLogin,
+				toUserLogin,
+			},
+		})
+		if err != nil {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: fmt.Sprintf("twitch get users err: %v", err),
+			})
+
+			return
+		}
+		if resp == nil || len(resp.Data.Users) != 2 {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusBadRequest,
+				ErrorMessage: "One or both users not found",
+			})
+
+			return
+		}
+
+		var fromUser, toUser helix.User
+		for _, u := range resp.Data.Users {
+			if u.Login == fromUserLogin {
+				fromUser = u
+			} else if u.Login == toUserLogin {
+				toUser = u
+			}
+		}
+
+		fromUserID, err := strconv.Atoi(fromUser.ID)
+		if err != nil {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: fmt.Sprintf("failed to parse from user id: %v", err),
+			})
+
+			return
+		}
+
+		toUserID, err := strconv.Atoi(toUser.ID)
+		if err != nil {
+			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+				ErrorCode:    http.StatusInternalServerError,
+				ErrorMessage: fmt.Sprintf("failed to parse to user id: %v", err),
+			})
+
+			return
+		}
+
+		relation := &db.Relation{
+			TwitchLogin1:  fromUser.Login,
+			TwitchUserID1: fromUserID,
+
+			TwitchLogin2:  toUser.Login,
+			TwitchUserID2: toUserID,
+
+			RelationType: relationType,
+		}
+
+		switch action {
+		case permissionActionAdd:
+			_, err = api.db.AddRelation(r.Context(), relation)
+			if err != nil {
+				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+					ErrorCode:    http.StatusInternalServerError,
+					ErrorMessage: fmt.Sprintf("failed to add relation: %v", err),
+				})
+
+				return
+			}
+		case permissionActionRemove:
+			err = api.db.RemoveRelation(r.Context(), relation)
+			if err != nil {
+				_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+					ErrorCode:    http.StatusInternalServerError,
+					ErrorMessage: fmt.Sprintf("failed to remove relation: %v", err),
+				})
+
+				return
+			}
+		}
+
+		_, _ = w.Write([]byte("Success"))
 	}
 }
