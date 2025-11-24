@@ -224,7 +224,7 @@ func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 		Prompt:           prompt,
 		MaxTokens:        c.cfg.MaxTokens,
 		Temperature:      0.5,
-		FrequencyPenalty: 0.9,
+		FrequencyPenalty: 1.1,
 		Stop:             []string{"###", "<START>", "<END>"},
 	})
 	if err != nil {
@@ -240,16 +240,14 @@ func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 	return longest, nil
 }
 
-func (c *Client) AskGuided(ctx context.Context, messages []Message, schema json.RawMessage) (string, error) {
-	zeroTemp := 0.0
-
+func (c *Client) AskGuided(ctx context.Context, messages []Message, schema json.RawMessage, temperature float64) (string, error) {
 	req := &ChatRequest{
 		Model:       c.cfg.Model,
 		Messages:    messages,
 		MaxTokens:   c.cfg.MaxTokens,
 		MinTokens:   c.cfg.MinTokens,
 		GuidedJSON:  schema,
-		Temperature: &zeroTemp,
+		Temperature: &temperature,
 	}
 
 	resp, err := c.reqChat(ctx, req)

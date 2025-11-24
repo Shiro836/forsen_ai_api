@@ -212,7 +212,7 @@ func (d *Detector) DetectCharacters(ctx context.Context, prompt string, characte
 	}
 
 	// Call LLM with guided JSON
-	response, err := d.client.AskGuided(ctx, messages, schemaBytes)
+	response, err := d.client.AskGuided(ctx, messages, schemaBytes, 0.0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call LLM: %w", err)
 	}
@@ -301,7 +301,8 @@ func detectionRules() string {
 		"2. Substring overlaps or vague titles are insufficient. Do not conflate different characters that share partial names.",
 		"3. When the prompt provides no strong evidence for any character, respond with an empty list.",
 		"4. Each character can appear at most once. Never invent names outside the catalog.",
-		"5. If random characters are requested, return it and follow the count if it's explicitly stated. Return 3 characters if asked for 3, return 2 chars if asked for 2.",
+		"5. Dr. Les Carter is NOT DrDisrespect and Dr. Disrespect is NOT Dr. Les Carter.",
+		"6. If random characters are requested, return it and follow the count if it's explicitly stated. Return 3 characters if asked for 3, return 2 chars if asked for 2.",
 	}
 	return strings.Join(rules, "\n")
 }

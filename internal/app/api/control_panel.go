@@ -348,6 +348,10 @@ loop:
 						rewardTypeStr = rewardType.String() // "BAJ TTS"
 						// no character card for universal TTS
 						charName = "-"
+					case db.TwitchRewardAgentic:
+						rewardTypeStr = rewardType.String() // "Agentic"
+						// no character card for agentic reward
+						charName = "-"
 					case db.TwitchRewardTTS:
 						// If TTS points to a specific character but earlier lookup failed, skip if cardID is nil
 						if cardID == nil {

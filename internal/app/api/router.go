@@ -11,8 +11,6 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/internal/app/processor"
-	"app/pkg/ai"
-	"app/pkg/llm"
 	"app/pkg/s3client"
 	"app/pkg/twitch"
 
@@ -32,9 +30,6 @@ type API struct {
 
 	connManager *conns.Manager
 
-	styleTts *ai.StyleTTSClient
-	llm      *llm.Client
-
 	twitchClient *twitch.Client
 
 	db *db.DB
@@ -44,15 +39,16 @@ type API struct {
 	cfg *Config
 
 	// Handlers for try feature
-	ttsHandler processor.InteractionHandler
-	aiHandler  processor.InteractionHandler
+	ttsHandler     processor.InteractionHandler
+	aiHandler      processor.InteractionHandler
+	agenticHandler processor.InteractionHandler
 
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 }
 
 func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager,
-	twitchClient *twitch.Client, styleTts *ai.StyleTTSClient, llm *llm.Client, db *db.DB, s3 *s3client.Client,
-	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler) *API {
+	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client,
+	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler) *API {
 	return &API{
 		cfg: cfg,
 
@@ -62,15 +58,13 @@ func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager,
 
 		twitchClient: twitchClient,
 
-		styleTts: styleTts,
-		llm:      llm,
-
 		db: db,
 
 		s3: s3,
 
-		ttsHandler: ttsHandler,
-		aiHandler:  aiHandler,
+		ttsHandler:     ttsHandler,
+		aiHandler:      aiHandler,
+		agenticHandler: agenticHandler,
 	}
 }
 
@@ -133,6 +127,9 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/characters/{character_id}/try", api.nav(api.tryCharacter))
 		router.Get("/ws/characters/{character_id}/try", api.tryCharacterWS)
 
+		router.Get("/agentic/try", api.nav(api.tryAgentic))
+		router.Get("/ws/agentic/try", api.tryAgenticWS)
+
 		router.Get("/new_message_example/{id}", api.elem(api.newMessageExample))
 
 		// router.Get("/characters/{character_id}/image", api.charImage)
@@ -142,6 +139,7 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Post("/characters/{character_id}/reward_ai", api.reward(db.TwitchRewardAI))
 
 		router.Post("/universal-tts/reward", http.HandlerFunc(api.universalTTSReward))
+		router.Post("/agentic/reward", http.HandlerFunc(api.agenticReward))
 
 		router.Post("/control/grant", http.HandlerFunc(api.controlPanelGrant))
 		router.Post("/control/revoke", http.HandlerFunc(api.controlPanelRevoke))

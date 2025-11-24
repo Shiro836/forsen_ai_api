@@ -618,6 +618,28 @@ func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (api *API) agenticReward(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+		return
+	}
+
+	err := api.createReward(r.Context(), w, user, nil, "", db.TwitchRewardAgentic, "")
+	if err != nil {
+		return
+	}
+}
+
+type tryPageData struct {
+	CharacterID   uuid.UUID
+	CharacterName string
+	AgenticMode   bool
+}
+
 // tryCharacter serves the try page for testing a character
 func (api *API) tryCharacter(r *http.Request) template.HTML {
 	user := ctxstore.GetUser(r.Context())
@@ -653,12 +675,10 @@ func (api *API) tryCharacter(r *http.Request) template.HTML {
 		})
 	}
 
-	return getHtml("try_character.html", &struct {
-		CharacterID   uuid.UUID
-		CharacterName string
-	}{
+	return getHtml("try_character.html", &tryPageData{
 		CharacterID:   characterID,
 		CharacterName: card.Name,
+		AgenticMode:   false,
 	})
 }
 
@@ -743,6 +763,9 @@ func (api *API) tryCharacterWS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
+	// Shared state to track current message
+	state := processor.NewProcessorState()
+
 	// READ FROM WS
 	go func() {
 		defer cancel()
@@ -762,6 +785,19 @@ func (api *API) tryCharacterWS(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			if action.Action == "stop" {
+				currentMsgID := state.GetCurrent()
+				if currentMsgID != uuid.Nil {
+					state.AddSkipped(currentMsgID)
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeSkip,
+						EventData: []byte(currentMsgID.String()),
+					})
+					logger.Info("stopped current message", "msg_id", currentMsgID)
+				}
+				continue
+			}
+
 			if action.Text == "" {
 				logger.Warn("empty text in action")
 				continue
@@ -771,9 +807,6 @@ func (api *API) tryCharacterWS(w http.ResponseWriter, r *http.Request) {
 
 			// Create a new message ID for this test
 			msgID := uuid.New()
-
-			// Create processor state
-			state := processor.NewProcessorState()
 			state.SetCurrent(msgID)
 
 			input := processor.InteractionInput{
@@ -786,7 +819,7 @@ func (api *API) tryCharacterWS(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Execute handler in goroutine
-			go func(act string) {
+			go func(act string, currentMsgID uuid.UUID) {
 				defer state.SetCurrent(uuid.Nil)
 
 				var handlerErr error
@@ -801,38 +834,217 @@ func (api *API) tryCharacterWS(w http.ResponseWriter, r *http.Request) {
 				}
 
 				if handlerErr != nil {
-					logger.Error("handler error", "action", act, "err", handlerErr)
+					logger.Error("handler failed", "err", handlerErr)
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeText,
+						EventData: []byte("Error: " + handlerErr.Error()),
+					})
 				}
-			}(action.Action)
+			}(action.Action, msgID)
+		}
+	}()
+
+	// Keep connection open until context is cancelled
+	// WRITE TO WS
+	go func() {
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := sendData(wsClient, conns.EventTypePing.String(), []byte("ping")); err != nil {
+					logger.Error("failed to send ping", "err", err)
+					return
+				}
+			case event := <-eventCh:
+				if err := sendData(wsClient, event.EventType.String(), event.EventData); err != nil {
+					logger.Error("failed to write to ws", "err", err)
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	// Keep connection open until context is cancelled
+	<-ctx.Done()
+}
+
+func (api *API) tryAgentic(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not logged in",
+		})
+	}
+
+	return getHtml("try_character.html", &tryPageData{
+		CharacterName: "Agentic Flow",
+		AgenticMode:   true,
+	})
+}
+
+func (api *API) tryAgenticWS(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("not authorized"))
+		return
+	}
+
+	logger := api.logger.With("user", user.TwitchLogin, "handler", "tryAgenticWS")
+	logger.Info("received websocket connection request")
+
+	wsConn, err := ws.Upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		logger.Error("failed to upgrade to websocket connection", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	wsClient, done := ws.NewWsClient(wsConn)
+	defer func() {
+		logger.Info("closing websocket connection")
+		wsClient.Close()
+	}()
+
+	logger.Info("websocket connection established")
+
+	userSettings, err := api.db.GetUserSettings(r.Context(), user.ID)
+	if err != nil {
+		logger.Warn("failed to get user settings, using defaults", "err", err)
+		userSettings = &db.UserSettings{}
+	}
+
+	eventCh := make(chan *conns.DataEvent, 100)
+	defer close(eventCh)
+
+	eventWriter := conns.EventWriter(func(event *conns.DataEvent) bool {
+		select {
+		case eventCh <- event:
+			return true
+		default:
+			logger.Warn("event channel full, dropping event")
+			return false
+		}
+	})
+
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// Shared state to track current message
+	state := processor.NewProcessorState()
+
+	// READ FROM WS
+	go func() {
+		defer cancel()
+		for {
+			msg, err := wsClient.Read()
+			if err != nil {
+				if !errors.Is(err, ws.ErrClosed) {
+					logger.Error("failed to read from ws", "err", err)
+				}
+				break
+			}
+
+			var action *tryAction
+			err = json.Unmarshal(msg.Message, &action)
+			if err != nil {
+				logger.Error("failed to unmarshal message from ws", "err", err)
+				continue
+			}
+
+			// Handle stop action
+			if action.Action == "stop" {
+				currentMsgID := state.GetCurrent()
+				if currentMsgID != uuid.Nil {
+					state.AddSkipped(currentMsgID)
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeSkip,
+						EventData: []byte(currentMsgID.String()),
+					})
+					logger.Info("stopped current message", "msg_id", currentMsgID)
+				}
+				continue
+			}
+
+			if action.Text == "" {
+				logger.Warn("empty text in action")
+				continue
+			}
+
+			logger.Info("processing try action", "action", action.Action, "text", action.Text)
+
+			msgID := uuid.New()
+			state.SetCurrent(msgID)
+
+			// Create dummy card with user ID to allow access to private characters
+			dummyCard := &db.Card{
+				OwnerUserID: user.ID,
+			}
+
+			input := processor.InteractionInput{
+				Requester:    "Demo User",
+				Message:      action.Text,
+				Character:    dummyCard,
+				UserSettings: userSettings,
+				MsgID:        msgID.String(),
+				State:        state,
+			}
+
+			go func(act string, currentMsgID uuid.UUID) {
+				defer state.SetCurrent(uuid.Nil)
+
+				var handlerErr error
+				switch act {
+				case "agentic":
+					handlerErr = api.agenticHandler.Handle(ctx, input, eventWriter)
+				default:
+					logger.Error("unknown action", "action", act)
+					return
+				}
+
+				if handlerErr != nil {
+					logger.Error("handler failed", "err", handlerErr)
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeText,
+						EventData: []byte("Error: " + handlerErr.Error()),
+					})
+				}
+			}(action.Action, msgID)
 		}
 	}()
 
 	// WRITE TO WS
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
+	go func() {
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
 
-loop:
-	for {
-		select {
-		case <-done:
-			break loop
-		case <-ctx.Done():
-			break loop
-		case <-ticker.C:
-			if err := sendData(wsClient, conns.EventTypePing.String(), []byte("ping")); err != nil {
-				logger.Error("failed to send ping to ws conn", "err", err)
-				break loop
-			}
-		case event, ok := <-eventCh:
-			if !ok {
-				logger.Info("event channel closed")
-				break loop
-			}
-
-			if err := sendData(wsClient, event.EventType.String(), event.EventData); err != nil {
-				logger.Error("failed to send data to ws conn", "err", err)
-				break loop
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := sendData(wsClient, conns.EventTypePing.String(), []byte("ping")); err != nil {
+					logger.Error("failed to send ping", "err", err)
+					return
+				}
+			case event := <-eventCh:
+				// Convert event to WS message
+				if err := sendData(wsClient, event.EventType.String(), event.EventData); err != nil {
+					logger.Error("failed to write to ws", "err", err)
+					return
+				}
+			case <-done:
+				return
 			}
 		}
-	}
+	}()
+
+	<-ctx.Done()
 }

@@ -15,6 +15,8 @@ var Upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+const TextMessage = websocket.TextMessage
+
 type Message struct {
 	MsgType int
 	Message []byte

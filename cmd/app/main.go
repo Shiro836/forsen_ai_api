@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"app/internal/app/conns"
 	"app/internal/app/nvidia"
 	"app/internal/app/processor"
+	"app/pkg/agentic"
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
@@ -83,9 +85,15 @@ func main() {
 
 	llmModel := llm.New(httpClient, &cfg.LLM)
 	imageLlm := llm.New(httpClient, &cfg.ImageLLM)
-	styleTts := ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
+	ffmpegClient := ffmpeg.New(&cfg.Ffmpeg)
+	var ttsEngine ai.TTSEngine
+	if strings.TrimSpace(cfg.IndexTTS.URL) != "" {
+		indexClient := ai.NewIndexTTSClient(httpClient, &cfg.IndexTTS)
+		ttsEngine = ai.NewIndexTTSEngine(indexClient, ffmpegClient)
+	} else {
+		ttsEngine = ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
+	}
 	whisper := whisperx.New(httpClient, &cfg.Whisper)
-	ffmpeg := ffmpeg.New(&cfg.Ffmpeg)
 
 	// init s3 client
 	s3, err := s3client.New(ctx, &cfg.S3)
@@ -106,21 +114,25 @@ func main() {
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
 
 	// 1. Create Service (Shared Dependencies)
-	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpeg, styleTts, whisper, llmModel, imageLlm, connManager)
+	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, whisper, llmModel, imageLlm, connManager)
 
 	// 2. Create Handlers
 	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), llmModel, imageLlm, db, s3, procService)
 	ttsHandler := processor.NewTTSHandler(logger.WithGroup("tts_handler"), db, procService)
 	universalHandler := processor.NewUniversalHandler(logger.WithGroup("universal_handler"), db, procService)
 
+	agenticDetector := agentic.NewDetector(llmModel)
+	agenticPlanner := agentic.NewPlanner(llmModel)
+	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, llmModel, procService)
+
 	// 3. Create Processor with Handlers
-	proc := processor.NewProcessor(logger.WithGroup("processor"), db, connManager, aiHandler, ttsHandler, universalHandler)
+	proc := processor.NewProcessor(logger.WithGroup("processor"), db, connManager, aiHandler, ttsHandler, universalHandler, agenticHandler)
 
 	conns.SetProcessor(connManager, proc)
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, twitchClient, styleTts, llmModel, db, s3, ttsHandler, aiHandler)
+	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, twitchClient, db, s3, ttsHandler, aiHandler, agenticHandler)
 
 	router := api.NewRouter()
 

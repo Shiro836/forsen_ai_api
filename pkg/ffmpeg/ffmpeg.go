@@ -179,3 +179,42 @@ func (c *Client) CutAudio(ctx context.Context, data []byte, maxDuration time.Dur
 
 	return output, nil
 }
+
+func (c *Client) TrimToWav(ctx context.Context, data []byte, maxDuration time.Duration) ([]byte, error) {
+	inputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
+	outputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString()+".wav")
+
+	defer os.Remove(inputPath)
+	defer os.Remove(outputPath)
+
+	if err := os.WriteFile(inputPath, data, 0644); err != nil {
+		return nil, fmt.Errorf("write input file: %w", err)
+	}
+
+	args := []string{"-i", inputPath}
+	if maxDuration > 0 {
+		args = append(args, "-t", fmt.Sprintf("%.3f", maxDuration.Seconds()))
+	}
+	args = append(args,
+		"-ar", "44100",
+		"-ac", "1",
+		"-f", "wav",
+		"-y",
+		outputPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to run ffmpeg trim to wav: %w, stderr: %s", err, stderr.String())
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read trimmed wav output: %w", err)
+	}
+
+	return output, nil
+}

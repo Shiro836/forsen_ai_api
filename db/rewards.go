@@ -13,6 +13,7 @@ const (
 	TwitchRewardTTS TwitchRewardType = iota
 	TwitchRewardAI
 	TwitchRewardUniversalTTS
+	TwitchRewardAgentic
 )
 
 func (t TwitchRewardType) String() string {
@@ -23,6 +24,8 @@ func (t TwitchRewardType) String() string {
 		return "AI"
 	case TwitchRewardUniversalTTS:
 		return "BAJ TTS"
+	case TwitchRewardAgentic:
+		return "Agent BAJ"
 	default:
 		return "unknown"
 	}
@@ -97,4 +100,8 @@ func (db *DB) GetRewardByTwitchReward(ctx context.Context, userID uuid.UUID, twi
 
 func (db *DB) UpsertUniversalTTSReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) error {
 	return db.UpsertTwitchReward(ctx, userID, nil, twitchRewardID, TwitchRewardUniversalTTS)
+}
+
+func (db *DB) UpsertAgenticReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) error {
+	return db.UpsertTwitchReward(ctx, userID, nil, twitchRewardID, TwitchRewardAgentic)
 }

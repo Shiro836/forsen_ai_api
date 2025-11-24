@@ -8,35 +8,53 @@ import (
 	"strings"
 
 	"app/db"
+	"app/pkg/charutil"
 )
 
-func (s *Service) craftPrompt(char *db.Card, requester string, message string) (string, error) {
+func (s *Service) craftPrompt(char *db.Card, requester string, message string, history ...string) (string, error) {
 	data := char.Data
 
-	messageExamples := &strings.Builder{}
-	for _, msgExample := range data.MessageExamples {
-		messageExamples.WriteString(fmt.Sprintf("<START>###UserName: %s\n###%s: %s<END>\n", msgExample.Request, data.Name, msgExample.Response))
-	}
-
 	prompt := &strings.Builder{}
-	prompt.WriteString("Start request/response pairs with <START> and end with <END>\n")
-	if len(data.Name) != 0 {
-		prompt.WriteString(fmt.Sprintf("Name: %s\n", data.Name))
-	}
-	if len(data.Description) != 0 {
-		prompt.WriteString(fmt.Sprintf("Description: %s\n", data.Description))
-	}
-	if len(data.Personality) != 0 {
-		prompt.WriteString(fmt.Sprintf("Personality: %s\n", data.Personality))
-	}
-	if len(data.MessageExamples) != 0 {
-		prompt.WriteString(fmt.Sprintf("Message Examples: %s", messageExamples.String()))
-	}
+
+	prompt.WriteString(charutil.BuildCharacterContext(data.Name, data.Description, data.Personality, data.MessageExamples))
+
 	if len(data.SystemPrompt) != 0 {
 		prompt.WriteString(fmt.Sprintf("System Instructions: %s\n", data.SystemPrompt))
 	}
 
+	for _, turn := range history {
+		if turn != "" {
+			prompt.WriteString(fmt.Sprintf("<START>%s<END>\n", turn))
+		}
+	}
+
 	prompt.WriteString(fmt.Sprintf("Prompt: <START>###%s: %s\n###%s: ", requester, message, data.Name))
+
+	return prompt.String(), nil
+}
+
+func (s *Service) dialoguePrompt(char *db.Card, scenario string, history ...string) (string, error) {
+	data := char.Data
+
+	prompt := &strings.Builder{}
+
+	prompt.WriteString(charutil.BuildCharacterContext(data.Name, data.Description, data.Personality, data.MessageExamples))
+
+	if len(data.SystemPrompt) != 0 {
+		prompt.WriteString(fmt.Sprintf("System Instructions: %s\n", data.SystemPrompt))
+	}
+
+	if scenario != "" {
+		prompt.WriteString(fmt.Sprintf("Topic: %s\n", scenario))
+	}
+
+	for _, turn := range history {
+		if turn != "" {
+			prompt.WriteString(fmt.Sprintf("<START>%s<END>\n", turn))
+		}
+	}
+
+	prompt.WriteString(fmt.Sprintf("<START>%s: ", data.Name))
 
 	return prompt.String(), nil
 }

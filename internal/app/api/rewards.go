@@ -96,7 +96,15 @@ func (api *API) createReward(ctx context.Context, w http.ResponseWriter, user *d
 		return err
 	}
 
-	err = api.db.UpsertTwitchReward(ctx, user.ID, cardID, resp.Data.ChannelCustomRewards[0].ID, rewardType)
+	switch rewardType {
+	case db.TwitchRewardUniversalTTS:
+		err = api.db.UpsertUniversalTTSReward(ctx, user.ID, resp.Data.ChannelCustomRewards[0].ID)
+	case db.TwitchRewardAgentic:
+		err = api.db.UpsertAgenticReward(ctx, user.ID, resp.Data.ChannelCustomRewards[0].ID)
+	default:
+		err = api.db.UpsertTwitchReward(ctx, user.ID, cardID, resp.Data.ChannelCustomRewards[0].ID, rewardType)
+	}
+
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,

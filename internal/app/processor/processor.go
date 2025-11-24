@@ -31,9 +31,10 @@ type Processor struct {
 	aiHandler        InteractionHandler
 	ttsHandler       InteractionHandler
 	universalHandler InteractionHandler
+	agenticHandler   InteractionHandler
 }
 
-func NewProcessor(logger *slog.Logger, db *db.DB, connManager *conns.Manager, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler) *Processor {
+func NewProcessor(logger *slog.Logger, db *db.DB, connManager *conns.Manager, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, agenticHandler InteractionHandler) *Processor {
 	return &Processor{
 		logger:           logger,
 		db:               db,
@@ -41,6 +42,7 @@ func NewProcessor(logger *slog.Logger, db *db.DB, connManager *conns.Manager, ai
 		aiHandler:        aiHandler,
 		ttsHandler:       ttsHandler,
 		universalHandler: universalHandler,
+		agenticHandler:   agenticHandler,
 	}
 }
 
@@ -217,6 +219,10 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 	case db.TwitchRewardAI:
 		if err := p.aiHandler.Handle(ctx, input, eventWriter); err != nil {
 			return fmt.Errorf("ai handler error: %w", err)
+		}
+	case db.TwitchRewardAgentic:
+		if err := p.agenticHandler.Handle(ctx, input, eventWriter); err != nil {
+			return fmt.Errorf("agentic handler error: %w", err)
 		}
 	default:
 		logger.Error("unexpected reward type", "reward_type", rewardType)
