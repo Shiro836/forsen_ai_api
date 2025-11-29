@@ -9,6 +9,10 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 
+	"github.com/prometheus/client_golang/prometheus"
+
+	"app/internal/app/monitoring"
+
 	"github.com/google/uuid"
 )
 
@@ -28,6 +32,9 @@ func NewUniversalHandler(logger *slog.Logger, db *db.DB, service *Service) *Univ
 
 func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, eventWriter conns.EventWriter) error {
 	logger := h.logger.With("handler", "Universal", "requester", input.Requester)
+
+	timer := prometheus.NewTimer(monitoring.AppMetrics.UniversalQueryTime)
+	defer timer.ObserveDuration()
 
 	msgID, err := uuid.Parse(input.MsgID)
 	if err != nil {

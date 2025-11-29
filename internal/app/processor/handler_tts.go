@@ -9,6 +9,9 @@ import (
 	"app/internal/app/conns"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"app/internal/app/monitoring"
 )
 
 type TTSHandler struct {
@@ -27,6 +30,9 @@ func NewTTSHandler(logger *slog.Logger, db *db.DB, service *Service) *TTSHandler
 
 func (h *TTSHandler) Handle(ctx context.Context, input InteractionInput, eventWriter conns.EventWriter) error {
 	logger := h.logger.With("handler", "TTS", "requester", input.Requester)
+
+	timer := prometheus.NewTimer(monitoring.AppMetrics.TTSQueryTime)
+	defer timer.ObserveDuration()
 
 	if input.Character != nil {
 		if err := h.db.IncrementCharTTSRedeems(ctx, input.Character.ID); err != nil {

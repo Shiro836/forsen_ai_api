@@ -24,6 +24,13 @@ echo "Building $PKG_PATH -> $OUT_BIN"
 GO111MODULE=on CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" \
   go build -trimpath -ldflags "-s -w" -o "$OUT_BIN" "$PKG_PATH"
 
-echo "Done: $OUT_BIN"
+OUT_BIN_INGEST="$REPO_ROOT/twitch-ingest"
+PKG_PATH_INGEST="./cmd/twitch-ingest"
+
+echo "Building $PKG_PATH_INGEST -> $OUT_BIN_INGEST"
+GO111MODULE=on CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" \
+  go build -trimpath -ldflags "-s -w" -o "$OUT_BIN_INGEST" "$PKG_PATH_INGEST"
+
+echo "Done: $OUT_BIN, $OUT_BIN_INGEST"
 
 

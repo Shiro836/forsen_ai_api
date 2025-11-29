@@ -16,6 +16,9 @@ import (
 	"app/pkg/s3client"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+
+	"app/internal/app/monitoring"
 )
 
 type AIHandler struct {
@@ -40,6 +43,9 @@ func NewAIHandler(logger *slog.Logger, llmModel LLMClient, imageLlm LLMClient, d
 
 func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWriter conns.EventWriter) error {
 	logger := h.logger.With("handler", "AI", "requester", input.Requester)
+
+	timer := prometheus.NewTimer(monitoring.AppMetrics.AIQueryTime)
+	defer timer.ObserveDuration()
 
 	// Increment AI redeems for the character
 	if input.Character != nil {

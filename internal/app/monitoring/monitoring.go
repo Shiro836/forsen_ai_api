@@ -1,4 +1,4 @@
-package nvidia
+package monitoring
 
 import (
 	"bytes"
@@ -42,7 +42,7 @@ func monitorNvidia(ctx context.Context) error {
 					return
 				}
 
-				metrics.NvidiaStats.WithLabelValues(gpuName, "memory_used").Set(float64(val))
+				AppMetrics.NvidiaStats.WithLabelValues(gpuName, "memory_used").Set(float64(val))
 			},
 		},
 		{
@@ -53,7 +53,7 @@ func monitorNvidia(ctx context.Context) error {
 					return
 				}
 
-				metrics.NvidiaStats.WithLabelValues(gpuName, "memory_total").Set(float64(val))
+				AppMetrics.NvidiaStats.WithLabelValues(gpuName, "memory_total").Set(float64(val))
 			},
 		},
 		{
@@ -64,7 +64,7 @@ func monitorNvidia(ctx context.Context) error {
 					return
 				}
 
-				metrics.NvidiaStats.WithLabelValues(gpuName, "temperature_gpu").Set(float64(val))
+				AppMetrics.NvidiaStats.WithLabelValues(gpuName, "temperature_gpu").Set(float64(val))
 			},
 		},
 		{
@@ -75,7 +75,7 @@ func monitorNvidia(ctx context.Context) error {
 					return
 				}
 
-				metrics.NvidiaStats.WithLabelValues(gpuName, "power_draw").Set(float64(val))
+				AppMetrics.NvidiaStats.WithLabelValues(gpuName, "power_draw").Set(float64(val))
 			},
 		},
 	}

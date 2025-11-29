@@ -12,6 +12,10 @@ import (
 	"app/pkg/llm"
 	"app/pkg/whisperx"
 
+	"github.com/prometheus/client_golang/prometheus"
+
+	"app/internal/app/monitoring"
+
 	"github.com/google/uuid"
 )
 
@@ -39,6 +43,9 @@ func NewAgenticHandler(logger *slog.Logger, db *db.DB, detector *agentic.Detecto
 
 func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eventWriter conns.EventWriter) error {
 	logger := h.logger.With("handler", "Agentic", "requester", input.Requester)
+
+	timer := prometheus.NewTimer(monitoring.AppMetrics.AgenticQueryTime)
+	defer timer.ObserveDuration()
 
 	allChars, err := h.db.GetAllCharacterBasicInfo(ctx)
 	if err != nil {

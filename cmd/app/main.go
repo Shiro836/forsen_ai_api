@@ -13,24 +13,23 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"app/cfg"
 	"app/db"
 	"app/internal/app/api"
 	"app/internal/app/conns"
-	"app/internal/app/nvidia"
+	"app/internal/app/monitoring"
 	"app/internal/app/processor"
 	"app/pkg/agentic"
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
 	"app/pkg/s3client"
-	"app/pkg/slg"
 	"app/pkg/twitch"
 	"app/pkg/whisperx"
 
-	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v3"
 )
@@ -58,27 +57,12 @@ func main() {
 		Timeout: 30 * time.Second,
 	}
 
-	influxDBClient := influxdb2.NewClient(cfg.InfluxDB.URL, cfg.InfluxDB.Token)
-
-	influxCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if ok, err := influxDBClient.Ping(influxCtx); err != nil {
-		log.Fatal("failed to ping influxdb", err)
-	} else if !ok {
-		log.Fatal("failed to ping influxdb")
-	}
-
-	influxWriter := influxDBClient.WriteAPI(cfg.InfluxDB.Org, cfg.InfluxDB.Bucket)
-	defer influxWriter.Flush()
-
-	logger := slog.New(&slg.InfluxDBHandler{InfluxDBWriter: influxWriter})
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	// logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	slog.SetDefault(logger)
 
-	reg := prometheus.NewRegistry()
-	nvidia.RegisterMetrics(reg)
+	monitoring.RegisterMetrics(prometheus.DefaultRegisterer)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -137,7 +121,7 @@ func main() {
 	router := api.NewRouter()
 
 	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	srv := &http.Server{
 		Addr:           ":" + strconv.Itoa(cfg.Api.Port),
@@ -146,22 +130,6 @@ func main() {
 	}
 
 	wg := sync.WaitGroup{}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-	loop:
-		for {
-			select {
-			case <-time.After(5 * time.Second):
-			case <-ctx.Done():
-				break loop
-			}
-
-			nvidia.GatherAndSendMetrics(ctx, reg, influxWriter, logger.WithGroup("metrics"))
-		}
-	}()
 
 	wg.Add(1)
 	go func() {
@@ -209,12 +177,12 @@ func main() {
 		}
 	}()
 
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	// 	nvidia.MonitoringLoop(ctx, logger.WithGroup("nvidia"))
-	// }()
+		monitoring.MonitoringLoop(ctx, logger.WithGroup("nvidia"))
+	}()
 
 	select {
 	case <-ctx.Done():

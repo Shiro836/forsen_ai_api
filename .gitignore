@@ -2,8 +2,11 @@ cfg/cfg.yaml
 cfg/docker_cfg.yaml
 cfg/prod_cfg.yaml
 
-prod
+/prod
 prod.sh
+/twitch-ingest
+
+backup_*.sql
 
 playground
 

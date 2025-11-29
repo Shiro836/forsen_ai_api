@@ -75,6 +75,34 @@ func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage, 
 	return id, nil
 }
 
+func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage, data *MessageData, uniqueID string) (uuid.UUID, error) {
+	var id uuid.UUID
+
+	// We use ON CONFLICT DO UPDATE to ensure RETURNING works.
+	// We update the updated timestamp to signal it was seen again, or just a dummy update.
+
+	err := db.QueryRow(ctx, `
+		INSERT INTO
+			msg_queue (
+				user_id,
+				msg,
+				status,
+				data,
+				unique_id
+			)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (unique_id) WHERE unique_id IS NOT NULL 
+		DO UPDATE SET unique_id = EXCLUDED.unique_id
+		RETURNING id
+	`, userID, msg, MsgStatusWait, data, uniqueID).Scan(&id)
+
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to push ingest message: %w", err)
+	}
+
+	return id, nil
+}
+
 func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error) {
 	msg := Message{}
 

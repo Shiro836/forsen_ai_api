@@ -6,13 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"sync"
 	"time"
 
 	"app/db"
 	"app/internal/app/conns"
-	"app/pkg/twitch"
 
 	"github.com/google/uuid"
 )
@@ -111,8 +109,6 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	state := NewProcessorState()
 
 	go p.handleControlSignals(ctx, updates, eventWriter, broadcaster, state, cancel)
-
-	go p.ingestTwitchMessages(ctx, broadcaster, cancel)
 
 	return p.processLoop(ctx, eventWriter, broadcaster, state)
 }
@@ -338,52 +334,5 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 		case <-ctx.Done():
 			return
 		}
-	}
-}
-
-func (p *Processor) ingestTwitchMessages(ctx context.Context, broadcaster *db.User, cancel context.CancelFunc) {
-	defer cancel()
-	logger := p.logger.With("user", broadcaster.TwitchLogin, "component", "ingest")
-
-	twitchChatCh := twitch.MessagesFetcher(ctx, broadcaster.TwitchLogin, true)
-	imgRegex := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`)
-
-	for msg := range twitchChatCh {
-		if len(msg.Message) == 0 || len(msg.TwitchLogin) == 0 {
-			continue
-		}
-
-		if len(msg.RewardID) == 0 {
-			continue
-		}
-
-		// msg.Message = unidecode.Unidecode(msg.Message)
-
-		imgMatches := imgRegex.FindAllStringSubmatch(msg.Message, -1)
-		imageIDs := make([]string, 0, 2)
-		for _, m := range imgMatches {
-			if len(m) >= 2 {
-				imageIDs = append(imageIDs, m[1])
-				if len(imageIDs) == 2 {
-					break
-				}
-			}
-		}
-
-		showImages := false
-
-		_, err := p.db.PushMsg(ctx, broadcaster.ID, db.TwitchMessage{
-			TwitchLogin: msg.TwitchLogin,
-			Message:     msg.Message,
-			RewardID:    msg.RewardID,
-		}, &db.MessageData{ImageIDs: imageIDs, ShowImages: &showImages})
-		if err != nil {
-			logger.Error("error pushing message to db", "err", err)
-		}
-		if len(imageIDs) > 0 {
-			logger.Info("stored image ids with message", "ids", imageIDs)
-		}
-
-		p.connManager.NotifyControlPanel(broadcaster.ID)
 	}
 }

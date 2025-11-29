@@ -1,21 +1,58 @@
 version: '3.9'
 
 services:
-  influxdb:
-    image: influxdb:2.7.5
+  # influxdb:
+  #   image: influxdb:2.7.5
+  #   ports:
+  #     - 8085:8086
+  #   environment:
+  #     - DOCKER_INFLUXDB_INIT_MODE=setup
+  #     - DOCKER_INFLUXDB_INIT_USERNAME=forsen
+  #     - DOCKER_INFLUXDB_INIT_PASSWORD=forsenxd
+  #     - DOCKER_INFLUXDB_INIT_ORG=forsen
+  #     - DOCKER_INFLUXDB_INIT_BUCKET=forsen
+  #     - DOCKER_INFLUXDB_INIT_RETENTION=1w
+  #     - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=forsen-forsen-forsen-forsen
+  #   volumes:
+  #     - influxdb-data:/var/lib/influxdb2
+  #   restart: unless-stopped
+  #   networks:
+  #     - forsen
+
+  prometheus:
+    image: prom/prometheus:latest
     ports:
-      - 8085:8086
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=forsen
-      - DOCKER_INFLUXDB_INIT_PASSWORD=forsenxd
-      - DOCKER_INFLUXDB_INIT_ORG=forsen
-      - DOCKER_INFLUXDB_INIT_BUCKET=forsen
-      - DOCKER_INFLUXDB_INIT_RETENTION=1w
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=forsen-forsen-forsen-forsen
+      - 9091:9090
     volumes:
-      - influxdb-data:/var/lib/influxdb2
+      - ./cfg/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    networks:
+      - forsen
+
+  loki:
+    image: grafana/loki:2.9.2
+    ports:
+      - 3100:3100
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./cfg/loki/local-config.yaml:/etc/loki/local-config.yaml
+    networks:
+      - forsen
+
+  promtail:
+    image: grafana/promtail:2.9.2
+    user: root
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/log/journal:/var/log/journal
+      - /etc/machine-id:/etc/machine-id
+      - ./cfg/promtail/config.yaml:/etc/promtail/config.yaml
+    command: -config.file=/etc/promtail/config.yaml
     networks:
       - forsen
 
@@ -26,9 +63,16 @@ services:
       - 2999:3000
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_SERVER_DOMAIN=forsen.fun
+      - GF_SERVER_ROOT_URL=https://forsen.fun/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
+      - GF_SECURITY_ALLOW_EMBEDDING=true
     volumes:
       - grafana-data-1:/etc/grafana
       - grafana-data-2:/var/lib/grafana
+      - ./cfg/grafana/provisioning:/etc/grafana/provisioning
+      - ./cfg/grafana/dashboards:/var/lib/grafana/dashboards
     env_file:
       - .env
     networks:
