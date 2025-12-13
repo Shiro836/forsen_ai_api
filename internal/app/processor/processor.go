@@ -195,6 +195,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 
 	input := InteractionInput{
 		Requester:    msg.TwitchMessage.TwitchLogin,
+		Broadcaster:  broadcaster,
 		Message:      msg.TwitchMessage.Message,
 		Character:    charCard,
 		UserSettings: userSettings,

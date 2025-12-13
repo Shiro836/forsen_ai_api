@@ -29,7 +29,7 @@ func NewTTSHandler(logger *slog.Logger, db *db.DB, service *Service) *TTSHandler
 }
 
 func (h *TTSHandler) Handle(ctx context.Context, input InteractionInput, eventWriter conns.EventWriter) error {
-	logger := h.logger.With("handler", "TTS", "requester", input.Requester)
+	logger := h.logger.With("handler", "TTS", "requester", input.Requester, "user", input.Broadcaster.TwitchLogin)
 
 	timer := prometheus.NewTimer(monitoring.AppMetrics.TTSQueryTime)
 	defer timer.ObserveDuration()

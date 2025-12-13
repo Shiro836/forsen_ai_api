@@ -136,7 +136,7 @@ func (db *DB) GetCharCardByID(ctx context.Context, userID uuid.UUID, cardID uuid
 	return &card, nil
 }
 
-func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, userID uuid.UUID, twitchRewardID string) (*Card, TwitchRewardType, error) {
+func (db *DB) GetCharCardByTwitchRewardNoPerms(ctx context.Context, twitchRewardID string) (*Card, TwitchRewardType, error) {
 	var rewardType TwitchRewardType
 	var card Card
 	err := db.QueryRow(ctx, `

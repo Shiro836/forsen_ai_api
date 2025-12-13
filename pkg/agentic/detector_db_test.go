@@ -36,7 +36,7 @@ func TestDetectCharacters_DBIntegration(t *testing.T) {
 
 	// Create LLM client
 	httpClient := &http.Client{Timeout: 30 * time.Second}
-	client := llm.New(httpClient, &testCfg.LLM)
+	client := llm.New(httpClient, &testCfg.AgenticLLM)
 	detector := agentic.NewDetector(client)
 
 	// Fetch all characters from DB

@@ -68,6 +68,7 @@ func main() {
 	defer cancel()
 
 	llmModel := llm.New(httpClient, &cfg.LLM)
+	agenticLLM := llm.New(httpClient, &cfg.AgenticLLM)
 	imageLlm := llm.New(httpClient, &cfg.ImageLLM)
 	ffmpegClient := ffmpeg.New(&cfg.Ffmpeg)
 	var ttsEngine ai.TTSEngine
@@ -105,9 +106,9 @@ func main() {
 	ttsHandler := processor.NewTTSHandler(logger.WithGroup("tts_handler"), db, procService)
 	universalHandler := processor.NewUniversalHandler(logger.WithGroup("universal_handler"), db, procService)
 
-	agenticDetector := agentic.NewDetector(llmModel)
-	agenticPlanner := agentic.NewPlanner(llmModel)
-	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, llmModel, procService)
+	agenticDetector := agentic.NewDetector(agenticLLM)
+	agenticPlanner := agentic.NewPlanner(agenticLLM)
+	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, agenticLLM, procService)
 
 	// 3. Create Processor with Handlers
 	proc := processor.NewProcessor(logger.WithGroup("processor"), db, connManager, aiHandler, ttsHandler, universalHandler, agenticHandler)
@@ -116,7 +117,7 @@ func main() {
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, logger.WithGroup("api"), connManager, twitchClient, db, s3, ttsHandler, aiHandler, agenticHandler)
+	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, logger.WithGroup("api"), connManager, twitchClient, db, s3, ttsHandler, aiHandler, agenticHandler)
 
 	router := api.NewRouter()
 

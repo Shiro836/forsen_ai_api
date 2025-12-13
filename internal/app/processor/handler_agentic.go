@@ -42,7 +42,7 @@ func NewAgenticHandler(logger *slog.Logger, db *db.DB, detector *agentic.Detecto
 }
 
 func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eventWriter conns.EventWriter) error {
-	logger := h.logger.With("handler", "Agentic", "requester", input.Requester)
+	logger := h.logger.With("handler", "Agentic", "requester", input.Requester, "user", input.Broadcaster.TwitchLogin)
 
 	timer := prometheus.NewTimer(monitoring.AppMetrics.AgenticQueryTime)
 	defer timer.ObserveDuration()

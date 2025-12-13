@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
@@ -47,12 +50,14 @@ type API struct {
 	agenticHandler processor.InteractionHandler
 
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
+
+	ingestRestartURL string
 }
 
-func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager,
+func NewAPI(cfg *Config, ingestHost string, ingestPort int, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client,
 	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler) *API {
-	return &API{
+	api := &API{
 		cfg: cfg,
 
 		logger: logger,
@@ -69,6 +74,17 @@ func NewAPI(cfg *Config, logger *slog.Logger, connManager *conns.Manager,
 		aiHandler:      aiHandler,
 		agenticHandler: agenticHandler,
 	}
+
+	if ingestPort > 0 {
+		host := ingestHost
+		if host == "" {
+			host = "127.0.0.1"
+		}
+
+		api.ingestRestartURL = fmt.Sprintf("http://%s:%d/restart", host, ingestPort)
+	}
+
+	return api
 }
 
 func (api *API) NewRouter() *chi.Mux {
@@ -188,6 +204,38 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Post("/remove_streamer", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionStreamer)))
 
 			router.Post("/restart", func(w http.ResponseWriter, r *http.Request) {
+				if api.ingestRestartURL != "" {
+					ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+					defer cancel()
+
+					req, err := http.NewRequestWithContext(ctx, http.MethodPost, api.ingestRestartURL, nil)
+					if err != nil {
+						api.logger.Error("failed to build ingest restart request", "error", err)
+						http.Error(w, "failed to restart ingest service", http.StatusInternalServerError)
+
+						return
+					}
+
+					resp, err := http.DefaultClient.Do(req)
+					if err != nil {
+						api.logger.Error("failed to call ingest restart", "error", err)
+						http.Error(w, "failed to restart ingest service", http.StatusBadGateway)
+
+						return
+					}
+					defer resp.Body.Close()
+					io.Copy(io.Discard, resp.Body)
+
+					if resp.StatusCode >= http.StatusMultipleChoices {
+						api.logger.Error("ingest restart returned non-success", "status", resp.StatusCode)
+						http.Error(w, "ingest restart failed", http.StatusBadGateway)
+
+						return
+					}
+				} else {
+					api.logger.Warn("ingest restart url not configured; skipping ingest restart call")
+				}
+
 				cmds := [][]string{
 					// {"sudo", "systemctl", "restart", "lexi"},
 					// {"sudo", "systemctl", "restart", "style"},

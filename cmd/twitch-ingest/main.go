@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -24,8 +25,6 @@ import (
 func main() {
 	var cfgPath string
 	flag.StringVar(&cfgPath, "cfg-path", "cfg/cfg.yaml", "path to config file")
-	var metricsAddr string
-	flag.StringVar(&metricsAddr, "metrics-addr", ":8081", "address to expose metrics on")
 	flag.Parse()
 
 	var cfg *cfg.Config
@@ -51,6 +50,12 @@ func main() {
 	reg := prometheus.NewRegistry()
 	ingest.RegisterMetrics(reg)
 
+	if cfg.Ingest.Port == 0 {
+		log.Fatal("ingest port must be set in config")
+	}
+
+	metricsAddr := fmt.Sprintf("%s:%d", cfg.Ingest.Host, cfg.Ingest.Port)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -74,6 +79,21 @@ func main() {
 
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
+		mux.HandleFunc("/restart", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			logger.Info("restart requested via ingest /restart endpoint")
+			w.WriteHeader(http.StatusAccepted)
+			w.Write([]byte("ingest restart scheduled"))
+
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				cancel()
+			}()
+		})
 
 		logger.Info("starting metrics server", "addr", metricsAddr)
 		srv := &http.Server{

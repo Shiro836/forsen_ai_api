@@ -174,7 +174,7 @@ func TestDetectCharacters(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create LLM client from config
 			httpClient := &http.Client{Timeout: 30 * time.Second}
-			client := llm.New(httpClient, &testCfg.LLM)
+			client := llm.New(httpClient, &testCfg.AgenticLLM)
 			detector := agentic.NewDetector(client)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

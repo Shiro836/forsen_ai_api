@@ -42,7 +42,7 @@ func NewAIHandler(logger *slog.Logger, llmModel LLMClient, imageLlm LLMClient, d
 }
 
 func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWriter conns.EventWriter) error {
-	logger := h.logger.With("handler", "AI", "requester", input.Requester)
+	logger := h.logger.With("handler", "AI", "requester", input.Requester, "user", input.Broadcaster.TwitchLogin)
 
 	timer := prometheus.NewTimer(monitoring.AppMetrics.AIQueryTime)
 	defer timer.ObserveDuration()
@@ -223,12 +223,11 @@ The description should read like a clever commentary, not like someone talking a
 			llmResult = "empty response"
 		}
 		h.db.UpdateMessageData(ctx, msgID, &db.MessageData{AIResponse: llmResult})
-		h.service.connManager.NotifyControlPanel(input.Character.OwnerUserID) // Assuming UserID is available or we use broadcaster ID
+		h.service.connManager.NotifyControlPanel(input.Broadcaster.ID)
 	case <-ctx.Done():
 		return nil
 	}
 
-	// llmResult = unidecode.Unidecode(llmResult)
 	filteredResponse := h.service.FilterText(ctx, input.UserSettings, llmResult)
 
 	responseTtsAudio, textTimings, err := h.service.TTSWithTimings(ctx, filteredResponse, input.Character.Data.VoiceReference)

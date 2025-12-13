@@ -12,13 +12,15 @@ import (
 )
 
 type Config struct {
-	Api api.Config `yaml:"api"`
+	Api    api.Config   `yaml:"api"`
+	Ingest IngestConfig `yaml:"ingest"`
 
-	LLM      llm.Config        `yaml:"llm"`
-	ImageLLM llm.Config        `yaml:"image_llm"`
-	StyleTTS ai.StyleTTSConfig `yaml:"tts"`
-	IndexTTS ai.IndexTTSConfig `yaml:"index_tts"`
-	Whisper  whisperx.Config   `yaml:"whisper"`
+	LLM        llm.Config        `yaml:"llm"`
+	AgenticLLM llm.Config        `yaml:"agentic_llm"`
+	ImageLLM   llm.Config        `yaml:"image_llm"`
+	StyleTTS   ai.StyleTTSConfig `yaml:"tts"`
+	IndexTTS   ai.IndexTTSConfig `yaml:"index_tts"`
+	Whisper    whisperx.Config   `yaml:"whisper"`
 
 	Twitch twitch.Config `yaml:"twitch"`
 
@@ -29,6 +31,11 @@ type Config struct {
 	Ffmpeg ffmpeg.Config `yaml:"ffmpeg"`
 
 	S3 s3client.Config `yaml:"s3"`
+}
+
+type IngestConfig struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
 }
 
 type InfluxConfig struct {

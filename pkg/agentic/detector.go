@@ -119,6 +119,18 @@ var defaultDetectionExamples = []detectionExample{
 		Notes:    "Mentioning ForsenSpectate alone should not return Forsen; only include Forsen if he is explicitly referenced.",
 	},
 	{
+		Title:    "Explicit character names beat similarly named channels",
+		Prompt:   "forsen is the god gamer",
+		Expected: []string{"Forsen"},
+		Notes:    "When the exact name 'Forsen' appears, never return ForsenSpectate or other lookalikes.",
+	},
+	{
+		Title:    "Channel-specific phrasing resolves the character",
+		Prompt:   "The Surviving Narcissism host shares new tips",
+		Expected: []string{"Dr Les Carter"},
+		Notes:    "Use the character descriptions to recognize unique shows or recurring roles even when the full name is missing.",
+	},
+	{
 		Title:    "Keyword-driven identification",
 		Prompt:   "Udisen posts a new Terraria crafting guide",
 		Expected: []string{"Udisen"},
@@ -132,7 +144,30 @@ var defaultDetectionExamples = []detectionExample{
 	{
 		Title:  "Random Characters request",
 		Prompt: "2 random persons talk about microphone",
-		Notes:  "Return N random characters when explicitly asked about it.",
+		Expected: []string{
+			"Dr Les Carter",
+			"Forsen",
+		},
+		Notes: "When a prompt requests random characters, still return exact names from the catalog. " +
+			"If randomness is unclear, pick the first requested number of characters from the catalog order to stay deterministic.",
+	},
+	{
+		Title:    "CamelCase or punctuation differences still count",
+		Prompt:   "Forsen and DrDisrespect duel while Jesus watches",
+		Expected: []string{"Forsen", "DrDisRespect", "Jesus"},
+		Notes:    "Treat aliases like DrDisrespect or dr disrespect as DrDisRespect when the context clearly points to the same person.",
+	},
+	{
+		Title:    "Different doctors, different domains",
+		Prompt:   "The narcissism doctor argues with DrDisRespect in the arena",
+		Expected: []string{"Dr Les Carter", "DrDisRespect"},
+		Notes:    "Therapy or Surviving Narcissism references map to Dr Les Carter even though both names contain 'Dr'.",
+	},
+	{
+		Title:    "Do not censor explicit character names",
+		Prompt:   "Retard barges into the scene again",
+		Expected: []string{"Retard"},
+		Notes:    "If the catalog contains edgy names, still return them when explicitly mentioned.",
 	},
 }
 
@@ -174,6 +209,8 @@ func (d *Detector) DetectCharacters(ctx context.Context, prompt string, characte
 	systemPrompt := strings.Join([]string{
 		"You are a careful character detection assistant.",
 		"Use the provided character catalog and rules to decide which characters are clearly referenced.",
+		"Descriptions, short names, and show titles often imply the character even when the exact name is missing—make thoughtful inferences when the clue uniquely fits one entry.",
+		"The Surviving Narcissism therapist (\"narcissism doctor\") is Dr Les Carter, while DrDisRespect is a gaming streamer; never swap them.",
 		"Return only names from the catalog and prefer returning nothing when unsure.",
 	}, " ")
 
@@ -282,6 +319,7 @@ func buildCharacterCatalog(characters []db.CharacterBasicInfo) string {
 		if desc.Description == "" {
 			desc.Description = ""
 		}
+
 		descriptors = append(descriptors, desc)
 	}
 	if len(descriptors) == 0 {
@@ -298,11 +336,15 @@ func buildCharacterCatalog(characters []db.CharacterBasicInfo) string {
 func detectionRules() string {
 	rules := []string{
 		"1. Only return a character when the prompt explicitly names them, uses their short name, or clearly describes their unique traits from the catalog.",
-		"2. Substring overlaps or vague titles are insufficient. Do not conflate different characters that share partial names.",
-		"3. When the prompt provides no strong evidence for any character, respond with an empty list.",
-		"4. Each character can appear at most once. Never invent names outside the catalog.",
-		"5. Dr. Les Carter is NOT DrDisrespect and Dr. Disrespect is NOT Dr. Les Carter.",
-		"6. If random characters are requested, return it and follow the count if it's explicitly stated. Return 3 characters if asked for 3, return 2 chars if asked for 2.",
+		"2. Substring overlaps or vague titles are insufficient. Do not conflate different characters that share partial names (e.g., Forsen vs. ForsenSpectate).",
+		"3. If the prompt clearly describes a unique role, show, quote, or expertise from the catalog, include that character even when their name is absent. Prefer the character whose description best matches the clue.",
+		"4. When the prompt provides no strong evidence for any character, respond with an empty list.",
+		"5. Each character can appear at most once. Never invent names outside the catalog.",
+		"6. Dr. Les Carter is NOT DrDisrespect and Dr. Disrespect is NOT Dr. Les Carter.",
+		"7. When a prompt asks for N random characters (digits or words), output exactly N distinct names taken from the catalog. If true randomness is unclear, deterministically choose the first N names from the catalog list. Never return fewer names than requested; if the catalog is smaller than N, return all available names.",
+		"8. Exact names always win over similarly named entries. If the user writes 'Forsen', you must return 'Forsen', not 'forsenSpectate'.",
+		"9. Short names or CamelCase variations in the catalog count as valid references—map them back to the canonical entry listed.",
+		"10. Do not censor or omit catalog names even if they look offensive; faithfully return them when the prompt does.",
 	}
 	return strings.Join(rules, "\n")
 }

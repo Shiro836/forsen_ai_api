@@ -40,6 +40,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./cfg/loki/local-config.yaml:/etc/loki/local-config.yaml
+    restart: unless-stopped
     networks:
       - forsen
 
@@ -53,6 +54,7 @@ services:
       - /etc/machine-id:/etc/machine-id
       - ./cfg/promtail/config.yaml:/etc/promtail/config.yaml
     command: -config.file=/etc/promtail/config.yaml
+    restart: unless-stopped
     networks:
       - forsen
 
@@ -75,6 +77,7 @@ services:
       - ./cfg/grafana/dashboards:/var/lib/grafana/dashboards
     env_file:
       - .env
+    restart: unless-stopped
     networks:
       - forsen
 

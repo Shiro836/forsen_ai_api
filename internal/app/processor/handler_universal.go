@@ -31,7 +31,7 @@ func NewUniversalHandler(logger *slog.Logger, db *db.DB, service *Service) *Univ
 }
 
 func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, eventWriter conns.EventWriter) error {
-	logger := h.logger.With("handler", "Universal", "requester", input.Requester)
+	logger := h.logger.With("handler", "Universal", "requester", input.Requester, "user", input.Broadcaster.TwitchLogin)
 
 	timer := prometheus.NewTimer(monitoring.AppMetrics.UniversalQueryTime)
 	defer timer.ObserveDuration()

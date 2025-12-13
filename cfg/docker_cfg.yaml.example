@@ -1,5 +1,7 @@
 llm:
   url: llm/generate
+agentic_llm:
+  url: llm-agentic/generate
 image_llm:
   url: image_llm/generate
 tts:
@@ -12,6 +14,9 @@ twitch:
 api:
   port: 8080
   page_prefix: BAJ AI
+ingest:
+  host: twitch-ingest
+  port: 8081
 db:
   conn_str: "postgres://postgres/postgres?user=postgres&password=postgres"
 influx:

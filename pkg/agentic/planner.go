@@ -73,7 +73,7 @@ func (p *Planner) PlanInitialTurn(ctx context.Context, prompt string, cards []*d
 	}
 
 	systemPrompt := "You are a conversation planner. Your goal is to analyze the user's prompt and decide who should speak first and what they should say to strictly follow the user's intent."
-	userPrompt := fmt.Sprintf("Available Characters:%s\n\n User Prompt: \"%s\" \n\n Task: Decide the first speaker and write ONLY their message text (without the character name prefix). The message should be in character style and directly follow the user's prompt scenario.", prompt, charContext.String())
+	userPrompt := fmt.Sprintf("Available Characters:%s\n\n User Prompt: \"%s\" \n\n Task: Decide the first speaker and write ONLY their message text (without the character name prefix). The message should be in character style and directly follow the user's prompt scenario.", charContext.String(), prompt)
 
 	messages := []llm.Message{
 		{Role: "system", Content: []llm.MessageContent{{Type: "text", Text: systemPrompt}}},
@@ -137,7 +137,7 @@ func (p *Planner) SelectNextSpeaker(ctx context.Context, prompt string, history 
 		return "", fmt.Errorf("failed to marshal schema: %w", err)
 	}
 
-	systemPrompt := "You are a conversation director. Analyze the conversation history. Has it reached a natural conclusion? Has it reached unending repeating loop? If yes, select 'END'. If not, select the character who should speak next to continue the flow naturally."
+	systemPrompt := "You are a conversation director. Analyze the conversation history. Has it reached a natural conclusion? Has it reached unending repeating loop? If there is any sign, however smal it is, then select 'END'. If not, select the character who should speak next to continue the flow naturally."
 
 	messages := append([]llm.Message(nil), history...)
 	messages = append(messages, llm.Message{
@@ -146,7 +146,7 @@ func (p *Planner) SelectNextSpeaker(ctx context.Context, prompt string, history 
 	})
 	messages = append(messages, llm.Message{
 		Role:    "user",
-		Content: []llm.MessageContent{{Type: "text", Text: fmt.Sprintf("Topic: %s. Who speaks next? Or maybe no one speaks next? Available: %s, END", prompt, strings.Join(validOptions[:len(validOptions)-1], ", "))}},
+		Content: []llm.MessageContent{{Type: "text", Text: fmt.Sprintf("Topic: %s. Who speaks next between following speakers? END is chosen if conversation reached it's dead end or there is some repetition happening. Available: %s, END", prompt, strings.Join(validOptions[:len(validOptions)-1], ", "))}},
 	})
 
 	response, err := p.client.AskGuided(ctx, messages, schemaBytes, 0.0)

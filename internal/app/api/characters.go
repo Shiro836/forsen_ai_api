@@ -697,7 +697,7 @@ type TryHandler interface {
 	Handle(ctx context.Context, input processor.InteractionInput, writer conns.EventWriter) error
 }
 
-func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state *processor.ProcessorState, eventWriter conns.EventWriter, card *db.Card, userSettings *db.UserSettings) <-chan tryJob {
+func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state *processor.ProcessorState, eventWriter conns.EventWriter, card *db.Card, dbUser *db.User, userSettings *db.UserSettings) <-chan tryJob {
 	jobCh := make(chan tryJob)
 
 	go func() {
@@ -742,7 +742,8 @@ func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state 
 			msgID := uuid.New()
 
 			input := processor.InteractionInput{
-				Requester:    "Demo User",
+				Requester:    dbUser.TwitchLogin,
+				Broadcaster:  dbUser,
 				Message:      action.Text,
 				Character:    card,
 				UserSettings: userSettings,
@@ -835,7 +836,7 @@ func (api *API) serveTryWS(w http.ResponseWriter, r *http.Request, card *db.Card
 		}
 	}()
 
-	jobCh := api.readTryCommands(ctx, wsClient, state, eventWriter, card, userSettings)
+	jobCh := api.readTryCommands(ctx, wsClient, state, eventWriter, card, user, userSettings)
 
 	for job := range jobCh {
 		if msgID, err := uuid.Parse(job.Input.MsgID); err == nil {

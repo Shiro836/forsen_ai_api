@@ -320,14 +320,12 @@ loop:
 			case db.MsgStatusCurrent, db.MsgStatusWait:
 				action = ActionUpsert
 
-				// Resolve reward type and (optionally) character card
 				var (
 					charName      string
 					rewardTypeStr string = "unknown"
 				)
 
-				if charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID); err == nil {
-					// Standard path (AI/TTS tied to a character)
+				if charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), dbMessage.TwitchMessage.RewardID); err == nil {
 					charName = charCard.Name
 					switch rewardType {
 					case db.TwitchRewardTTS:
@@ -336,33 +334,28 @@ loop:
 						rewardTypeStr = "AI"
 					}
 				} else {
-					// Fallback: handle rewards without a character mapping (e.g., Universal TTS)
-					cardID, rewardType, err2 := api.db.GetRewardByTwitchReward(r.Context(), user.ID, dbMessage.TwitchMessage.RewardID)
+					cardID, rewardType, err2 := api.db.GetRewardByTwitchReward(r.Context(), targetUser.ID, dbMessage.TwitchMessage.RewardID)
 					if err2 != nil {
-						logger.Info("failed to resolve reward by twitch reward", "err", err2)
+						logger.Error("failed to resolve reward by twitch reward", "err", err2)
 						continue
 					}
 
 					switch rewardType {
 					case db.TwitchRewardUniversalTTS:
-						rewardTypeStr = rewardType.String() // "BAJ TTS"
-						// no character card for universal TTS
+						rewardTypeStr = rewardType.String()
 						charName = "-"
 					case db.TwitchRewardAgentic:
-						rewardTypeStr = rewardType.String() // "Agentic"
-						// no character card for agentic reward
+						rewardTypeStr = rewardType.String()
 						charName = "-"
 					case db.TwitchRewardTTS:
-						// If TTS points to a specific character but earlier lookup failed, skip if cardID is nil
 						if cardID == nil {
-							logger.Info("tts reward has no card mapping; skipping")
+							logger.Error("tts reward has no card mapping; skipping")
 							continue
 						}
 						rewardTypeStr = "TTS"
 						charName = "-"
 					case db.TwitchRewardAI:
-						// AI should always have a character; skip if not resolvable
-						logger.Info("ai reward without resolvable character; skipping")
+						logger.Error("ai reward without resolvable character; skipping")
 						continue
 					default:
 						continue
@@ -375,7 +368,6 @@ loop:
 					break loop
 				}
 
-				// Build image URLs from stored image IDs, if any
 				imageURLs := make([]string, 0, len(msgData.ImageIDs))
 				for _, iid := range msgData.ImageIDs {
 					imageURLs = append(imageURLs, fmt.Sprintf("/images/%s", iid))

@@ -17,6 +17,7 @@ type InteractionHandler interface {
 // InteractionInput contains all the necessary data for an interaction.
 type InteractionInput struct {
 	Requester    string
+	Broadcaster  *db.User
 	Message      string
 	Character    *db.Card
 	UserSettings *db.UserSettings
