@@ -51,21 +51,7 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 		return nil, err
 	}
 
-	if textTimings == nil {
-		textTimings = append(textTimings, whisperx.Timiing{
-			Text:  msg,
-			Start: 0,
-			End:   audioLen,
-		})
-	}
-
-	if len(textTimings) == 0 {
-		textTimings = append(textTimings, whisperx.Timiing{
-			Text:  msg,
-			Start: 0,
-			End:   audioLen,
-		})
-	} else {
+	if len(textTimings) > 0 {
 		textTimings[len(textTimings)-1].End = audioLen
 	}
 

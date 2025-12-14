@@ -84,13 +84,13 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 		charCardsSlice = append(charCardsSlice, card)
 	}
 
-	initialPlan, err := h.planner.PlanInitialTurn(ctx, input.Message, charCardsSlice)
+	firstSpeakerName, err := h.planner.SelectFirstSpeaker(ctx, input.Message, charCardsSlice)
 	if err != nil {
-		logger.Error("failed to plan initial turn", "err", err)
-		return fmt.Errorf("failed to plan initial turn: %w", err)
+		logger.Error("failed to select first speaker", "err", err)
+		return fmt.Errorf("failed to select first speaker: %w", err)
 	}
 
-	firstSpeakerID, ok := nameToID[strings.ToLower(initialPlan.FirstSpeakerName)]
+	firstSpeakerID, ok := nameToID[strings.ToLower(firstSpeakerName)]
 	if !ok {
 		return fmt.Errorf("no characters available for fallback")
 	}
@@ -104,12 +104,25 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 
 	firstCard, ok := charCards[firstSpeakerID]
 	if !ok {
-		return fmt.Errorf("character card not found for %s", initialPlan.FirstSpeakerName)
+		return fmt.Errorf("character card not found for %s", firstSpeakerName)
 	}
 
-	appendHistoryTurn(&history, firstCard.Name, initialPlan.FirstMessageText)
+	firstPrompt, err := h.service.dialoguePrompt(firstCard, input.Message)
+	if err != nil {
+		logger.Error("failed to craft first dialogue prompt", "err", err)
+		return fmt.Errorf("failed to craft first dialogue prompt: %w", err)
+	}
 
-	currentTurn, err := h.buildAgenticTurn(ctx, firstSpeakerID, firstCard, input.UserSettings, initialPlan.FirstMessageText)
+	firstResponse, err := h.llmModel.Ask(ctx, firstPrompt)
+	if err != nil {
+		logger.Error("failed to generate first dialogue response", "err", err)
+		return fmt.Errorf("failed to generate first dialogue response: %w", err)
+	}
+
+	firstMsg := stripLeadingSpeakerPrefix(firstCard.Name, firstResponse)
+	appendHistoryTurn(&history, firstCard.Name, firstMsg)
+
+	currentTurn, err := h.buildAgenticTurn(ctx, firstSpeakerID, firstCard, input.UserSettings, firstMsg)
 	if err != nil {
 		logger.Error("failed to prepare initial agentic turn", "err", err)
 		return fmt.Errorf("failed to prepare initial agentic turn: %w", err)
@@ -229,9 +242,10 @@ func (h *AgenticHandler) prepareNextAgenticTurn(
 		return nil, fmt.Errorf("failed to generate response: %w", err)
 	}
 
-	appendHistoryTurn(history, nextCard.Name, response)
+	cleanResponse := stripLeadingSpeakerPrefix(nextCard.Name, response)
+	appendHistoryTurn(history, nextCard.Name, cleanResponse)
 
-	turn, err := h.buildAgenticTurn(ctx, nextSpeakerID, nextCard, userSettings, response)
+	turn, err := h.buildAgenticTurn(ctx, nextSpeakerID, nextCard, userSettings, cleanResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -267,4 +281,33 @@ func collectHistoryTurns(history []llm.Message) []string {
 	}
 
 	return turns
+}
+
+func stripCI(prefix, msg string) string {
+	if prefix == "" || msg == "" {
+		return msg
+	}
+
+	trimmed := strings.TrimLeft(msg, " \t\r\n")
+	if len(trimmed) < len(prefix) {
+		return msg
+	}
+
+	if !strings.EqualFold(trimmed[:len(prefix)], prefix) {
+		return msg
+	}
+
+	return strings.TrimLeft(trimmed[len(prefix):], " \t\r\n")
+}
+
+func stripLeadingSpeakerPrefix(speaker, msg string) string {
+	speaker = strings.TrimSpace(speaker)
+	if speaker == "" || msg == "" {
+		return msg
+	}
+
+	msg = stripCI(speaker+":", msg)
+	msg = stripCI(speaker+" :", msg)
+
+	return msg
 }

@@ -334,7 +334,7 @@ loop:
 						rewardTypeStr = "AI"
 					}
 				} else {
-					cardID, rewardType, err2 := api.db.GetRewardByTwitchReward(r.Context(), targetUser.ID, dbMessage.TwitchMessage.RewardID)
+					cardID, rewardType, err2 := api.db.GetRewardByTwitchReward(r.Context(), dbMessage.TwitchMessage.RewardID)
 					if err2 != nil {
 						logger.Error("failed to resolve reward by twitch reward", "err", err2)
 						continue
@@ -661,16 +661,4 @@ func (api *API) controlPanelRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, _ = w.Write([]byte("success"))
-}
-
-// add any relation
-func (api *API) adminControlPanelGrant(w http.ResponseWriter, r *http.Request) {
-	user := ctxstore.GetUser(r.Context())
-	if user == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("unauthorized"))
-		return
-	}
-
-	_, _ = w.Write([]byte("not implemented"))
 }

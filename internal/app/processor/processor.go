@@ -174,8 +174,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		return nil
 	}
 
-	// Try to get any reward (character or universal) by Twitch reward ID
-	cardID, rewardType, err := p.db.GetRewardByTwitchReward(ctx, broadcaster.ID, msg.TwitchMessage.RewardID)
+	cardID, rewardType, err := p.db.GetRewardByTwitchReward(ctx, msg.TwitchMessage.RewardID)
 	if err != nil {
 		if db.ErrCode(err) != db.ErrCodeNoRows {
 			logger.Error("error getting reward by twitch reward", "err", err)
@@ -183,7 +182,6 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		return nil
 	}
 
-	// Get character card if this is a character-based reward
 	var charCard *db.Card
 	if cardID != nil {
 		charCard, err = p.db.GetCharCardByID(ctx, broadcaster.ID, *cardID)

@@ -82,15 +82,15 @@ func (db *DB) UpsertTwitchReward(ctx context.Context, userID uuid.UUID, CardID *
 	return nil
 }
 
-func (db *DB) GetRewardByTwitchReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) (*uuid.UUID, TwitchRewardType, error) {
+func (db *DB) GetRewardByTwitchReward(ctx context.Context, twitchRewardID string) (*uuid.UUID, TwitchRewardType, error) {
 	var cardID *uuid.UUID
 	var rewardType TwitchRewardType
 
 	err := db.QueryRow(ctx, `
 		SELECT card_id, reward_type
 		FROM reward_buttons
-		WHERE twitch_reward_id = $1 AND user_id = $2
-	`, twitchRewardID, userID).Scan(&cardID, &rewardType)
+		WHERE twitch_reward_id = $1
+	`, twitchRewardID).Scan(&cardID, &rewardType)
 	if err != nil {
 		return nil, 0, fmt.Errorf("getRewardByTwitchReward: %w", err)
 	}

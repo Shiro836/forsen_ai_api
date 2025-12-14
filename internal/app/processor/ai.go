@@ -11,7 +11,7 @@ import (
 	"app/pkg/charutil"
 )
 
-func (s *Service) craftPrompt(char *db.Card, requester string, message string, history ...string) (string, error) {
+func (s *Service) craftPrompt(char *db.Card, requester string, message string) (string, error) {
 	data := char.Data
 
 	prompt := &strings.Builder{}
@@ -20,12 +20,6 @@ func (s *Service) craftPrompt(char *db.Card, requester string, message string, h
 
 	if len(data.SystemPrompt) != 0 {
 		prompt.WriteString(fmt.Sprintf("System Instructions: %s\n", data.SystemPrompt))
-	}
-
-	for _, turn := range history {
-		if turn != "" {
-			prompt.WriteString(fmt.Sprintf("<START>%s<END>\n", turn))
-		}
 	}
 
 	prompt.WriteString(fmt.Sprintf("Prompt: <START>###%s: %s\n###%s: ", requester, message, data.Name))
@@ -48,13 +42,16 @@ func (s *Service) dialoguePrompt(char *db.Card, scenario string, history ...stri
 		prompt.WriteString(fmt.Sprintf("Topic: %s\n", scenario))
 	}
 
+	prompt.WriteString(fmt.Sprintf("Task: Write the next single message spoken by %s. Return ONLY the message text.\n", data.Name))
+	prompt.WriteString("Do NOT include any speaker name prefixes (no \"Name:\"), do NOT write multiple turns, and do NOT add extra labels.\n")
+
 	for _, turn := range history {
 		if turn != "" {
-			prompt.WriteString(fmt.Sprintf("<START>%s<END>\n", turn))
+			prompt.WriteString(fmt.Sprintf("<START>###%s<END>\n", turn))
 		}
 	}
 
-	prompt.WriteString(fmt.Sprintf("<START>%s: ", data.Name))
+	prompt.WriteString(fmt.Sprintf("<START>###%s: ", data.Name))
 
 	return prompt.String(), nil
 }
