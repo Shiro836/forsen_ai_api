@@ -12,6 +12,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
+	"app/pkg/imagetag"
 	"app/pkg/llm"
 	"app/pkg/s3client"
 
@@ -75,6 +76,13 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 			imageIDs = msgData.ImageIDs
 			showImages = msgData.ShowImages != nil && *msgData.ShowImages
 			logger.Info("parsed image ids from message data", "ids", imageIDs)
+		}
+	}
+
+	if len(imageIDs) == 0 {
+		if ids := imagetag.ExtractIDs(updatedMessage, 0); len(ids) > 0 {
+			imageIDs = ids
+			logger.Info("parsed image ids from input message", "ids", imageIDs)
 		}
 	}
 
@@ -176,7 +184,7 @@ The description should read like a clever commentary, not like someone talking a
 		})
 	}
 
-	ttsUserMsg := replaceImageTagsForTTS(input.Message)
+	ttsUserMsg := imagetag.ReplaceImageTags(input.Message)
 	requestText := input.Requester + " asked me: " + ttsUserMsg
 	filteredRequestText := h.service.FilterText(ctx, input.UserSettings, requestText)
 

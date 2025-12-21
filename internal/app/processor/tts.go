@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -369,15 +368,6 @@ actions_loop:
 	}
 
 	return finalAudio, combinedText.String(), combinedTimings, nil
-}
-
-func replaceImageTagsForTTS(s string) string {
-	re := regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`)
-	idx := 0
-	return re.ReplaceAllStringFunc(s, func(_ string) string {
-		idx++
-		return fmt.Sprintf("image_%d", idx)
-	})
 }
 
 func (s *Service) getVoiceReference(ctx context.Context, logger *slog.Logger, voice string) (uuid.UUID, []byte, error) {

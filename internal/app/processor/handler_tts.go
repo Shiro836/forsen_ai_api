@@ -7,6 +7,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
+	"app/pkg/imagetag"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -50,7 +51,7 @@ func (h *TTSHandler) Handle(ctx context.Context, input InteractionInput, eventWr
 		EventData: []byte("/characters/" + input.Character.ID.String() + "/image"),
 	})
 
-	ttsMsg := replaceImageTagsForTTS(input.Message)
+	ttsMsg := imagetag.ReplaceImageTags(input.Message)
 	filteredRequest := h.service.FilterText(ctx, input.UserSettings, ttsMsg)
 
 	requestAudio, textTimings, err := h.service.TTSWithTimings(ctx, filteredRequest, input.Character.Data.VoiceReference)

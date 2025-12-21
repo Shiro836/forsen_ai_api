@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"sync"
 	"time"
 
 	"app/db"
+	"app/pkg/imagetag"
 	"app/pkg/twitch"
 
 	gempir "github.com/gempir/go-twitch-irc/v4"
@@ -133,8 +133,6 @@ func (s *Service) departChannel(channel string) {
 	metrics.ActiveChannels.Dec()
 }
 
-var imgRegex = regexp.MustCompile(`<img:([A-Za-z0-9]{5})>`)
-
 func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	metrics.MessagesIngested.Inc()
 
@@ -154,16 +152,7 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 		return
 	}
 
-	imgMatches := imgRegex.FindAllStringSubmatch(msg.Message, -1)
-	imageIDs := make([]string, 0, 2)
-	for _, m := range imgMatches {
-		if len(m) >= 2 {
-			imageIDs = append(imageIDs, m[1])
-			if len(imageIDs) == 2 {
-				break
-			}
-		}
-	}
+	imageIDs := imagetag.ExtractIDs(msg.Message, 2)
 
 	showImages := false
 	data := &db.MessageData{

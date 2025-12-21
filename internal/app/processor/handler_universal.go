@@ -8,6 +8,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
+	"app/pkg/imagetag"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -41,7 +42,7 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 		return fmt.Errorf("invalid msg id: %w", err)
 	}
 
-	ttsMsg := replaceImageTagsForTTS(input.Message)
+	ttsMsg := imagetag.ReplaceImageTags(input.Message)
 	filteredRequest := h.service.FilterText(ctx, input.UserSettings, ttsMsg)
 
 	actions, err := h.service.processUniversalTTSMessage(ctx, filteredRequest, input.UserSettings)
