@@ -1,6 +1,10 @@
 package llm
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	appmetrics "app/pkg/metrics"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 type Metrics struct {
 	LLMQueryTime prometheus.Histogram
@@ -11,6 +15,7 @@ var metrics = &Metrics{
 	LLMQueryTime: prometheus.NewHistogram(prometheus.HistogramOpts{
 		Subsystem: "llm",
 		Name:      "request_seconds",
+		Buckets:   appmetrics.RequestSecondsBuckets,
 	}),
 	LLMErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Subsystem: "llm",

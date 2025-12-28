@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +40,10 @@ func NewService(logger *slog.Logger, database *db.DB, cfg *twitch.Config) *Servi
 		s.handleMessage,
 		func() { metrics.ConnectedClients.Inc() },
 		func() { metrics.ConnectedClients.Dec() },
+		func(channel, reason string) {
+			metrics.JoinFailures.WithLabelValues(reason).Inc()
+			s.logger.Warn("twitch channel join failed", "channel", channel, "reason", reason)
+		},
 	)
 
 	return s
@@ -94,7 +99,7 @@ func (s *Service) syncUsers(ctx context.Context) error {
 
 	desiredUsers := make(map[string]uuid.UUID)
 	for _, u := range users {
-		desiredUsers[u.TwitchLogin] = u.ID
+		desiredUsers[strings.ToLower(u.TwitchLogin)] = u.ID
 	}
 
 	s.activeUsersLock.Lock()
@@ -119,25 +124,27 @@ func (s *Service) syncUsers(ctx context.Context) error {
 		}
 	}
 
+	metrics.ActiveChannels.Set(float64(len(s.activeUsers)))
+	metrics.ShardCount.Set(float64(s.chatClient.ShardCount()))
+	metrics.JoinedChannels.Set(float64(s.chatClient.JoinedChannelCount()))
+
 	return nil
 }
 
 func (s *Service) joinChannel(channel string) error {
 	s.chatClient.Join(channel)
-	metrics.ActiveChannels.Inc()
 	return nil
 }
 
 func (s *Service) departChannel(channel string) {
 	s.chatClient.Depart(channel)
-	metrics.ActiveChannels.Dec()
 }
 
 func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	metrics.MessagesIngested.Inc()
 
 	s.activeUsersLock.RLock()
-	userID, ok := s.activeUsers[msg.Channel]
+	userID, ok := s.activeUsers[strings.ToLower(msg.Channel)]
 	s.activeUsersLock.RUnlock()
 
 	if !ok {

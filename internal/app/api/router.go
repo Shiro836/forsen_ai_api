@@ -44,10 +44,10 @@ type API struct {
 
 	cfg *Config
 
-	// Handlers for try feature
-	ttsHandler     processor.InteractionHandler
-	aiHandler      processor.InteractionHandler
-	agenticHandler processor.InteractionHandler
+	ttsHandler       processor.InteractionHandler
+	aiHandler        processor.InteractionHandler
+	universalHandler processor.InteractionHandler
+	agenticHandler   processor.InteractionHandler
 
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 
@@ -56,7 +56,7 @@ type API struct {
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client,
-	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler) *API {
+	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler) *API {
 	api := &API{
 		cfg: cfg,
 
@@ -70,9 +70,10 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, logger *slog.Logger,
 
 		s3: s3,
 
-		ttsHandler:     ttsHandler,
-		aiHandler:      aiHandler,
-		agenticHandler: agenticHandler,
+		ttsHandler:       ttsHandler,
+		aiHandler:        aiHandler,
+		universalHandler: universalHandler,
+		agenticHandler:   agenticHandler,
 	}
 
 	if ingestPort > 0 {
@@ -155,6 +156,9 @@ func (api *API) NewRouter() *chi.Mux {
 
 			router.Get("/characters/{character_id}/try", api.nav(api.tryCharacter))
 			router.Get("/ws/characters/{character_id}/try", api.tryCharacterWS)
+
+			router.Get("/universal-tts/try", api.nav(api.tryUniversalTTS))
+			router.Get("/ws/universal-tts/try", api.tryUniversalTTSWS)
 
 			router.Get("/agentic/try", api.nav(api.tryAgentic))
 			router.Get("/ws/agentic/try", api.tryAgenticWS)

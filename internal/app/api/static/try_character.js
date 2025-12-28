@@ -140,10 +140,12 @@
 
     function enableButtons() {
         const ttsBtn = document.getElementById("tts_button");
+        const universalTtsBtn = document.getElementById("universal_tts_button");
         const aiBtn = document.getElementById("ai_button");
         const agenticBtn = document.getElementById("agentic_button");
         const stopBtn = document.getElementById("stop_button");
         if (ttsBtn) ttsBtn.disabled = false;
+        if (universalTtsBtn) universalTtsBtn.disabled = false;
         if (aiBtn) aiBtn.disabled = false;
         if (agenticBtn) agenticBtn.disabled = false;
         if (stopBtn) stopBtn.disabled = false;
@@ -151,10 +153,12 @@
 
     function disableButtons() {
         const ttsBtn = document.getElementById("tts_button");
+        const universalTtsBtn = document.getElementById("universal_tts_button");
         const aiBtn = document.getElementById("ai_button");
         const agenticBtn = document.getElementById("agentic_button");
         const stopBtn = document.getElementById("stop_button");
         if (ttsBtn) ttsBtn.disabled = true;
+        if (universalTtsBtn) universalTtsBtn.disabled = true;
         if (aiBtn) aiBtn.disabled = true;
         if (agenticBtn) agenticBtn.disabled = true;
         if (stopBtn) stopBtn.disabled = true;
@@ -218,19 +222,20 @@
 
     function init() {
         const container = document.getElementById('tab-content');
-        const tryContainer = container?.querySelector('[data-character-id]');
+        const tryContainer = container?.querySelector('[data-try-page="true"]');
 
         if (!tryContainer) return;
 
         // Cleanup any previous connection
         cleanup();
 
-        characterID = tryContainer.dataset.characterId;
         const agenticMode = tryContainer.dataset.agenticMode === "true";
+        const universalMode = tryContainer.dataset.universalMode === "true";
+        characterID = tryContainer.dataset.characterId;
 
-        if (!characterID && !agenticMode) return;
+        if (!characterID && !agenticMode && !universalMode) return;
 
-        console.log('Initializing try page. Character:', characterID, 'Agentic:', agenticMode);
+        console.log('Initializing try page. Character:', characterID, 'Agentic:', agenticMode, 'Universal:', universalMode);
 
         // Initialize audio context on first user interaction
         const initAudio = () => {
@@ -244,6 +249,7 @@
 
         // Set up event listeners
         const ttsBtn = document.getElementById("tts_button");
+        const universalTtsBtn = document.getElementById("universal_tts_button");
         const aiBtn = document.getElementById("ai_button");
         const agenticBtn = document.getElementById("agentic_button");
         const stopBtn = document.getElementById("stop_button");
@@ -253,6 +259,13 @@
             ttsBtn.addEventListener('click', () => {
                 initAudio();
                 sendAction('tts');
+            });
+        }
+
+        if (universalTtsBtn) {
+            universalTtsBtn.addEventListener('click', () => {
+                initAudio();
+                sendAction('universal_tts');
             });
         }
 
@@ -282,6 +295,8 @@
                     initAudio();
                     if (agenticMode) {
                         sendAction('agentic');
+                    } else if (universalMode) {
+                        sendAction('universal_tts');
                     } else {
                         sendAction('ai');
                     }
@@ -294,18 +309,20 @@
         // Stop button should always be enabled
         if (stopBtn) stopBtn.disabled = false;
 
-        // Connect function needs to know about agentic mode
-        connect(agenticMode);
+        // Connect function needs to know about agentic/universal mode
+        connect(agenticMode, universalMode);
     }
 
-    function connect(agenticMode) {
-        if (!characterID && !agenticMode) return;
+    function connect(agenticMode, universalMode) {
+        if (!characterID && !agenticMode && !universalMode) return;
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         let wsUrl;
 
         if (agenticMode) {
             wsUrl = `${protocol}//${window.location.host}/ws/agentic/try`;
+        } else if (universalMode) {
+            wsUrl = `${protocol}//${window.location.host}/ws/universal-tts/try`;
         } else {
             wsUrl = `${protocol}//${window.location.host}/ws/characters/${characterID}/try`;
         }
@@ -336,14 +353,16 @@
 
             // Only reconnect if we're still on the try page
             const container = document.getElementById('tab-content');
-            const currentContainer = container?.querySelector('[data-character-id]');
+            const currentContainer = container?.querySelector('[data-try-page="true"]');
 
             if (currentContainer) {
                 // Check if we are still on the same page context
                 if (agenticMode && currentContainer.dataset.agenticMode === "true") {
-                    setTimeout(() => connect(true), 1000);
+                    setTimeout(() => connect(true, false), 1000);
+                } else if (universalMode && currentContainer.dataset.universalMode === "true") {
+                    setTimeout(() => connect(false, true), 1000);
                 } else if (currentContainer.dataset.characterId === characterID) {
-                    setTimeout(() => connect(false), 1000);
+                    setTimeout(() => connect(false, false), 1000);
                 }
             }
         };
@@ -423,14 +442,14 @@
     // Handle htmx content swaps
     document.body.addEventListener('htmx:afterSwap', function (event) {
         // Check if the swapped content has our try character container
-        if (event.detail.target.querySelector('[data-character-id]')) {
+        if (event.detail.target.querySelector('[data-try-page="true"]')) {
             init();
         }
     });
 
     // Clean up when navigating away
     document.body.addEventListener('htmx:beforeSwap', function (event) {
-        const tryContainer = document.querySelector('[data-character-id]');
+        const tryContainer = document.querySelector('[data-try-page="true"]');
         if (tryContainer) {
             cleanup();
         }

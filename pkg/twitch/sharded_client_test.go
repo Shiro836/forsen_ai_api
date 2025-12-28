@@ -12,7 +12,7 @@ import (
 
 func TestShardedClient_Distribution(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client := NewShardedClient(logger, func(pm gempir.PrivateMessage) {}, func() {}, func() {})
+	client := NewShardedClient(logger, func(pm gempir.PrivateMessage) {}, func() {}, func() {}, func(string, string) {})
 
 	for i := 0; i < 50; i++ {
 		client.Join(fmt.Sprintf("channel%d", i))
@@ -37,7 +37,7 @@ func TestShardedClient_Distribution(t *testing.T) {
 
 func TestShardedClient_Idempotency_Scale(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client := NewShardedClient(logger, func(pm gempir.PrivateMessage) {}, func() {}, func() {})
+	client := NewShardedClient(logger, func(pm gempir.PrivateMessage) {}, func() {}, func() {}, func(string, string) {})
 
 	for i := 0; i < 150; i++ {
 		channelName := fmt.Sprintf("channel%d", i)
@@ -50,7 +50,7 @@ func TestShardedClient_Idempotency_Scale(t *testing.T) {
 
 func TestShardedClient_Cleanup(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	client := NewShardedClient(logger, func(pm gempir.PrivateMessage) {}, func() {}, func() {})
+	client := NewShardedClient(logger, func(pm gempir.PrivateMessage) {}, func() {}, func() {}, func(string, string) {})
 
 	for i := 0; i < 51; i++ {
 		client.Join(fmt.Sprintf("channel%d", i))

@@ -1,6 +1,8 @@
 package ai
 
 import (
+	appmetrics "app/pkg/metrics"
+
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -13,6 +15,7 @@ var metrics = &Metrics{
 	TTSQueryTime: prometheus.NewHistogram(prometheus.HistogramOpts{
 		Subsystem: "tts",
 		Name:      "request_seconds",
+		Buckets:   appmetrics.RequestSecondsBuckets,
 	}),
 	TTSErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Subsystem: "tts",

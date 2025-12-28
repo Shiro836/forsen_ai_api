@@ -636,9 +636,10 @@ func (api *API) agenticReward(w http.ResponseWriter, r *http.Request) {
 }
 
 type tryPageData struct {
-	CharacterID   uuid.UUID
+	CharacterID   string
 	CharacterName string
 	AgenticMode   bool
+	UniversalMode bool
 }
 
 // tryCharacter serves the try page for testing a character
@@ -677,9 +678,10 @@ func (api *API) tryCharacter(r *http.Request) template.HTML {
 	}
 
 	return getHtml("try_character.html", &tryPageData{
-		CharacterID:   characterID,
+		CharacterID:   characterID.String(),
 		CharacterName: card.Name,
 		AgenticMode:   false,
+		UniversalMode: false,
 	})
 }
 
@@ -912,6 +914,7 @@ func (api *API) tryAgentic(r *http.Request) template.HTML {
 	return getHtml("try_character.html", &tryPageData{
 		CharacterName: "Agentic Flow",
 		AgenticMode:   true,
+		UniversalMode: false,
 	})
 }
 
@@ -929,5 +932,38 @@ func (api *API) tryAgenticWS(w http.ResponseWriter, r *http.Request) {
 
 	api.serveTryWS(w, r, dummyCard, map[string]TryHandler{
 		"agentic": api.agenticHandler,
+	})
+}
+
+func (api *API) tryUniversalTTS(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not logged in",
+		})
+	}
+
+	return getHtml("try_character.html", &tryPageData{
+		CharacterName: "Universal TTS",
+		AgenticMode:   false,
+		UniversalMode: true,
+	})
+}
+
+func (api *API) tryUniversalTTSWS(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("not authorized"))
+		return
+	}
+
+	dummyCard := &db.Card{
+		OwnerUserID: user.ID,
+	}
+
+	api.serveTryWS(w, r, dummyCard, map[string]TryHandler{
+		"universal_tts": api.universalHandler,
 	})
 }

@@ -41,6 +41,28 @@ var GlobalSwears = []string{
 	`kill ?(your|him|her|the[my])sel(f|ves)`,
 
 	`\bg?rap(e|ist|ing|ed)\b`,
+
+	// china n and g chars
+	`内`,
+	`那`,
+	`哪`,
+	`个`,
+	`阁`,
+
+	// korean
+	`내`,
+	`네`,
+	`가`,
+	`거`,
+	`니`,
+
+	// arab
+	`نيجا`,
+	`نيج`,
+	`ن`,
+	`ي`,
+	`ج`,
+	`ا`,
 }
 
 // cmonBruh

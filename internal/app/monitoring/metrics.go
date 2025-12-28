@@ -3,6 +3,7 @@ package monitoring
 import (
 	"app/pkg/ai"
 	"app/pkg/llm"
+	"app/pkg/metrics"
 	"app/pkg/ws"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,6 +25,7 @@ var AppMetrics = &Metrics{
 		Namespace: "processor",
 		Subsystem: "tts",
 		Name:      "request_seconds",
+		Buckets:   metrics.RequestSecondsBuckets,
 	}),
 	TTSErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "processor",
@@ -34,6 +36,7 @@ var AppMetrics = &Metrics{
 		Namespace: "processor",
 		Subsystem: "ai",
 		Name:      "request_seconds",
+		Buckets:   metrics.RequestSecondsBuckets,
 	}),
 	AIErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "processor",
@@ -44,11 +47,13 @@ var AppMetrics = &Metrics{
 		Namespace: "processor",
 		Subsystem: "agentic",
 		Name:      "request_seconds",
+		Buckets:   metrics.RequestSecondsBuckets,
 	}),
 	UniversalQueryTime: prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "processor",
 		Subsystem: "universal",
 		Name:      "request_seconds",
+		Buckets:   metrics.RequestSecondsBuckets,
 	}),
 	AIUserRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "processor",

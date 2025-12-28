@@ -474,12 +474,14 @@ func (db *DB) GetVoiceReferenceByShortName(ctx context.Context, shortName string
 		return uuid.Nil, nil, fmt.Errorf("empty short_char_name")
 	}
 
+	shortName = strings.ToLower(shortName)
+
 	var data *CardData
 	var id uuid.UUID
 	err := db.QueryRow(ctx, `
         select cc.id, cc.data
         from char_cards cc
-        where cc.short_char_name = $1
+        where lower(cc.short_char_name) = $1
           and cc.public = true
         limit 1
     `, shortName).Scan(&id, &data)

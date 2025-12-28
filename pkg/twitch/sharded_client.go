@@ -17,16 +17,24 @@ type ShardedClient struct {
 	onMessage         func(gempir.PrivateMessage)
 	onShardConnect    func()
 	onShardDisconnect func()
+	onJoinFailure     func(channel, reason string)
 	nextShardID       int
 }
 
-func NewShardedClient(logger *slog.Logger, onMessage func(gempir.PrivateMessage), onShardConnect func(), onShardDisconnect func()) *ShardedClient {
+func NewShardedClient(
+	logger *slog.Logger,
+	onMessage func(gempir.PrivateMessage),
+	onShardConnect func(),
+	onShardDisconnect func(),
+	onJoinFailure func(channel, reason string),
+) *ShardedClient {
 	return &ShardedClient{
 		shards:            make([]*Shard, 0),
 		logger:            logger,
 		onMessage:         onMessage,
 		onShardConnect:    onShardConnect,
 		onShardDisconnect: onShardDisconnect,
+		onJoinFailure:     onJoinFailure,
 		nextShardID:       0,
 	}
 }
@@ -51,7 +59,7 @@ func (c *ShardedClient) Join(channel string) {
 
 	shardID := c.nextShardID
 	c.nextShardID++
-	newShard := NewShard(shardID, c.logger, c.onMessage, c.onShardConnect, c.onShardDisconnect)
+	newShard := NewShard(shardID, c.logger, c.onMessage, c.onShardConnect, c.onShardDisconnect, c.onJoinFailure)
 	newShard.Connect()
 	newShard.Join(channel)
 	c.shards = append(c.shards, newShard)
@@ -90,4 +98,14 @@ func (c *ShardedClient) ShardCount() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return len(c.shards)
+}
+
+func (c *ShardedClient) JoinedChannelCount() int {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	total := 0
+	for _, shard := range c.shards {
+		total += shard.JoinedCount()
+	}
+	return total
 }
