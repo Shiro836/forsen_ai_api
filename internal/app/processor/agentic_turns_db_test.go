@@ -462,23 +462,24 @@ func newAgenticGuidedStubServer(t *testing.T, nameA, nameB string) *httptest.Ser
 
 	var nextSpeakerCalls int
 
-	type chatReq struct {
-		GuidedJSON json.RawMessage `json:"guided_json"`
-	}
-
 	handler := http.NewServeMux()
 	handler.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		body, _ := io.ReadAll(r.Body)
 
-		var req chatReq
+		var req llm.ChatRequest
 		if err := json.Unmarshal(body, &req); err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
 
+		if req.StructuredOutputs == nil {
+			http.Error(w, "missing structured_outputs", http.StatusBadRequest)
+			return
+		}
+
 		var schema map[string]any
-		_ = json.Unmarshal(req.GuidedJSON, &schema)
+		_ = json.Unmarshal(req.StructuredOutputs.JSON, &schema)
 		props, _ := schema["properties"].(map[string]any)
 
 		var content any

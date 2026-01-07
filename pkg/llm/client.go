@@ -39,36 +39,35 @@ func New(httpClient HTTPClient, cfg *Config) *Client {
 	}
 }
 
-// ImageURL represents an image URL in the message content
 type ImageURL struct {
 	URL string `json:"url"`
 }
 
-// MessageContent represents a single content item in a message
 type MessageContent struct {
 	Type     string    `json:"type"`
 	Text     string    `json:"text,omitempty"`
 	ImageURL *ImageURL `json:"image_url,omitempty"`
 }
 
-// Message represents a single message in the conversation
 type Message struct {
 	Role    string           `json:"role"`
 	Content []MessageContent `json:"content"`
 }
 
-// ChatRequest represents the request payload for chat completions
-type ChatRequest struct {
-	Model       string          `json:"model"`
-	Messages    []Message       `json:"messages"`
-	MaxTokens   int             `json:"max_tokens"`
-	MinTokens   int             `json:"min_tokens"`
-	Stop        []string        `json:"stop,omitempty"`
-	GuidedJSON  json.RawMessage `json:"guided_json,omitempty"`
-	Temperature *float64        `json:"temperature,omitempty"`
+type StructuredOutputs struct {
+	JSON json.RawMessage `json:"json,omitempty"`
 }
 
-// ChatResponse represents the response from the chat completions API
+type ChatRequest struct {
+	Model             string             `json:"model"`
+	Messages          []Message          `json:"messages"`
+	MaxTokens         int                `json:"max_tokens"`
+	MinTokens         int                `json:"min_tokens"`
+	Stop              []string           `json:"stop,omitempty"`
+	StructuredOutputs *StructuredOutputs `json:"structured_outputs,omitempty"`
+	Temperature       *float64           `json:"temperature,omitempty"`
+}
+
 type ChatResponse struct {
 	Choices []struct {
 		Message struct {
@@ -77,14 +76,11 @@ type ChatResponse struct {
 	} `json:"choices"`
 }
 
-// Attachment represents binary data to be attached to a user message (e.g., images)
-// ContentType should be like "image/png"; if empty, defaults to image/png.
 type Attachment struct {
 	Data        []byte
 	ContentType string
 }
 
-// Legacy completions request/response types
 type aiReq struct {
 	Model            string   `json:"model"`
 	Prompt           string   `json:"prompt"`
@@ -164,12 +160,8 @@ func (c *Client) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 	return out, nil
 }
 
-// AskMessages sends pre-constructed role-based messages to the AI and returns the response.
-// If images are provided, they will be attached to the last user message as image_url entries.
 func (c *Client) AskMessages(ctx context.Context, messages []Message, images []Attachment) (string, error) {
-	// Optionally attach images to the last user message
 	if len(images) > 0 {
-		// Find last user message index
 		idx := -1
 		for i := len(messages) - 1; i >= 0; i-- {
 			if messages[i].Role == "user" {
@@ -177,12 +169,12 @@ func (c *Client) AskMessages(ctx context.Context, messages []Message, images []A
 				break
 			}
 		}
-		// Ensure a user message exists
+
 		if idx < 0 {
 			messages = append(messages, Message{Role: "user", Content: []MessageContent{}})
 			idx = len(messages) - 1
 		}
-		// Append each provided attachment as an image_url
+
 		for _, att := range images {
 			if len(att.Data) == 0 {
 				continue
@@ -217,7 +209,6 @@ func (c *Client) AskMessages(ctx context.Context, messages []Message, images []A
 	return resp.Choices[0].Message.Content, nil
 }
 
-// Ask sends a prompt to the AI (legacy completions) and returns the response
 func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 	variants, err := c.reqAi(ctx, &aiReq{
 		Model:            c.cfg.Model,
@@ -242,11 +233,13 @@ func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 
 func (c *Client) AskGuided(ctx context.Context, messages []Message, schema json.RawMessage, temperature float64) (string, error) {
 	req := &ChatRequest{
-		Model:       c.cfg.Model,
-		Messages:    messages,
-		MaxTokens:   c.cfg.MaxTokens,
-		MinTokens:   c.cfg.MinTokens,
-		GuidedJSON:  schema,
+		Model:     c.cfg.Model,
+		Messages:  messages,
+		MaxTokens: c.cfg.MaxTokens,
+		MinTokens: c.cfg.MinTokens,
+		StructuredOutputs: &StructuredOutputs{
+			JSON: schema,
+		},
 		Temperature: &temperature,
 	}
 

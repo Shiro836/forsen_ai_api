@@ -54,7 +54,7 @@ func main() {
 	}
 
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 2 * time.Minute,
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
