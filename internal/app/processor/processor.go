@@ -11,6 +11,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
+	"app/internal/app/monitoring"
 
 	"github.com/google/uuid"
 )
@@ -30,9 +31,10 @@ type Processor struct {
 	ttsHandler       InteractionHandler
 	universalHandler InteractionHandler
 	agenticHandler   InteractionHandler
+	chatTTSHandler   InteractionHandler
 }
 
-func NewProcessor(logger *slog.Logger, db *db.DB, connManager *conns.Manager, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, agenticHandler InteractionHandler) *Processor {
+func NewProcessor(logger *slog.Logger, db *db.DB, connManager *conns.Manager, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, agenticHandler InteractionHandler, chatTTSHandler InteractionHandler) *Processor {
 	return &Processor{
 		logger:           logger,
 		db:               db,
@@ -41,6 +43,7 @@ func NewProcessor(logger *slog.Logger, db *db.DB, connManager *conns.Manager, ai
 		ttsHandler:       ttsHandler,
 		universalHandler: universalHandler,
 		agenticHandler:   agenticHandler,
+		chatTTSHandler:   chatTTSHandler,
 	}
 }
 
@@ -171,6 +174,37 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 	p.connManager.NotifyControlPanel(broadcaster.ID)
 
 	if len(msg.TwitchMessage.RewardID) == 0 {
+		if !userSettings.IngestAllMessages {
+			if _, err := p.db.SkipWaitingNoRewardMessages(ctx, broadcaster.ID); err != nil {
+				logger.Error("error bulk-skipping chat messages", "err", err)
+			}
+			return nil
+		}
+
+		// If a known reward message is already waiting, skip this and all other chat messages
+		hasReward, err := p.db.HasWaitingKnownRewardMessage(ctx, broadcaster.ID)
+		if err != nil {
+			logger.Error("error checking for waiting reward message", "err", err)
+		}
+		if hasReward {
+			if _, err := p.db.SkipWaitingNoRewardMessages(ctx, broadcaster.ID); err != nil {
+				logger.Error("error bulk-skipping chat messages", "err", err)
+			}
+			return nil
+		}
+
+		input := InteractionInput{
+			Requester:    msg.TwitchMessage.TwitchLogin,
+			TwitchUserID: msg.TwitchMessage.TwitchUserID,
+			Broadcaster:  broadcaster,
+			Message:      msg.TwitchMessage.Message,
+			UserSettings: userSettings,
+			MsgID:        msg.ID.String(),
+			State:        state,
+		}
+		if err := p.chatTTSHandler.Handle(ctx, input, eventWriter); err != nil {
+			return fmt.Errorf("chat tts handler error: %w", err)
+		}
 		return nil
 	}
 
@@ -181,6 +215,23 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		}
 		return nil
 	}
+
+	// Known reward — skip any queued non-reward chat messages
+	if skipped, err := p.db.SkipWaitingNoRewardMessages(ctx, broadcaster.ID); err != nil {
+		logger.Error("error skipping waiting chat messages", "err", err)
+	} else if skipped > 0 {
+		logger.Info("skipped queued chat messages for reward", "count", skipped)
+		p.connManager.NotifyControlPanel(broadcaster.ID)
+	}
+
+	// Track reward usage per chatter
+	if msg.TwitchMessage.TwitchUserID != 0 {
+		if err := p.db.IncrementChatUserRewardCount(ctx, msg.TwitchMessage.TwitchUserID, msg.TwitchMessage.TwitchLogin); err != nil {
+			logger.Warn("failed to increment reward count", "err", err)
+		}
+	}
+
+	monitoring.AppMetrics.RewardRedeems.WithLabelValues(broadcaster.TwitchLogin, rewardType.String()).Inc()
 
 	var charCard *db.Card
 	if cardID != nil {
@@ -193,6 +244,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 
 	input := InteractionInput{
 		Requester:    msg.TwitchMessage.TwitchLogin,
+		TwitchUserID: msg.TwitchMessage.TwitchUserID,
 		Broadcaster:  broadcaster,
 		Message:      msg.TwitchMessage.Message,
 		Character:    charCard,

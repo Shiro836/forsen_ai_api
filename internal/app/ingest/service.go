@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,11 @@ import (
 	"github.com/google/uuid"
 )
 
+type ingestUserConfig struct {
+	id                uuid.UUID
+	ingestAllMessages bool
+}
+
 type Service struct {
 	logger *slog.Logger
 	db     *db.DB
@@ -23,7 +29,7 @@ type Service struct {
 
 	chatClient *twitch.ShardedClient
 
-	activeUsers     map[string]uuid.UUID
+	activeUsers     map[string]*ingestUserConfig
 	activeUsersLock sync.RWMutex
 }
 
@@ -32,7 +38,7 @@ func NewService(logger *slog.Logger, database *db.DB, cfg *twitch.Config) *Servi
 		logger:      logger,
 		db:          database,
 		cfg:         cfg,
-		activeUsers: make(map[string]uuid.UUID),
+		activeUsers: make(map[string]*ingestUserConfig),
 	}
 
 	s.chatClient = twitch.NewShardedClient(
@@ -74,7 +80,7 @@ func (s *Service) pollUsers(ctx context.Context) {
 		s.logger.Error("failed to sync users", "err", err)
 	}
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -90,29 +96,34 @@ func (s *Service) pollUsers(ctx context.Context) {
 }
 
 func (s *Service) syncUsers(ctx context.Context) error {
-	users, err := s.db.GetUsersPermissions(ctx, db.PermissionStreamer, db.PermissionStatusGranted)
+	users, err := s.db.GetIngestUsers(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get users: %w", err)
 	}
 
 	metrics.TotalGrantedChannels.Set(float64(len(users)))
 
-	desiredUsers := make(map[string]uuid.UUID)
+	desiredUsers := make(map[string]*ingestUserConfig, len(users))
 	for _, u := range users {
-		desiredUsers[strings.ToLower(u.TwitchLogin)] = u.ID
+		desiredUsers[strings.ToLower(u.TwitchLogin)] = &ingestUserConfig{
+			id:                u.ID,
+			ingestAllMessages: u.IngestAllMessages,
+		}
 	}
 
 	s.activeUsersLock.Lock()
 	defer s.activeUsersLock.Unlock()
 
-	for login, id := range desiredUsers {
-		if _, ok := s.activeUsers[login]; !ok {
+	for login, cfg := range desiredUsers {
+		if existing, ok := s.activeUsers[login]; !ok {
 			s.logger.Info("joining channel", "login", login)
 			if err := s.joinChannel(login); err != nil {
 				s.logger.Error("failed to join channel", "login", login, "err", err)
 				continue
 			}
-			s.activeUsers[login] = id
+			s.activeUsers[login] = cfg
+		} else {
+			existing.ingestAllMessages = cfg.ingestAllMessages
 		}
 	}
 
@@ -144,7 +155,7 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	metrics.MessagesIngested.Inc()
 
 	s.activeUsersLock.RLock()
-	userID, ok := s.activeUsers[strings.ToLower(msg.Channel)]
+	userCfg, ok := s.activeUsers[strings.ToLower(msg.Channel)]
 	s.activeUsersLock.RUnlock()
 
 	if !ok {
@@ -155,7 +166,15 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 		return
 	}
 
-	if len(msg.CustomRewardID) == 0 {
+	twitchUserID, _ := strconv.Atoi(msg.User.ID)
+
+	// Handle ^^voice command before any other processing
+	if voiceName, ok := parseVoiceCommand(msg.Message); ok {
+		s.handleVoiceCommand(twitchUserID, msg.User.Name, voiceName)
+		return
+	}
+
+	if len(msg.CustomRewardID) == 0 && !userCfg.ingestAllMessages {
 		return
 	}
 
@@ -168,18 +187,61 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	}
 
 	twitchMsg := db.TwitchMessage{
-		TwitchLogin: msg.User.Name,
-		Message:     msg.Message,
-		RewardID:    msg.CustomRewardID,
+		TwitchLogin:  msg.User.Name,
+		TwitchUserID: twitchUserID,
+		Message:      msg.Message,
+		RewardID:     msg.CustomRewardID,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := s.db.PushIngestMsg(ctx, userID, twitchMsg, data, msg.ID)
+	_, err := s.db.PushIngestMsg(ctx, userCfg.id, twitchMsg, data, msg.ID)
 	if err != nil {
 		s.logger.Error("failed to push message", "err", err, "user", msg.Channel)
 	} else {
 		s.logger.Info("ingested message", "user", msg.Channel, "msg_id", msg.ID)
 	}
+}
+
+func parseVoiceCommand(message string) (string, bool) {
+	if !strings.HasPrefix(message, "^^voice ") {
+		return "", false
+	}
+
+	voiceName := strings.TrimPrefix(message, "^^voice ")
+	voiceName = strings.Trim(voiceName, "\" ")
+
+	if len(voiceName) == 0 {
+		return "", false
+	}
+
+	return voiceName, true
+}
+
+func (s *Service) handleVoiceCommand(twitchUserID int, twitchLogin, voiceName string) {
+	if twitchUserID == 0 {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	exists, err := s.db.VoiceShortNameExists(ctx, voiceName)
+	if err != nil {
+		s.logger.Error("failed to check voice existence", "err", err, "voice", voiceName)
+		return
+	}
+
+	if !exists {
+		s.logger.Info("voice not found", "voice", voiceName, "user", twitchLogin)
+		return
+	}
+
+	if err := s.db.SetChatUserVoice(ctx, twitchUserID, twitchLogin, voiceName); err != nil {
+		s.logger.Error("failed to set chat user voice", "err", err, "user", twitchLogin, "voice", voiceName)
+		return
+	}
+
+	s.logger.Info("voice set", "user", twitchLogin, "voice", voiceName)
 }

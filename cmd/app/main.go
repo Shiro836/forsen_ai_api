@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -71,13 +70,9 @@ func main() {
 	agenticLLM := llm.New(httpClient, &cfg.AgenticLLM)
 	imageLlm := llm.New(httpClient, &cfg.ImageLLM)
 	ffmpegClient := ffmpeg.New(&cfg.Ffmpeg)
-	var ttsEngine ai.TTSEngine
-	if strings.TrimSpace(cfg.IndexTTS.URL) != "" {
-		indexClient := ai.NewIndexTTSClient(httpClient, &cfg.IndexTTS)
-		ttsEngine = ai.NewIndexTTSEngine(indexClient, ffmpegClient)
-	} else {
-		ttsEngine = ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
-	}
+	chatTTSEngine := ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
+	indexClient := ai.NewIndexTTSClient(httpClient, &cfg.IndexTTS)
+	ttsEngine := ai.NewIndexTTSEngine(indexClient, ffmpegClient)
 	whisper := whisperx.New(httpClient, &cfg.Whisper)
 
 	// init s3 client
@@ -99,7 +94,7 @@ func main() {
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
 
 	// 1. Create Service (Shared Dependencies)
-	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, whisper, llmModel, imageLlm, connManager)
+	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, chatTTSEngine, whisper, llmModel, imageLlm, connManager)
 
 	// 2. Create Handlers
 	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), llmModel, imageLlm, db, s3, procService)
@@ -109,9 +104,10 @@ func main() {
 	agenticDetector := agentic.NewDetector(agenticLLM)
 	agenticPlanner := agentic.NewPlanner(agenticLLM)
 	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, agenticLLM, procService)
+	chatTTSHandler := processor.NewChatTTSHandler(logger.WithGroup("chat_tts_handler"), db, procService)
 
 	// 3. Create Processor with Handlers
-	proc := processor.NewProcessor(logger.WithGroup("processor"), db, connManager, aiHandler, ttsHandler, universalHandler, agenticHandler)
+	proc := processor.NewProcessor(logger.WithGroup("processor"), db, connManager, aiHandler, ttsHandler, universalHandler, agenticHandler, chatTTSHandler)
 
 	conns.SetProcessor(connManager, proc)
 

@@ -157,6 +157,10 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/characters/{character_id}/try", api.nav(api.tryCharacter))
 			router.Get("/ws/characters/{character_id}/try", api.tryCharacterWS)
 
+			router.Get("/characters/{character_id}/reward", api.nav(api.rewardChoose))
+			router.Post("/characters/{character_id}/reward_new", http.HandlerFunc(api.rewardNew))
+			router.Post("/characters/{character_id}/reward_existing", http.HandlerFunc(api.rewardExisting))
+
 			router.Get("/universal-tts/try", api.nav(api.tryUniversalTTS))
 			router.Get("/ws/universal-tts/try", api.tryUniversalTTSWS)
 
@@ -172,7 +176,12 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Post("/characters/{character_id}/reward_ai", api.reward(db.TwitchRewardAI))
 
 			router.Post("/universal-tts/reward", http.HandlerFunc(api.universalTTSReward))
+			router.Get("/universal-tts/reward", api.nav(api.universalTTSRewardChoose))
+			router.Post("/universal-tts/reward_existing", http.HandlerFunc(api.universalTTSRewardExisting))
+
 			router.Post("/agentic/reward", http.HandlerFunc(api.agenticReward))
+			router.Get("/agentic/reward", api.nav(api.agenticRewardChoose))
+			router.Post("/agentic/reward_existing", http.HandlerFunc(api.agenticRewardExisting))
 
 			router.Post("/control/grant", http.HandlerFunc(api.controlPanelGrant))
 			router.Post("/control/revoke", http.HandlerFunc(api.controlPanelRevoke))

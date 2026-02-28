@@ -222,7 +222,7 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 
 	events := api.connManager.SubscribeControlPanel(r.Context(), targetUser.ID)
 
-	ticker := immediateticker.New(2 * time.Minute)
+	ticker := immediateticker.New(5 * time.Second)
 	defer ticker.Stop()
 
 	lastUpdated := 0
@@ -266,8 +266,6 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 
 loop:
 	for {
-		defer wsClient.Close()
-
 		select {
 		case <-done:
 			break loop
@@ -325,7 +323,10 @@ loop:
 					rewardTypeStr string = "unknown"
 				)
 
-				if charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), dbMessage.TwitchMessage.RewardID); err == nil {
+				if len(dbMessage.TwitchMessage.RewardID) == 0 {
+					rewardTypeStr = "Chat TTS"
+					charName = "-"
+				} else if charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), dbMessage.TwitchMessage.RewardID); err == nil {
 					charName = charCard.Name
 					switch rewardType {
 					case db.TwitchRewardTTS:
@@ -336,7 +337,6 @@ loop:
 				} else {
 					cardID, rewardType, err2 := api.db.GetRewardByTwitchReward(r.Context(), dbMessage.TwitchMessage.RewardID)
 					if err2 != nil {
-						logger.Error("failed to resolve reward by twitch reward", "err", err2)
 						continue
 					}
 

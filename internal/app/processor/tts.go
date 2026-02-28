@@ -32,6 +32,15 @@ func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byt
 	return ttsResult, ttsSegments, nil
 }
 
+func (s *Service) ChatTTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
+	ttsResult, ttsSegments, err := s.chatTTSEngine.TTS(ctx, msg, refAudio)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return ttsResult, ttsSegments, nil
+}
+
 func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
 	mp3Audio, err := s.ffmpeg.Ffmpeg2Mp3(ctx, audio)
 	if err == nil {

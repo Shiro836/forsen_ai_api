@@ -35,9 +35,10 @@ func (s MsgStatus) String() string {
 }
 
 type TwitchMessage struct {
-	TwitchLogin string `json:"twitch_login"`
-	Message     string `json:"message"`
-	RewardID    string `json:"reward_id"`
+	TwitchLogin  string `json:"twitch_login"`
+	TwitchUserID int    `json:"twitch_user_id,omitempty"`
+	Message      string `json:"message"`
+	RewardID     string `json:"reward_id"`
 }
 
 type Message struct {
@@ -88,10 +89,11 @@ func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMes
 				msg,
 				status,
 				data,
-				unique_id
+				unique_id,
+				updated
 			)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (unique_id) WHERE unique_id IS NOT NULL 
+		VALUES ($1, $2, $3, $4, $5, nextval('updated_seq'))
+		ON CONFLICT (unique_id) WHERE unique_id IS NOT NULL
 		DO UPDATE SET unique_id = EXCLUDED.unique_id
 		RETURNING id
 	`, userID, msg, MsgStatusWait, data, uniqueID).Scan(&id)
@@ -244,6 +246,42 @@ func (db *DB) UpdateCurrentMessages(ctx context.Context, userID uuid.UUID) (cntU
 	`, MsgStatusProcessed, userID, MsgStatusCurrent)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update current message: %w", err)
+	}
+
+	return int(tag.RowsAffected()), nil
+}
+
+func (db *DB) HasWaitingKnownRewardMessage(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var exists bool
+	err := db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM msg_queue mq
+			JOIN reward_buttons rb ON rb.twitch_reward_id = mq.msg->>'reward_id'
+			WHERE mq.user_id = $1
+			AND mq.status = $2
+			AND mq.msg->>'reward_id' IS NOT NULL
+			AND mq.msg->>'reward_id' != ''
+		)
+	`, userID, MsgStatusWait).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check for waiting reward message: %w", err)
+	}
+	return exists, nil
+}
+
+func (db *DB) SkipWaitingNoRewardMessages(ctx context.Context, userID uuid.UUID) (int, error) {
+	tag, err := db.Exec(ctx, `
+		UPDATE msg_queue
+		SET
+			status = $1,
+			updated = nextval('updated_seq')
+		WHERE
+			user_id = $2
+		AND status = $3
+		AND (msg->>'reward_id' IS NULL OR msg->>'reward_id' = '')
+	`, MsgStatusDeleted, userID, MsgStatusWait)
+	if err != nil {
+		return 0, fmt.Errorf("failed to skip waiting no-reward messages: %w", err)
 	}
 
 	return int(tag.RowsAffected()), nil

@@ -9,7 +9,7 @@
             </svg>
             <span class="text-sm font-medium">Universal TTS<br>(forsen dono like)</span>
             <div class="flex gap-2 mt-2">
-                <button hx-post="/universal-tts/reward" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Add Reward</button>
+                <button hx-get="/universal-tts/reward" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Add Reward</button>
                 <button hx-get="/universal-tts/try" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Try</button>
             </div>
         </div>
@@ -22,7 +22,7 @@
             </svg>
             <span class="text-sm font-medium">Agent Baj</span>
             <div class="flex gap-2 mt-2">
-                <button hx-post="/agentic/reward" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Add Reward</button>
+                <button hx-get="/agentic/reward" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Add Reward</button>
                 <button hx-get="/agentic/try" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Try</button>
             </div>
         </div>

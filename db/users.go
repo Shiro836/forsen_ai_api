@@ -179,6 +179,8 @@ type UserSettings struct {
 	MaxSfxCount    *int          `json:"max_sfx_count,omitempty"`   // Maximum number of SFX that can be used in a single TTS message (nil = not set, 0 = unlimited)
 	SfxTotalLimit  *int          `json:"sfx_total_limit,omitempty"` // Maximum cumulative SFX duration in seconds per universal TTS message (nil = not set, 0 = unlimited; default 20s)
 	Token          string        `json:"token,omitempty"`
+
+	IngestAllMessages bool `json:"ingest_all_messages,omitempty"` // When true, ingest all chat messages, not just reward redemptions
 }
 
 func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {

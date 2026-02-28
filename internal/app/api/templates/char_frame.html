@@ -19,13 +19,10 @@
     {{ end }}
     <button class="row-start-11 row-end-12 col-start-4 col-end-6" hx-get="/characters/{{ .Card.ID }}/try"
         hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Try</button>
-    {{ if not .TTSRewardCreated}}
-    <button class="row-start-11 row-end-12 col-start-7 col-end-9"
-        hx-post="/characters/{{ .Card.ID }}/reward_tts">TTS</button>
-    {{ end }}
-    {{ if not .AIRewardCreated}}
-    <button class="row-start-11 row-end-12 col-start-10 col-end-12"
-        hx-post="/characters/{{ .Card.ID }}/reward_ai">AI</button>
+    {{ if or (not .TTSRewardCreated) (not .AIRewardCreated) }}
+    <button class="row-start-11 row-end-12 col-start-7 col-end-12"
+        hx-get="/characters/{{ .Card.ID }}/reward"
+        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Add Reward</button>
     {{ end }}
     {{ if .IsAdmin }}
     <form class="row-start-2 row-end-3 col-start-7 col-end-12 flex items-center gap-2"

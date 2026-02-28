@@ -51,10 +51,6 @@ type ttsResp struct {
 var _ TTSEngine = (*StyleTTSClient)(nil)
 
 func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
-	if len(refAudio) == 0 {
-		return nil, nil, fmt.Errorf("no audio provided")
-	}
-
 	start := time.Now()
 
 	req := &ttsReq{

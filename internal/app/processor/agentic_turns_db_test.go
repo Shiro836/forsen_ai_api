@@ -166,7 +166,7 @@ func TestAgenticHandle_DBIntegration(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	svc := NewService(logger, database, nil, ff, &stubTTSEngine{}, nil, nil, nil, nil)
+	svc := NewService(logger, database, nil, ff, &stubTTSEngine{}, &stubTTSEngine{}, nil, nil, nil, nil)
 	h := NewAgenticHandler(logger, database, detector, planner, dialogueLLM, svc)
 
 	msgID := uuid.New().String()
@@ -276,7 +276,7 @@ func TestAgenticHandle_RealLLM_DBIntegration_PrintDialoguePrompts(t *testing.T) 
 	shortWav, err := ff.TrimToWav(ctx, refWav, 250*time.Millisecond)
 	require.NoError(t, err)
 
-	svc := NewService(logger, database, nil, ff, &fixedAudioTTSEngine{audio: shortWav}, nil, nil, nil, nil)
+	svc := NewService(logger, database, nil, ff, &fixedAudioTTSEngine{audio: shortWav}, &fixedAudioTTSEngine{audio: shortWav}, nil, nil, nil, nil)
 
 	h := NewAgenticHandler(logger, database, detector, planner, dialogueLLM, svc)
 

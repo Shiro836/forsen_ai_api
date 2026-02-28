@@ -104,6 +104,46 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 	return users, nil
 }
 
+type IngestUser struct {
+	ID                uuid.UUID
+	TwitchLogin       string
+	IngestAllMessages bool
+}
+
+func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
+	rows, err := db.Query(ctx, `
+		SELECT
+			u.id,
+			u.twitch_login,
+			coalesce((u.data->>'ingest_all_messages')::boolean, false)
+		FROM permissions AS p
+		JOIN users AS u ON p.twitch_user_id = u.twitch_user_id
+		WHERE
+			p.status = $1
+		AND
+			p.permission = $2
+	`, PermissionStatusGranted, PermissionStreamer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ingest users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*IngestUser
+	for rows.Next() {
+		var u IngestUser
+		if err := rows.Scan(&u.ID, &u.TwitchLogin, &u.IngestAllMessages); err != nil {
+			return nil, fmt.Errorf("failed to scan ingest user: %w", err)
+		}
+		users = append(users, &u)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to scan ingest users: %w", err)
+	}
+
+	return users, nil
+}
+
 func (db *DB) GetUserPermissions(ctx context.Context, userID uuid.UUID, permissionStatus PermissionStatus) ([]Permission, error) {
 	rows, err := db.Query(ctx, `
 		SELECT

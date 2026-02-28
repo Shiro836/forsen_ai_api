@@ -1,0 +1,63 @@
+<div class="flex flex-col h-full p-6 gap-4">
+    <div class="flex items-center justify-between gap-4 border-b pb-4">
+        <div class="min-w-0">
+            <h1 class="text-2xl font-bold truncate">Add Reward</h1>
+            <div class="text-sm text-slate-600 dark:text-slate-400 truncate">{{ .CharacterName }}</div>
+        </div>
+
+        <div class="flex items-center gap-6">
+            <label class="inline-flex items-center cursor-pointer">
+                <span class="me-3 text-sm font-medium text-gray-900 dark:text-gray-300">TTS</span>
+                <input id="reward_type_ai" type="checkbox" name="reward_type" value="ai" class="sr-only peer">
+                <div class="relative w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-focus:ring-4 peer-focus:ring-purple-300 dark:peer-focus:ring-purple-800 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600">
+                </div>
+                <span class="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">AI</span>
+            </label>
+
+            <button class="px-4 py-2 border-2 {{template "button-2"}} font-semibold"
+                hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                hx-push-url="true">
+                Back
+            </button>
+        </div>
+    </div>
+
+    {{ if .Error }}
+    <div class="text-sm border border-red-400/70 bg-red-50 dark:bg-red-950/30 rounded px-3 py-2">
+        {{ .Error }}
+    </div>
+    {{ end }}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="border-2 rounded {{template "ui-border-clr"}} p-4 bg-gray-50 dark:bg-gray-900">
+            <div class="text-lg font-semibold mb-2">Create new reward</div>
+            <div class="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                Creates a new Twitch reward for this character.
+            </div>
+            <form hx-post="/characters/{{ .CharacterID }}/reward_new" hx-target="#tab-content" hx-swap="outerHTML"
+                hx-include="#reward_type_ai">
+                <button type="submit" class="w-full px-4 py-2 border-2 {{template "button-2"}} font-semibold">
+                    Create
+                </button>
+            </form>
+        </div>
+
+        <div class="border-2 rounded {{template "ui-border-clr"}} p-4 bg-gray-50 dark:bg-gray-900">
+            <div class="text-lg font-semibold mb-2">Use existing reward</div>
+            <div class="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                Enter the existing Twitch reward ID and we'll link it.
+            </div>
+            <form hx-post="/characters/{{ .CharacterID }}/reward_existing" hx-target="#tab-content" hx-swap="outerHTML"
+                hx-include="#reward_type_ai">
+                <input type="text" name="twitch_reward_id" placeholder="Reward ID"
+                    value="{{ .ExistingRewardID }}"
+                    class="w-full px-2 py-1 {{template "input-class"}}" />
+                <button type="submit" class="w-full mt-3 px-4 py-2 border-2 {{template "button-2"}} font-semibold">
+                    Link reward
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+

@@ -9,11 +9,12 @@ import (
 )
 
 type filters struct {
-	Filters       string
-	TtsLimit      int
-	MaxSfxCount   int
-	SfxTotalLimit int
-	Token         string
+	Filters           string
+	TtsLimit          int
+	MaxSfxCount       int
+	SfxTotalLimit     int
+	Token             string
+	IngestAllMessages bool
 }
 
 func (api *API) filters(r *http.Request) template.HTML {
@@ -49,11 +50,12 @@ func (api *API) filters(r *http.Request) template.HTML {
 	}
 
 	return getHtml("filters.html", &filters{
-		Filters:       settings.Filters,
-		TtsLimit:      ttsLimit,
-		MaxSfxCount:   maxSfxCount,
-		SfxTotalLimit: sfxTotalLimit,
-		Token:         settings.Token,
+		Filters:           settings.Filters,
+		TtsLimit:          ttsLimit,
+		MaxSfxCount:       maxSfxCount,
+		SfxTotalLimit:     sfxTotalLimit,
+		Token:             settings.Token,
+		IngestAllMessages: settings.IngestAllMessages,
 	})
 }
 
@@ -103,6 +105,7 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	settings.Filters = r.Form.Get("filters")
+	settings.IngestAllMessages = r.Form.Get("ingest_all_messages") == "on"
 
 	ttsLimitStr := r.Form.Get("tts_limit")
 	if ttsLimitStr != "" {

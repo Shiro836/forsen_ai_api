@@ -7,6 +7,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -22,7 +23,7 @@ const dropEverythingQuery = `
 	DROP TABLE if exists users;
 `
 
-const drop = true
+const drop = false
 
 const migrationsFolder = "db/migrations"
 
@@ -60,19 +61,29 @@ func main() {
 
 	for _, file := range files {
 		filePath := migrationsFolder + "/" + file.Name()
-		file, err := os.ReadFile(filePath)
+		fileContent, err := os.ReadFile(filePath)
 		if err != nil {
 			log.Fatalf("can't read file %s: %v", filePath, err)
 		}
 
 		log.Printf("applying migration %s", filePath)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_, err = db.Exec(ctx, string(file))
-		if err != nil {
-			log.Fatalf("can't execute migration %s: %v", filePath, err)
-			return
+		// Execute each statement separately so that statements like
+		// CREATE INDEX CONCURRENTLY (which cannot run inside a transaction)
+		// are not batched together with other statements.
+		for _, stmt := range strings.Split(string(fileContent), ";") {
+			stmt = strings.TrimSpace(stmt)
+			if len(stmt) == 0 {
+				continue
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_, err = db.Exec(ctx, stmt)
+			cancel()
+			if err != nil {
+				log.Fatalf("can't execute migration %s: %v", filePath, err)
+				return
+			}
 		}
 	}
 
