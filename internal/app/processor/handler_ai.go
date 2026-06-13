@@ -270,9 +270,11 @@ The description should read like a clever commentary, not like someone talking a
 		return nil
 	}
 
+	eventWriter(textEvent("", msgID))
+
 	eventWriter(&conns.DataEvent{
-		EventType: conns.EventTypeSkip,
-		EventData: []byte(msgID.String()),
+		EventType: conns.EventTypeImage,
+		EventData: []byte(" "),
 	})
 
 	return nil

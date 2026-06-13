@@ -104,9 +104,11 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		}
 	}()
 
+	eventWriter(textEvent("", uuid.Nil))
+
 	eventWriter(&conns.DataEvent{
-		EventType: conns.EventTypeSkip,
-		EventData: []byte(""),
+		EventType: conns.EventTypeImage,
+		EventData: []byte(" "),
 	})
 
 	state := NewProcessorState()
@@ -346,9 +348,10 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 				updateImageState(msgID, false)
 
 			case conns.CleanOverlay:
+				eventWriter(textEvent("", uuid.Nil))
 				eventWriter(&conns.DataEvent{
-					EventType: conns.EventTypeSkip,
-					EventData: []byte(""),
+					EventType: conns.EventTypeImage,
+					EventData: []byte(" "),
 				})
 
 			case conns.SkipCurrent, conns.ShowImagesCurrent:
