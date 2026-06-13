@@ -52,11 +52,15 @@ type API struct {
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 
 	ingestRestartURL string
+
+	imageCache   *ImageCache
+	voiceSamples *VoiceSampleCache
 }
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client,
-	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler) *API {
+	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
+	voiceSampler VoiceSampler) *API {
 	api := &API{
 		cfg: cfg,
 
@@ -74,6 +78,9 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, logger *slog.Logger,
 		aiHandler:        aiHandler,
 		universalHandler: universalHandler,
 		agenticHandler:   agenticHandler,
+
+		imageCache:   NewImageCache(db),
+		voiceSamples: NewVoiceSampleCache(voiceSampler, db),
 	}
 
 	if ingestPort > 0 {
@@ -124,13 +131,17 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))
 
-		// Images upload page and retrieval (registered before catch-all route)
+		// Images upload and retrieval
 		router.Get("/images", api.navPublic(api.imagesPage))
 		router.Post("/images", http.HandlerFunc(api.imagesUpload))
 		router.Get("/images/{id}", http.HandlerFunc(api.imageGet))
 
 		// Public voices list (short names with images)
 		router.Get("/voices", api.navPublic(api.voicesPublic))
+		router.Get("/voices/{voice}/sample", http.HandlerFunc(api.voiceSample))
+		router.Get("/sounds/{id}", http.HandlerFunc(api.soundGet))
+		router.Get("/filters/{id}/sample", http.HandlerFunc(api.filterSample))
+		router.Get("/emotions/{name}/sample", http.HandlerFunc(api.emotionSample))
 
 		// START No perms routes
 
@@ -275,6 +286,10 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/empty", api.elem(empty))
 	})
+
+	// Public image pages (outside auth so anyone can access)
+	router.Get("/i", api.navPublic(api.sharePage))
+	router.Get("/i/{id}", http.HandlerFunc(api.imagePreview))
 
 	router.Handle("/static/*", http.FileServerFS(staticFS))
 	router.Handle("/favicon.ico", http.RedirectHandler("/static/logo.jpg", http.StatusMovedPermanently))

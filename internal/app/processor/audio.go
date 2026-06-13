@@ -98,19 +98,24 @@ func (s *Service) limitFilters(filters []string) []string {
 	return limitedFilters
 }
 
-func (s *Service) applyAudioEffects(ctx context.Context, audio []byte, filters ...string) ([]byte, error) {
+func (s *Service) applyAudioEffects(ctx context.Context, audio []byte, disableLimiter bool, filters ...string) ([]byte, error) {
 	if len(filters) == 0 {
 		return audio, nil
 	}
 
 	limitedFilters := s.limitFilters(filters)
 
-	processedAudio, err := s.ffmpeg.ApplyStringFilters(ctx, audio, limitedFilters)
+	processedAudio, err := s.ffmpeg.ApplyStringFilters(ctx, audio, limitedFilters, disableLimiter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to apply audio effects: %w", err)
 	}
 
 	return processedAudio, nil
+}
+
+// ApplyFilters applies the given TTS filters (by number) to audio.
+func (s *Service) ApplyFilters(ctx context.Context, audio []byte, filters ...string) ([]byte, error) {
+	return s.applyAudioEffects(ctx, audio, false, filters...)
 }
 
 func (s *Service) getSFX(sfxName string) ([]byte, error) {

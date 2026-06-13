@@ -11,6 +11,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
+	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	ttsprocessor "app/pkg/tts_processor"
 	"app/pkg/whisperx"
@@ -42,7 +43,7 @@ func (s *Service) ChatTTSWithTimings(ctx context.Context, msg string, refAudio [
 }
 
 func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
-	mp3Audio, err := s.ffmpeg.Ffmpeg2Mp3(ctx, audio)
+	mp3Audio, err := s.ffmpeg.Ffmpeg2Mp3(ctx, audio, userSettings.DisableAudioNormalization)
 	if err == nil {
 		audio = mp3Audio
 	} else {
@@ -54,6 +55,13 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 		s.logger.Warn("failed to cut TTS audio", "err", err)
 	}
 
+	if !userSettings.DisableAudioNormalization {
+		audio, err = s.ffmpeg.NormalizeAudio(ctx, audio)
+		if err != nil {
+			return nil, fmt.Errorf("failed to normalize TTS audio: %w", err)
+		}
+	}
+
 	audioLen, err := s.getAudioLength(ctx, audio)
 	if err != nil {
 		return nil, err
@@ -62,6 +70,10 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 	if len(textTimings) > 0 {
 		textTimings[len(textTimings)-1].End = audioLen
 	}
+
+	// cumulative original-text prefixes revealed as the corresponding timing
+	// starts; the overlay's typewriter appends only the new suffix of each event
+	textPrefixes := timingTextPrefixes(msg, textTimings)
 
 	done := make(chan struct{})
 
@@ -72,10 +84,13 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 			return
 		}
 
-		eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeText,
-			EventData: []byte(msg),
-		})
+		if len(textPrefixes) == 0 {
+			// no timings from the engine: keep showing the full text upfront
+			eventWriter(&conns.DataEvent{
+				EventType: conns.EventTypeText,
+				EventData: []byte(msg),
+			})
+		}
 
 		audioMsg, err := json.Marshal(&audioMsg{
 			Audio: audio,
@@ -95,6 +110,8 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 
+		nextSegment := 0
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -109,7 +126,23 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 				}
 
 				elapsed := time.Since(startTime)
+
+				for nextSegment < len(textPrefixes) && elapsed >= textTimings[nextSegment].Start {
+					eventWriter(&conns.DataEvent{
+						EventType: conns.EventTypeText,
+						EventData: []byte(textPrefixes[nextSegment]),
+					})
+					nextSegment++
+				}
+
 				if elapsed > audioLen {
+					if nextSegment < len(textPrefixes) {
+						// make sure the full text is visible at the end
+						eventWriter(&conns.DataEvent{
+							EventType: conns.EventTypeText,
+							EventData: []byte(textPrefixes[len(textPrefixes)-1]),
+						})
+					}
 					return
 				}
 			}
@@ -117,6 +150,52 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 	}()
 
 	return done, nil
+}
+
+// timingTextPrefixes maps each timing to a cumulative prefix of the original
+// message. Timing texts come back normalized from the TTS (case/punctuation
+// differ from msg), so the split points are proportional to the timing texts'
+// lengths, snapped forward to a word boundary. The last prefix is always the
+// whole message.
+func timingTextPrefixes(msg string, timings []whisperx.Timiing) []string {
+	if len(timings) == 0 {
+		return nil
+	}
+
+	msgRunes := []rune(msg)
+
+	total := 0
+	for _, t := range timings {
+		total += len([]rune(t.Text))
+	}
+
+	prefixes := make([]string, len(timings))
+
+	cum := 0
+	pos := 0
+
+	for i, t := range timings {
+		cum += len([]rune(t.Text))
+
+		if i == len(timings)-1 || total == 0 {
+			pos = len(msgRunes)
+		} else {
+			target := len(msgRunes) * cum / total
+			if target < pos {
+				target = pos
+			}
+			for target < len(msgRunes) && msgRunes[target] != ' ' {
+				target++
+			}
+			pos = target
+		}
+
+		prefixes[i] = string(msgRunes[:pos])
+	}
+
+	prefixes[len(prefixes)-1] = msg
+
+	return prefixes
 }
 
 func (s *Service) processUniversalTTSMessage(ctx context.Context, msg string, userSettings *db.UserSettings) ([]ttsprocessor.Action, error) {
@@ -138,6 +217,10 @@ func (s *Service) processUniversalTTSMessage(ctx context.Context, msg string, us
 
 		if len(filter) == 0 {
 			return false
+		}
+
+		if ai.IsEmotion(filter) {
+			return true
 		}
 
 		v, err := strconv.Atoi(filter)
@@ -236,7 +319,9 @@ actions_loop:
 				voiceRef = []byte{}
 			}
 
-			audio, timings, err := s.TTSWithTimings(ctx, action.Text, voiceRef)
+			emotions, audioFilters := splitEmotionFilters(action.Filters)
+
+			audio, timings, err := s.TTSWithTimings(ctx, ai.InsertEmotions(action.Text, emotions), voiceRef)
 			if err != nil {
 				logger.Error("error generating TTS for universal action", "err", err, "text", action.Text)
 				continue
@@ -248,9 +333,9 @@ actions_loop:
 				continue
 			}
 
-			processedAudio, err := s.applyAudioEffects(ctx, audio, action.Filters...)
+			processedAudio, err := s.applyAudioEffects(ctx, audio, userSettings.DisableAudioNormalization, audioFilters...)
 			if err != nil {
-				logger.Error("error applying audio effects", "err", err, "filters", action.Filters)
+				logger.Error("error applying audio effects", "err", err, "filters", audioFilters)
 
 				processedAudio = audio
 			}
@@ -313,9 +398,11 @@ actions_loop:
 				continue
 			}
 
-			processedSFX, err := s.applyAudioEffects(ctx, sfxAudio, action.Filters...)
+			_, sfxFilters := splitEmotionFilters(action.Filters)
+
+			processedSFX, err := s.applyAudioEffects(ctx, sfxAudio, userSettings.DisableAudioNormalization, sfxFilters...)
 			if err != nil {
-				logger.Error("error applying audio effects to SFX", "err", err, "filters", action.Filters)
+				logger.Error("error applying audio effects to SFX", "err", err, "filters", sfxFilters)
 
 				processedSFX = sfxAudio
 			}
@@ -377,6 +464,20 @@ actions_loop:
 	}
 
 	return finalAudio, combinedText.String(), combinedTimings, nil
+}
+
+// splitEmotionFilters separates emotion tags from ffmpeg filter numbers in an
+// action's filter stack.
+func splitEmotionFilters(filters []string) (emotions, audioFilters []string) {
+	for _, f := range filters {
+		if ai.IsEmotion(f) {
+			emotions = append(emotions, f)
+		} else {
+			audioFilters = append(audioFilters, f)
+		}
+	}
+
+	return emotions, audioFilters
 }
 
 func (s *Service) getVoiceReference(ctx context.Context, logger *slog.Logger, voice string) (uuid.UUID, []byte, error) {

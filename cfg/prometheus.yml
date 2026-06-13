@@ -10,3 +10,9 @@ scrape_configs:
       - targets: ['host.docker.internal:8081']
         labels:
           service: 'ingest'
+
+  - job_name: 'llm_translator'
+    static_configs:
+      - targets: ['host.docker.internal:8182']
+        labels:
+          service: 'llm-translator'

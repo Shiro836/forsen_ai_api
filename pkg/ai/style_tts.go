@@ -53,6 +53,9 @@ var _ TTSEngine = (*StyleTTSClient)(nil)
 func (c *StyleTTSClient) TTS(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
 	start := time.Now()
 
+	// StyleTTS has no emotion control; drop the marker so it isn't spoken.
+	msg, _ = ExtractEmotions(msg)
+
 	req := &ttsReq{
 		Text:     msg,
 		RefAudio: refAudio,

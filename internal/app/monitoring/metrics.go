@@ -77,7 +77,7 @@ var AppMetrics = &Metrics{
 	RewardRedeems: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "processor",
 		Subsystem: "rewards",
-		Name:      "total",
+		Name:      "redeems_total",
 	}, []string{"streamer", "reward_type"}),
 	NvidiaStats: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: "system",

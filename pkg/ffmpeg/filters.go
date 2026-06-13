@@ -100,6 +100,45 @@ const (
 	FilterLast
 )
 
+var filterNames = map[FilterType]string{
+	FilterRoomEcho:             "room echo",
+	FilterHallEcho:             "hall echo",
+	FilterOutsideEcho:          "outside echo",
+	FilterPitchDown:            "pitch down",
+	FilterPitchUp:              "pitch up",
+	FilterTelephone:            "telephone",
+	FilterMuffled:              "muffled",
+	FilterQuiet:                "quiet",
+	FilterGhost:                "ghost",
+	FilterChorus:               "chorus",
+	FilterSlower:               "slower",
+	FilterFaster:               "faster",
+	FilterRightSide:            "right side",
+	FilterLeftSide:             "left side",
+	FilterLeftToRight:          "left to right",
+	FilterRightToLeft:          "right to left",
+	FilterQuietToLoud:          "quiet to loud",
+	FilterLoudToQuiet:          "loud to quiet",
+	FilterBog:                  "bog",
+	FilterBackgroundKeyboard:   "keyboard",
+	FilterBackgroundTypewriter: "typewriter",
+	FilterBackgroundWriting:    "writing",
+	FilterBackgroundIphone:     "iphone",
+	FilterBackgroundCave:       "cave",
+	FilterBackgroundHospital:   "hospital",
+	FilterBackgroundWindy:      "windy",
+	FilterBackgroundClock:      "clock",
+	FilterBackgroundCrackles:   "crackles",
+	FilterBackgroundCrickets:   "crickets",
+	FilterBackgroundBirds:      "birds",
+	FilterBackgroundLava:       "lava",
+}
+
+// Name returns a human-readable name for the filter.
+func (t FilterType) Name() string {
+	return filterNames[t]
+}
+
 func getBackgroundAudio(filterType FilterType) []byte {
 	switch filterType {
 	case FilterRoomEcho:
@@ -136,7 +175,7 @@ func getBackgroundAudio(filterType FilterType) []byte {
 }
 
 // mixWithBackgroundAudio mixes the input audio with background audio
-func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, backgroundAudioData []byte, filterType FilterType) ([]byte, error) {
+func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, backgroundAudioData []byte, filterType FilterType, disableLimiter bool) ([]byte, error) {
 	// Create temporary input file
 	inputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
 	err := os.WriteFile(inputPath, audioData, 0644)
@@ -170,18 +209,22 @@ func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, b
 
 	if filterType == FilterRoomEcho || filterType == FilterHallEcho || filterType == FilterGhost {
 		var filterComplex string
+		limiter := ",alimiter=limit=0.9:attack=5:release=50"
+		if disableLimiter {
+			limiter = ""
+		}
 		switch filterType {
 		case FilterGhost:
-			filterComplex = `
+			filterComplex = fmt.Sprintf(`
 				[0] adelay=1000|1000 [input];
 				[input] areverse [reverse];
 				[reverse] [1] afir=dry=10:wet=10 [afirich];
 				[afirich] areverse [afirichreverse];
 				[0] adelay=1000|1000 [dry];
-				[dry] [afirichreverse] amix=inputs=2:weights=10 5 [out];
-			`
+				[dry] [afirichreverse] amix=inputs=2:weights=10 5%s [out];
+			`, limiter)
 		default:
-			filterComplex = "[0] [1] afir=dry=10:wet=10 [reverb]; [0] [reverb] amix=inputs=2:weights=10 1 [out]"
+			filterComplex = fmt.Sprintf("[0] [1] afir=dry=10:wet=10 [reverb]; [0] [reverb] amix=inputs=2:weights=10 1%s [out]", limiter)
 		}
 
 		args = []string{
@@ -198,11 +241,15 @@ func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, b
 			outputPath,
 		}
 	} else {
+		mixFilter := "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0,alimiter=limit=0.9:attack=5:release=50[out]"
+		if disableLimiter {
+			mixFilter = "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0[out]"
+		}
 		args = []string{
 			"-i", inputPath,
 			"-stream_loop", "-1", "-i", backgroundPath,
 			// "-nostats", "-loglevel", "0",
-			"-filter_complex", "[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0[out]",
+			"-filter_complex", mixFilter,
 			"-map", "[out]",
 			"-c:a", "mp3",
 			"-b:a", "192k",
@@ -231,7 +278,7 @@ func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, b
 	return output, nil
 }
 
-func (c *Client) applyFilter(ctx context.Context, audioData []byte, filterType FilterType) ([]byte, error) {
+func (c *Client) applyFilter(ctx context.Context, audioData []byte, filterType FilterType, disableLimiter bool) ([]byte, error) {
 	inputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
 	err := os.WriteFile(inputPath, audioData, 0644)
 	if err != nil {
@@ -259,6 +306,9 @@ func (c *Client) applyFilter(ctx context.Context, audioData []byte, filterType F
 
 	filter := c.buildFilter(filterType, duration)
 	if filter != "" {
+		if !disableLimiter {
+			filter += ",alimiter=limit=0.9:attack=5:release=50"
+		}
 		args = append(args, "-af", filter)
 	}
 
@@ -362,7 +412,7 @@ func (c *Client) buildFilter(filterType FilterType, duration time.Duration) stri
 	}
 }
 
-func (c *Client) ApplyStringFilters(ctx context.Context, audioData []byte, filterNames []string) ([]byte, error) {
+func (c *Client) ApplyStringFilters(ctx context.Context, audioData []byte, filterNames []string, disableLimiter bool) ([]byte, error) {
 	if len(filterNames) == 0 {
 		return audioData, nil
 	}
@@ -387,9 +437,9 @@ func (c *Client) ApplyStringFilters(ctx context.Context, audioData []byte, filte
 		var err error
 
 		if bgAudio := getBackgroundAudio(t); bgAudio != nil {
-			audioData, err = c.mixWithBackgroundAudio(ctx, audioData, bgAudio, t)
+			audioData, err = c.mixWithBackgroundAudio(ctx, audioData, bgAudio, t, disableLimiter)
 		} else {
-			audioData, err = c.applyFilter(ctx, audioData, t)
+			audioData, err = c.applyFilter(ctx, audioData, t, disableLimiter)
 		}
 
 		if err != nil {

@@ -17,7 +17,8 @@ import (
 type Card struct {
 	ID uuid.UUID
 
-	OwnerUserID uuid.UUID
+	OwnerUserID       uuid.UUID
+	OwnerTwitchLogin  string
 
 	Name        string
 	Description string
@@ -364,27 +365,29 @@ func (db *DB) populateCardDataMedia(ctx context.Context, data *CardData) {
 func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChatCardsParams) ([]*Card, error) {
 	rows, err := db.Query(ctx, `
 		select
-			id,
-			owner_user_id,
-			name,
-			description,
-            short_char_name,
-			redeems,
-			tts_redeems,
-			public,
-			updated_at
+			cc.id,
+			cc.owner_user_id,
+			coalesce(u.twitch_login, ''),
+			cc.name,
+			cc.description,
+			cc.short_char_name,
+			cc.redeems,
+			cc.tts_redeems,
+			cc.public,
+			cc.updated_at
 			-- data -- very heavy
-		from char_cards
+		from char_cards cc
+		left join users u on u.id = cc.owner_user_id
 		where (
-			owner_user_id = $1
-			or (public = true and $2 = true)
+			cc.owner_user_id = $1
+			or (cc.public = true and $2 = true)
 		)
 		order by
-			case when $3 = 0 then id end asc,
-			case when $3 = 1 then name end asc,
-			case when $3 = 2 then redeems end desc,
-			case when $3 = 3 then id end desc,
-			case when $3 = 4 then id end asc
+			case when $3 = 0 then cc.id end asc,
+			case when $3 = 1 then cc.name end asc,
+			case when $3 = 2 then cc.redeems end desc,
+			case when $3 = 3 then cc.id end desc,
+			case when $3 = 4 then cc.id end asc
 		limit 100
 	`, userID, params.ShowPublic, params.SortBy)
 	if err != nil {
@@ -398,6 +401,7 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 		err := rows.Scan(
 			&card.ID,
 			&card.OwnerUserID,
+			&card.OwnerTwitchLogin,
 			&card.Name,
 			&card.Description,
 			&card.ShortCharName,

@@ -99,16 +99,22 @@ func TestIndexTTSEngineTTS(t *testing.T) {
 		path, ok := req["spk_audio_path"].(string)
 		require.True(t, ok)
 
-		require.EqualValues(t, ai.EmoControlMethodText, req["emo_control_method"])
-
-		require.Equal(t, "hello world", req["emo_text"])
+		require.EqualValues(t, ai.EmoControlMethodAudioReference, req["emo_control_method"])
+		require.EqualValues(t, true, req["return_segments"])
+		require.EqualValues(t, 120, req["max_text_tokens_per_sentence"])
 
 		data, err := os.ReadFile(path)
 		require.NoError(t, err)
 		require.Equal(t, expectedTrimmed, data)
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("FAKEAUDIO"))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"audio":         []byte("FAKEAUDIO"),
+			"sampling_rate": 22050,
+			"segments": []map[string]any{
+				{"text": "HELLO WORLD", "start": 0.0, "end": 1.25},
+			},
+		})
 	}))
 	defer srv.Close()
 
@@ -119,6 +125,9 @@ func TestIndexTTSEngineTTS(t *testing.T) {
 
 	audio, timings, err := engine.TTS(context.Background(), "hello world", audioRef)
 	require.NoError(t, err)
-	require.Nil(t, timings)
 	require.Equal(t, []byte("FAKEAUDIO"), audio)
+	require.Len(t, timings, 1)
+	require.Equal(t, "HELLO WORLD", timings[0].Text)
+	require.Equal(t, 0*time.Second, timings[0].Start)
+	require.Equal(t, 1250*time.Millisecond, timings[0].End)
 }

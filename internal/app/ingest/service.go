@@ -19,6 +19,7 @@ import (
 
 type ingestUserConfig struct {
 	id                uuid.UUID
+	twitchUserID      int
 	ingestAllMessages bool
 }
 
@@ -107,6 +108,7 @@ func (s *Service) syncUsers(ctx context.Context) error {
 	for _, u := range users {
 		desiredUsers[strings.ToLower(u.TwitchLogin)] = &ingestUserConfig{
 			id:                u.ID,
+			twitchUserID:      u.TwitchUserID,
 			ingestAllMessages: u.IngestAllMessages,
 		}
 	}
@@ -124,6 +126,7 @@ func (s *Service) syncUsers(ctx context.Context) error {
 			s.activeUsers[login] = cfg
 		} else {
 			existing.ingestAllMessages = cfg.ingestAllMessages
+			existing.twitchUserID = cfg.twitchUserID
 		}
 	}
 
@@ -171,6 +174,20 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	// Handle ^^voice command before any other processing
 	if voiceName, ok := parseVoiceCommand(msg.Message); ok {
 		s.handleVoiceCommand(twitchUserID, msg.User.Name, voiceName)
+		return
+	}
+
+	// Route ^^ commands (except ^^voice) to clanker queue
+	if strings.HasPrefix(msg.Message, "^^") {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_, err := s.db.PushClankerMsg(ctx, msg.Channel, userCfg.twitchUserID, msg.User.Name, twitchUserID, msg.Message, msg.ID)
+		if err != nil {
+			s.logger.Error("failed to push clanker message", "err", err, "user", msg.Channel)
+		} else {
+			s.logger.Info("routed clanker message", "user", msg.Channel, "msg_id", msg.ID)
+		}
 		return
 	}
 

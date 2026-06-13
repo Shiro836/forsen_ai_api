@@ -5,6 +5,8 @@
 			</br>
 			Example: "{11} forsen: hello, this is slow message. [137] {.} {2} udisen: Hello, this is echo message.".
 			</br>
+			Emotions work like filters: "{angry} forsen: I HATE THEM! {.}" — stack them to mix: "{sad}{angry} les: I couldn't save forsen from narcissism {.}{.}".
+			</br>
 			Default voice is obiwan.
 		</div>
 		<br />
@@ -14,14 +16,88 @@
 		<br />
 		<p class="text-base mt-2">If your streamer has TTS for all chat messages enabled, type <code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">^^voice voice_name</code> in chat to pick your voice.</p>
     </div>
+	<details class="pt-2 pb-2">
+		<summary class="cursor-pointer text-xl font-medium select-none">
+			TTS Sounds ({{ len .Sounds }})
+		</summary>
+		<div class="flex flex-wrap gap-2 pt-4">
+			{{ range .Sounds }}
+			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+				data-src="/sounds/{{ .ID }}" title="Play sound [{{ .ID }}]">[{{ .ID }}] {{ .Name }}</button>
+			{{ end }}
+		</div>
+	</details>
+	<details class="pt-2 pb-2">
+		<summary class="cursor-pointer text-xl font-medium select-none">
+			TTS Filters ({{ len .Filters }})
+		</summary>
+		<div class="flex flex-wrap gap-2 pt-4">
+			{{ range .Filters }}
+			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+				data-src="/filters/{{ .ID }}/sample" data-loading="1" title="Play filter {{"{"}}{{ .ID }}{{"}"}} sample">{{"{"}}{{ .ID }}{{"}"}} {{ .Name }}</button>
+			{{ end }}
+		</div>
+	</details>
+	<details class="pt-2 pb-2">
+		<summary class="cursor-pointer text-xl font-medium select-none">
+			TTS Emotions ({{ len .Emotions }}) <span class="ml-1 px-2 py-0.5 text-xs font-bold rounded bg-green-600 text-white align-middle">NEW</span>
+		</summary>
+		<div class="flex flex-wrap gap-2 pt-4">
+			{{ range .Emotions }}
+			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+				data-src="/emotions/{{ . }}/sample" data-loading="1" title="Play emotion {{"{"}}{{ . }}{{"}"}} sample">{{"{"}}{{ . }}{{"}"}}</button>
+			{{ end }}
+		</div>
+	</details>
 	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-6">
 		{{ range .Items }}
-		<div class="border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col items-center justify-center">
+		<div class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col items-center justify-center">
 			<div class="w-[100px] h-[100px] flex items-center justify-center overflow-hidden">
 				<img class="object-contain max-w-full max-h-full" src="/characters/{{ .ID }}/image" />
 			</div>
 			<div class="mt-2 text-center text-base font-semibold truncate w-52" title="{{ .Name }}">{{ .Name }}</div>
+			<button class="play-audio-btn mt-2 px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
+				data-src="/voices/{{ .Name }}/sample" data-loading="1" title="Play a TTS sample of this voice">&#9654; Sample</button>
 		</div>
 		{{ end }}
 	</div>
+	<script>
+		(function () {
+			let currentAudio = null;
+
+			document.querySelectorAll('.play-audio-btn').forEach(function (btn) {
+				btn.addEventListener('click', function () {
+					if (currentAudio) {
+						currentAudio.pause();
+						currentAudio = null;
+					}
+
+					const showLoading = btn.dataset.loading === '1';
+					const label = btn.innerHTML;
+					if (showLoading) {
+						btn.disabled = true;
+						btn.textContent = 'Loading...';
+					}
+
+					const reset = function () {
+						btn.disabled = false;
+						btn.innerHTML = label;
+					};
+
+					const fail = function () {
+						btn.textContent = 'Failed';
+						setTimeout(reset, 1500);
+					};
+
+					const audio = new Audio(btn.dataset.src);
+					currentAudio = audio;
+
+					audio.addEventListener('error', fail);
+					audio.play().then(function () {
+						if (showLoading) reset();
+					}).catch(fail);
+				});
+			});
+		})();
+	</script>
 </div>

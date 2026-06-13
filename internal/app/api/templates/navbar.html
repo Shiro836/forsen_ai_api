@@ -2,28 +2,29 @@
     <div id="tabs" class="flex flex-col justify-start border-r {{template "ui-border-clr"}} tab-list pr-2 pb-6 pt-2">
         {{ if .IsAuthenticated }}
         <div class="pt-1 pb-1 w-full">
-            <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4" hx-get="/"
-                hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Home</button>
+            <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4" data-path="/" hx-get="/"
+                hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
+                hx-sync="closest #tabs:abort">Home</button>
         </div>
         {{ end }}
         {{ if .IsStreamer }}
         <div class="pt-1 pb-1 w-full">
             <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
-                hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
-                hx-push-url="true">Characters</button>
+                data-path="/characters,/universal-tts,/agentic" hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                hx-push-url="true" hx-sync="closest #tabs:abort">Characters</button>
         </div>
         <div class="pt-1 pb-1 w-full">
             <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
-                hx-get="/filters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
-                hx-push-url="true">Settings</button>
+                data-path="/filters" hx-get="/filters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                hx-push-url="true" hx-sync="closest #tabs:abort">Settings</button>
         </div>
         {{ end }}
         {{ if .IsMod }}
         <div class="border-t {{template "ui-border-clr"}} pt-1 pb-1">
             <div class="pt-1 pb-1 w-full">
                 <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
-                    hx-get="/mod" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
-                    hx-push-url="true">Mod Page</button>
+                    data-path="/mod" hx-get="/mod" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true" hx-sync="closest #tabs:abort">Mod Page</button>
             </div>
         </div>
         {{ end }}
@@ -31,27 +32,27 @@
         <div class="border-t {{template "ui-border-clr"}} pt-1 pb-1">
             <div class="pt-1 pb-1 w-full">
                 <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
-                    hx-get="/admin" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
-                    hx-push-url="true">Admin Page</button>
+                    data-path="/admin" hx-get="/admin" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true" hx-sync="closest #tabs:abort">Admin Page</button>
             </div>
         </div>
         {{ end }}
         <div class="w-max border-t {{template "ui-border-clr"}} pt-1 pb-1">
             <div class="pt-1 pb-1 w-full">
                 <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
-                    hx-get="/images" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
-                    hx-push-url="true">Images</button>
+                    data-path="/images" hx-get="/images" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true" hx-sync="closest #tabs:abort">Images</button>
             </div>
             <div class="pt-1 pb-1 w-full">
                 <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
-                    hx-get="/voices" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
-                    hx-push-url="true">Voices</button>
+                    data-path="/voices" hx-get="/voices" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true" hx-sync="closest #tabs:abort">Voices</button>
             </div>
             {{ if .IsAuthenticated }}
             <div class="pt-1 pb-1 w-full">
                 <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
-                    hx-get="/control" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
-                    hx-push-url="true">Control Panel</button>
+                    data-path="/control" hx-get="/control" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true" hx-sync="closest #tabs:abort">Control Panel</button>
             </div>
             {{ end }}
         </div>

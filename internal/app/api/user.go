@@ -6,15 +6,17 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type filters struct {
-	Filters           string
-	TtsLimit          int
-	MaxSfxCount       int
-	SfxTotalLimit     int
-	Token             string
-	IngestAllMessages bool
+	Filters                   string
+	TtsLimit                  int
+	MaxSfxCount               int
+	SfxTotalLimit             int
+	Token                     string
+	IngestAllMessages         bool
+	DisableAudioNormalization bool
 }
 
 func (api *API) filters(r *http.Request) template.HTML {
@@ -50,12 +52,13 @@ func (api *API) filters(r *http.Request) template.HTML {
 	}
 
 	return getHtml("filters.html", &filters{
-		Filters:           settings.Filters,
-		TtsLimit:          ttsLimit,
-		MaxSfxCount:       maxSfxCount,
-		SfxTotalLimit:     sfxTotalLimit,
-		Token:             settings.Token,
-		IngestAllMessages: settings.IngestAllMessages,
+		Filters:                   settings.Filters,
+		TtsLimit:                  ttsLimit,
+		MaxSfxCount:               maxSfxCount,
+		SfxTotalLimit:             sfxTotalLimit,
+		Token:                     settings.Token,
+		IngestAllMessages:         settings.IngestAllMessages,
+		DisableAudioNormalization: settings.DisableAudioNormalization,
 	})
 }
 
@@ -104,8 +107,9 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settings.Filters = r.Form.Get("filters")
+	settings.Filters = normalizeFilters(r.Form.Get("filters"))
 	settings.IngestAllMessages = r.Form.Get("ingest_all_messages") == "on"
+	settings.DisableAudioNormalization = r.Form.Get("disable_audio_normalization") == "on"
 
 	ttsLimitStr := r.Form.Get("tts_limit")
 	if ttsLimitStr != "" {
@@ -150,4 +154,15 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("success"))
+}
+
+func normalizeFilters(raw string) string {
+	parts := strings.Split(raw, ",")
+	clean := parts[:0]
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			clean = append(clean, p)
+		}
+	}
+	return strings.Join(clean, ",")
 }

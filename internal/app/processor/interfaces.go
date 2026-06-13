@@ -30,6 +30,7 @@ type InteractionInput struct {
 // LLMClient defines the interface for LLM interactions.
 type LLMClient interface {
 	Ask(ctx context.Context, prompt string) (string, error)
+	AskChat(ctx context.Context, prompt string) (string, error)
 	AskMessages(ctx context.Context, messages []llm.Message, attachments []llm.Attachment) (string, error)
 }
 

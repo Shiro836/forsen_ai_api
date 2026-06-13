@@ -2,6 +2,7 @@ cfg/cfg.yaml
 cfg/docker_cfg.yaml
 cfg/prod_cfg.yaml
 
+/clanker
 /prod
 prod.sh
 /twitch-ingest

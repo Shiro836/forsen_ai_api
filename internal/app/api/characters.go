@@ -4,6 +4,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/internal/app/processor"
+	"app/pkg/ai"
 	"app/pkg/ctxstore"
 	"app/pkg/ws"
 	"context"
@@ -93,17 +94,12 @@ func (api *API) characters(r *http.Request) template.HTML {
 		}
 	}
 	for _, charCard := range charCards {
-		author := ""
-		if owner, err := api.db.GetUserByID(r.Context(), charCard.OwnerUserID); err == nil && owner != nil {
-			author = owner.TwitchLogin
-		}
-
 		chars = append(chars, &charElem{
 			Card:             charCard,
 			CanEdit:          user.ID == charCard.OwnerUserID,
 			IsAdmin:          isAdmin,
 			TTSRewardCreated: false,
-			Author:           author,
+			Author:           charCard.OwnerTwitchLogin,
 		})
 	}
 
@@ -386,6 +382,8 @@ func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWri
 		return
 	}
 
+	api.imageCache.Invalidate(card.ID)
+
 	// w.Header().Add("hx-redirect", "/characters/"+card.ID.String())
 	_, _ = w.Write([]byte("Success"))
 }
@@ -544,7 +542,7 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	charImage, err := api.db.GetCharImage(r.Context(), characterID)
+	cached, err := api.imageCache.Get(r.Context(), characterID)
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
@@ -553,10 +551,7 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Encourage caching for repeated visits
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-
-	if len(charImage) == 0 {
+	if len(cached.Data) == 0 {
 		img, err := staticFS.ReadFile("static/doctorWTF.png")
 		if err != nil {
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
@@ -565,17 +560,28 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-
 		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
 		_, _ = w.Write(img)
 		return
 	}
 
-	_, _ = w.Write(charImage)
+	w.Header().Set("Cache-Control", "public, no-cache")
+	w.Header().Set("ETag", cached.ETag)
+
+	if match := r.Header.Get("If-None-Match"); match == cached.ETag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	_, _ = w.Write(cached.Data)
 }
 
 type voicesListPage struct {
-	Items []voiceItem
+	Items    []voiceItem
+	Sounds   []soundItem
+	Filters  []filterItem
+	Emotions []string
 }
 
 type voiceItem struct {
@@ -598,7 +604,7 @@ func (api *API) voicesPublic(r *http.Request) template.HTML {
 		list = append(list, voiceItem{ID: it.ID, Name: it.ShortCharName})
 	}
 
-	return getHtml("voices.html", &voicesListPage{Items: list})
+	return getHtml("voices.html", &voicesListPage{Items: list, Sounds: soundItems, Filters: filterItems, Emotions: ai.EmotionNames})
 }
 
 func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {

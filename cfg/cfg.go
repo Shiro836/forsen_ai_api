@@ -11,9 +11,23 @@ import (
 	"app/pkg/whisperx"
 )
 
+type ClankerConfig struct {
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	AccessToken  string `yaml:"access_token"`
+	RefreshToken string `yaml:"refresh_token"`
+	BotUserID    string `yaml:"bot_user_id"`
+	BotLogin     string `yaml:"bot_login"`
+	Host         string `yaml:"host"`
+	Port         int    `yaml:"port"`
+
+	LangSearchAPIKey string `yaml:"langsearch_api_key"`
+}
+
 type Config struct {
-	Api    api.Config   `yaml:"api"`
-	Ingest IngestConfig `yaml:"ingest"`
+	Api     api.Config     `yaml:"api"`
+	Ingest  IngestConfig   `yaml:"ingest"`
+	Clanker ClankerConfig  `yaml:"clanker"`
 
 	LLM        llm.Config        `yaml:"llm"`
 	AgenticLLM llm.Config        `yaml:"agentic_llm"`

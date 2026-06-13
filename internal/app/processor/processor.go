@@ -19,6 +19,11 @@ import (
 //go:embed sfx/*.mp3
 var embeddedSFX embed.FS
 
+// GetSFX returns the embedded sound effect audio for the given name (without extension).
+func GetSFX(name string) ([]byte, error) {
+	return embeddedSFX.ReadFile("sfx/" + name + ".mp3")
+}
+
 type Processor struct {
 	logger *slog.Logger
 
@@ -135,7 +140,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 				select {
 				case <-ctx.Done():
 					return nil
-				case <-time.After(time.Second):
+				case <-time.After(3 * time.Second):
 					continue
 				}
 			}

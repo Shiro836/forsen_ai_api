@@ -338,6 +338,10 @@ func (s *stubDialogueLLM) Ask(ctx context.Context, prompt string) (string, error
 	return "ok.", nil
 }
 
+func (s *stubDialogueLLM) AskChat(ctx context.Context, prompt string) (string, error) {
+	return s.Ask(ctx, prompt)
+}
+
 func (s *stubDialogueLLM) AskMessages(ctx context.Context, messages []llm.Message, attachments []llm.Attachment) (string, error) {
 	return "ok.", nil
 }
@@ -379,6 +383,10 @@ func (p *printingDialogueLLM) Ask(ctx context.Context, prompt string) (string, e
 	}
 
 	return p.inner.Ask(ctx, prompt)
+}
+
+func (p *printingDialogueLLM) AskChat(ctx context.Context, prompt string) (string, error) {
+	return p.inner.AskChat(ctx, prompt)
 }
 
 func (p *printingDialogueLLM) AskMessages(ctx context.Context, messages []llm.Message, attachments []llm.Attachment) (string, error) {

@@ -13,12 +13,18 @@ import (
 )
 
 // for the purpose of compressing audio to the highest degree
-func (c *Client) Ffmpeg2Mp3Path(ctx context.Context, inputPath string) ([]byte, error) {
+func (c *Client) Ffmpeg2Mp3Path(ctx context.Context, inputPath string, disableLimiter bool) ([]byte, error) {
 	outputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
 
 	defer os.Remove(outputPath)
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-i", inputPath, "-nostats", "-loglevel", "0", "-ar", "44100", "-ac", "2", "-b:a", "192k", "-vn", "-f", "mp3", outputPath)
+	args := []string{"-i", inputPath, "-nostats", "-loglevel", "0"}
+	if !disableLimiter {
+		args = append(args, "-af", "alimiter=limit=0.9:attack=5:release=50")
+	}
+	args = append(args, "-ar", "44100", "-ac", "2", "-b:a", "192k", "-vn", "-f", "mp3", outputPath)
+
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("failed to run ffmpeg: %w", err)
@@ -32,7 +38,7 @@ func (c *Client) Ffmpeg2Mp3Path(ctx context.Context, inputPath string) ([]byte, 
 	return output, nil
 }
 
-func (c *Client) Ffmpeg2Mp3(ctx context.Context, data []byte) ([]byte, error) {
+func (c *Client) Ffmpeg2Mp3(ctx context.Context, data []byte, disableLimiter bool) ([]byte, error) {
 	path := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
 
 	err := os.WriteFile(path, data, 0644)
@@ -42,7 +48,7 @@ func (c *Client) Ffmpeg2Mp3(ctx context.Context, data []byte) ([]byte, error) {
 
 	defer os.Remove(path)
 
-	return c.Ffmpeg2Mp3Path(ctx, path)
+	return c.Ffmpeg2Mp3Path(ctx, path, disableLimiter)
 }
 
 // ConcatenateAudio concatenates multiple audio files into one using ffmpeg
@@ -175,6 +181,44 @@ func (c *Client) CutAudio(ctx context.Context, data []byte, maxDuration time.Dur
 	output, err := os.ReadFile(outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cut output file: %w", err)
+	}
+
+	return output, nil
+}
+
+func (c *Client) NormalizeAudio(ctx context.Context, data []byte) ([]byte, error) {
+	inputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
+	outputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString()+".mp3")
+
+	defer os.Remove(inputPath)
+	defer os.Remove(outputPath)
+
+	if err := os.WriteFile(inputPath, data, 0644); err != nil {
+		return nil, fmt.Errorf("write input file: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-i", inputPath,
+		"-nostats", "-loglevel", "0",
+		"-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+		"-c:a", "mp3",
+		"-b:a", "192k",
+		"-ar", "44100",
+		"-ac", "2",
+		"-y",
+		outputPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to normalize audio: %w, stderr: %s", err, stderr.String())
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read normalized output: %w", err)
 	}
 
 	return output, nil

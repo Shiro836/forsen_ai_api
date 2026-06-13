@@ -1603,7 +1603,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (streamer, reward_type) (increase(processor_rewards_total[5m]))",
+          "expr": "sum by (streamer, reward_type) (processor_rewards_redeems_total)",
           "legendFormat": "{{streamer}} - {{reward_type}}",
           "range": true,
           "refId": "A"
@@ -1696,7 +1696,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (streamer) (increase(processor_rewards_total[1h]))",
+          "expr": "sum by (streamer) (processor_rewards_redeems_total)",
           "legendFormat": "{{streamer}}",
           "range": true,
           "refId": "A"

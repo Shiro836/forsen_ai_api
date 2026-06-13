@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta property="og:title" content="Image {{ .ID }}" />
+<meta property="og:image" content="{{ .ImageURL }}" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="{{ .ImageURL }}" />
+<link href="/static/tailwind.css" rel="stylesheet" />
+</head>
+<body class="bg-white dark:bg-slate-900 m-0 flex justify-center items-center min-h-screen">
+<img src="{{ .ImageURL }}" class="max-w-full max-h-screen object-contain" />
+</body>
+</html>

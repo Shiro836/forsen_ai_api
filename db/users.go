@@ -181,6 +181,8 @@ type UserSettings struct {
 	Token          string        `json:"token,omitempty"`
 
 	IngestAllMessages bool `json:"ingest_all_messages,omitempty"` // When true, ingest all chat messages, not just reward redemptions
+
+	DisableAudioNormalization bool `json:"disable_audio_normalization,omitempty"` // When true, skip loudnorm and alimiter on TTS audio
 }
 
 func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {

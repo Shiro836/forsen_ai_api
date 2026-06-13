@@ -8,15 +8,15 @@
 
     <title>{{ .Title }}</title>
 
-    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
-    <script src="https://unpkg.com/htmx.org/dist/ext/path-params.js"></script>
-    <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js"></script>
+    <script src="/static/htmx.min.js"></script>
+    <script src="/static/htmx-path-params.js"></script>
+    <script src="/static/htmx-json-enc.js"></script>
 
     <link href="/static/tailwind.css" rel="stylesheet">
 
-    <script src="https://unpkg.com/clipboard@2/dist/clipboard.min.js"></script>
+    <script src="/static/clipboard.min.js"></script>
 
-    <script src="https://cdn.rawgit.com/mattdiamond/Recorderjs/08e7abd9/dist/recorder.js"></script>
+    <script src="/static/recorder.js"></script>
 
     <script src="/static/column-resizer.js"></script>
 </head>
@@ -109,12 +109,136 @@
         .dark {
             scrollbar-color: #A970FF transparent;
         }
+
+        #tabs .tab-active {
+            border-color: rgb(51 65 85); /* slate-700 */
+        }
+
+        .dark #tabs .tab-active {
+            border-color: #A970FF; /* twitch-light */
+        }
+
+        .htmx-request {
+            opacity: 0.5;
+            cursor: wait;
+        }
+
+        button,
+        a {
+            transition: border-color .15s ease, background-color .15s ease, color .15s ease, opacity .15s ease, transform .1s ease;
+        }
+
+        button:active {
+            transform: scale(.97);
+        }
+
+        @keyframes content-fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        #tab-content {
+            animation: content-fade-in .18s ease-out;
+        }
+
+        #messages_box tr {
+            animation: content-fade-in .2s ease-out;
+        }
+
+        .tooltip {
+            opacity: 0;
+            transition: opacity .15s ease .075s;
+        }
+
+        .has-tooltip:hover .tooltip {
+            opacity: 1;
+        }
+
+        .hover-lift {
+            transition: transform .15s ease, border-color .15s ease;
+        }
+
+        .hover-lift:hover {
+            transform: translateY(-3px);
+        }
+
+        /* enabled briefly by the theme switch so colors crossfade instead of snapping */
+        html.theme-anim,
+        html.theme-anim * {
+            transition: background-color .25s ease, color .25s ease, border-color .25s ease, fill .25s ease !important;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            ::before,
+            ::after {
+                animation-duration: .01ms !important;
+                transition-duration: .01ms !important;
+            }
+        }
     </style>
 
     <script>
+        function updateActiveTab() {
+            const tabs = document.querySelectorAll('#tabs [data-path]');
+            if (!tabs.length) return;
+            const path = window.location.pathname;
+            let best = null;
+            let bestLen = -1;
+            tabs.forEach(function (t) {
+                t.getAttribute('data-path').split(',').forEach(function (p) {
+                    const match = p === '/' ? path === '/' : (path === p || path.startsWith(p + '/'));
+                    if (match && p.length > bestLen) {
+                        best = t;
+                        bestLen = p.length;
+                    }
+                });
+            });
+            tabs.forEach(function (t) { t.classList.toggle('tab-active', t === best); });
+        }
+        updateActiveTab();
+        window.addEventListener('popstate', updateActiveTab);
+        document.body.addEventListener('htmx:pushedIntoHistory', updateActiveTab);
+        document.body.addEventListener('htmx:replacedInHistory', updateActiveTab);
+    </script>
+
+    <script>
+        // Handlers return plain-text errors with 4xx/5xx; htmx skips swapping those by
+        // default, so errors into *_result divs would silently disappear.
+        document.body.addEventListener('htmx:beforeSwap', function (evt) {
+            const t = evt.detail.target;
+            if (evt.detail.xhr.status >= 400 && t && t.id && t.id.endsWith('_result')) {
+                evt.detail.shouldSwap = true;
+                evt.detail.isError = false;
+            }
+        });
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+            const t = evt.detail.target;
+            if (t && t.id && t.id.endsWith('_result')) {
+                const ok = evt.detail.xhr.status < 400;
+                t.classList.remove('text-green-600', 'dark:text-green-400', 'text-red-600', 'dark:text-red-400');
+                t.classList.add.apply(t.classList, ok
+                    ? ['text-green-600', 'dark:text-green-400']
+                    : ['text-red-600', 'dark:text-red-400']);
+            }
+        });
+    </script>
+
+    <script>
         document.getElementById("light_switch").addEventListener("click", function () {
-            document.documentElement.classList.toggle("dark");
-            document.cookie = "theme=" + (document.documentElement.classList.contains("dark") ? "dark" : "light") + " ; expires=Fri, 31 Dec 9999 23:59:59 GMT ; path=/ ;";
+            const root = document.documentElement;
+            root.classList.add("theme-anim");
+            setTimeout(function () { root.classList.remove("theme-anim"); }, 300);
+            root.classList.toggle("dark");
+            document.cookie = "theme=" + (root.classList.contains("dark") ? "dark" : "light") + " ; expires=Fri, 31 Dec 9999 23:59:59 GMT ; path=/ ;";
         });
     </script>
 

@@ -113,7 +113,7 @@ func main() {
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, logger.WithGroup("api"), connManager, twitchClient, db, s3, ttsHandler, aiHandler, universalHandler, agenticHandler)
+	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, logger.WithGroup("api"), connManager, twitchClient, db, s3, ttsHandler, aiHandler, universalHandler, agenticHandler, procService)
 
 	router := api.NewRouter()
 

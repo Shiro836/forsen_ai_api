@@ -7,7 +7,7 @@
 
         <button class="px-4 py-2 border-2 {{template "button-2"}} font-semibold"
             hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
-            hx-push-url="true">
+            hx-push-url="true" hx-sync="#tabs:abort">
             Back
         </button>
     </div>

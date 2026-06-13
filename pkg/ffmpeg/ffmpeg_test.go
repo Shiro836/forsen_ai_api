@@ -69,7 +69,7 @@ func TestFfmpegPath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	res, err := client.Ffmpeg2Mp3Path(ctx, "okayeg_ref.wav")
+	res, err := client.Ffmpeg2Mp3Path(ctx, "okayeg_ref.wav", false)
 	assert.NoError(err)
 
 	assert.NotEmpty(res)
@@ -89,7 +89,7 @@ func TestFfmpeg(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	res, err := client.Ffmpeg2Mp3(ctx, audio)
+	res, err := client.Ffmpeg2Mp3(ctx, audio, false)
 	assert.NoError(err)
 
 	assert.NotEmpty(res)

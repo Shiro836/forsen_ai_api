@@ -65,6 +65,9 @@ func (s *Service) FilterText(ctx context.Context, userSettings *db.UserSettings,
 
 	for _, exp := range swears {
 		exp = strings.TrimSpace(exp)
+		if exp == "" {
+			continue
+		}
 
 		r, err := regexp.Compile("(?i)" + exp) // makes them case-insensitive by default
 		if err != nil {

@@ -113,7 +113,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 		return fmt.Errorf("failed to craft first dialogue prompt: %w", err)
 	}
 
-	firstResponse, err := h.llmModel.Ask(ctx, firstPrompt)
+	firstResponse, err := h.llmModel.AskChat(ctx, firstPrompt)
 	if err != nil {
 		logger.Error("failed to generate first dialogue response", "err", err)
 		return fmt.Errorf("failed to generate first dialogue response: %w", err)
@@ -237,7 +237,7 @@ func (h *AgenticHandler) prepareNextAgenticTurn(
 		return nil, fmt.Errorf("failed to craft prompt: %w", err)
 	}
 
-	response, err := h.llmModel.Ask(ctx, prompt)
+	response, err := h.llmModel.AskChat(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate response: %w", err)
 	}

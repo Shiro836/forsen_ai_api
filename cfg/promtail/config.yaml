@@ -47,7 +47,7 @@ scrape_configs:
       - source_labels: ['__journal__systemd_unit']
         target_label: 'unit'
       - source_labels: ['__journal__systemd_unit']
-        regex: '(forsen_ai_api|forsen_ai_ingest)\.service'
+        regex: '(forsen_ai_api|forsen_ai_ingest|llm-translator-backend|llm-translator-frontend)\.service'
         action: keep
     pipeline_stages:
       - json:

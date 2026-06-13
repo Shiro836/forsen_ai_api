@@ -2,35 +2,59 @@
 
 <div class="grid grid-rows-12 grid-cols-12 w-full h-full overflow-hidden">
     <img class="col-start-2 col-end-7 row-start-2 row-end-7 object-contain max-h-full"
-        src="/characters/{{ .Card.ID }}/image"></img>
+        src="/characters/{{ .Card.ID }}/image" loading="lazy"></img>
     <div class="col-start-1 col-end-13 row-start-7 row-end-9 text-xl text-center truncate px-2">{{ .Card.Name }}</div>
     {{ if .Author }}
     <div class="col-start-1 col-end-13 row-start-9 row-end-10 text-xs/tight text-center text-gray-600 dark:text-gray-300 truncate px-2"
         title="{{ .Author }}">by {{ .Author }}</div>
     {{ end }}
-    <div class="col-start-1 col-end-13 row-start-10 row-end-11 text-sm text-center">
-        <span title="AI redeems">{{ .Card.Redeems }}</span>
-        <span class="mx-2"></span>
-        <span title="TTS redeems">{{ .Card.TTSRedeems }}</span>
+    <div class="col-start-1 col-end-13 row-start-10 row-end-11 text-sm flex items-center justify-center gap-4">
+        <span class="flex items-center gap-1" title="AI redeems">
+            <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 8V4H8" />
+                <rect x="4" y="8" width="16" height="12" rx="2" />
+                <path d="M2 14h2" />
+                <path d="M20 14h2" />
+                <path d="M15 13v2" />
+                <path d="M9 13v2" />
+            </svg>
+            {{ .Card.Redeems }}
+        </span>
+        <span class="flex items-center gap-1" title="TTS redeems">
+            <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+            </svg>
+            {{ .Card.TTSRedeems }}
+        </span>
     </div>
     {{ if .CanEdit }}
-    <button class="row-start-11 row-end-12 col-start-2 col-end-4" hx-get="/characters/{{ .Card.ID }}"
-        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Edit</button>
+    <button class="row-start-11 row-end-12 col-start-2 col-end-4 mx-0.5 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+        hx-get="/characters/{{ .Card.ID }}"
+        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
+        hx-sync="#tabs:abort">Edit</button>
     {{ end }}
-    <button class="row-start-11 row-end-12 col-start-4 col-end-6" hx-get="/characters/{{ .Card.ID }}/try"
-        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Try</button>
+    <button class="row-start-11 row-end-12 col-start-4 col-end-6 mx-0.5 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+        hx-get="/characters/{{ .Card.ID }}/try"
+        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
+        hx-sync="#tabs:abort">Try</button>
     {{ if or (not .TTSRewardCreated) (not .AIRewardCreated) }}
-    <button class="row-start-11 row-end-12 col-start-7 col-end-12"
+    <button class="row-start-11 row-end-12 col-start-7 col-end-12 mx-0.5 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
         hx-get="/characters/{{ .Card.ID }}/reward"
-        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Add Reward</button>
+        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
+        hx-sync="#tabs:abort">Add Reward</button>
     {{ end }}
     {{ if .IsAdmin }}
-    <form class="row-start-2 row-end-3 col-start-7 col-end-12 flex items-center gap-2"
+    <form class="row-start-2 row-end-5 col-start-7 col-end-12 flex flex-col justify-start gap-1.5"
         hx-post="/characters/{{ .Card.ID }}/admin/update_short_char_name" hx-target="closest div">
-        <input type="text" name="short_name" placeholder="Short name"
+        <input type="text" name="short_name" placeholder="Short name" autocomplete="off"
             value="{{ if .Card.ShortCharName.Valid }}{{ .Card.ShortCharName.String }}{{ end }}"
-            class="border rounded px-1 py-0.5 w-full" />
-        <button type="submit" class="border rounded px-2 py-0.5">Save</button>
+            class="w-full min-w-0 text-sm px-2 py-1.5 {{template "input-class"}}" />
+        <button type="submit"
+            class="self-end text-xs px-3 py-1 border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Save</button>
     </form>
     {{ end }}
 </div>

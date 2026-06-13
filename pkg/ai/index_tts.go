@@ -60,6 +60,20 @@ type IndexTTS2Request struct {
 	EmoText                  *string          `json:"emo_text,omitempty"`
 	EmoRandom                bool             `json:"emo_random"`
 	MaxTextTokensPerSentence int              `json:"max_text_tokens_per_sentence"`
+	ReturnSegments           bool             `json:"return_segments,omitempty"`
+}
+
+// IndexTTSSegment is one sentence-level time mark returned by the server.
+type IndexTTSSegment struct {
+	Text  string  `json:"text"`
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+}
+
+type indexTTSSegmentsResponse struct {
+	Audio        []byte            `json:"audio"`
+	SamplingRate int               `json:"sampling_rate"`
+	Segments     []IndexTTSSegment `json:"segments"`
 }
 
 // cloneWithDefaults copies the request and applies the defaults expected by the API.
@@ -101,6 +115,41 @@ type indexTTSServerError struct {
 
 // Synthesize executes a request against the IndexTTS server and returns the WAV bytes.
 func (c *IndexTTSClient) Synthesize(ctx context.Context, req *IndexTTS2Request) ([]byte, error) {
+	respBody, err := c.post(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return respBody, nil
+}
+
+// SynthesizeWithSegments is like Synthesize but also returns sentence-level
+// time marks computed exactly by the server (no aligner involved).
+func (c *IndexTTSClient) SynthesizeWithSegments(ctx context.Context, req *IndexTTS2Request) ([]byte, []IndexTTSSegment, error) {
+	if req != nil {
+		reqCopy := *req
+		reqCopy.ReturnSegments = true
+		req = &reqCopy
+	}
+
+	respBody, err := c.post(ctx, req)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var parsed indexTTSSegmentsResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, nil, fmt.Errorf("failed to unmarshal index tts segments response: %w", err)
+	}
+
+	if len(parsed.Audio) == 0 {
+		return nil, nil, fmt.Errorf("index tts segments response contained no audio")
+	}
+
+	return parsed.Audio, parsed.Segments, nil
+}
+
+func (c *IndexTTSClient) post(ctx context.Context, req *IndexTTS2Request) ([]byte, error) {
 	if c == nil || c.cfg == nil || strings.TrimSpace(c.cfg.URL) == "" {
 		return nil, fmt.Errorf("index tts client is not configured")
 	}
@@ -204,6 +253,8 @@ func (e *IndexTTSEngine) TTS(ctx context.Context, text string, voiceReference []
 		return nil, nil, fmt.Errorf("voice reference is required")
 	}
 
+	text, emotions := ExtractEmotions(text)
+
 	processedReference, err := e.trimVoiceReference(ctx, voiceReference)
 	if err != nil {
 		return nil, nil, err
@@ -233,20 +284,34 @@ func (e *IndexTTSEngine) TTS(ctx context.Context, text string, voiceReference []
 		return nil, nil, fmt.Errorf("failed to set temp voice file permissions: %w", err)
 	}
 
-	// emoText := text
-
-	audio, err := e.client.Synthesize(ctx, &IndexTTS2Request{
+	req := &IndexTTS2Request{
 		Text:             text,
 		SpeakerAudioPath: tmpPath,
 		EmoControlMethod: EmoControlMethodAudioReference,
-		// EmoText:          &emoText,
-		EmoRefPath: &tmpPath,
-	})
+		EmoRefPath:       &tmpPath,
+	}
+
+	if vec := EmotionVector(emotions); vec != nil {
+		req.EmoControlMethod = EmoControlMethodVector
+		req.EmoRefPath = nil
+		req.EmoVector = vec
+	}
+
+	audio, segments, err := e.client.SynthesizeWithSegments(ctx, req)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return audio, nil, nil
+	timings := make([]whisperx.Timiing, 0, len(segments))
+	for _, seg := range segments {
+		timings = append(timings, whisperx.Timiing{
+			Text:  seg.Text,
+			Start: time.Duration(seg.Start * float64(time.Second)),
+			End:   time.Duration(seg.End * float64(time.Second)),
+		})
+	}
+
+	return audio, timings, nil
 }
 
 func (e *IndexTTSEngine) trimVoiceReference(ctx context.Context, voiceReference []byte) ([]byte, error) {

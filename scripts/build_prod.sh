@@ -31,6 +31,11 @@ echo "Building $PKG_PATH_INGEST -> $OUT_BIN_INGEST"
 GO111MODULE=on CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" \
   go build -trimpath -ldflags "-s -w" -o "$OUT_BIN_INGEST" "$PKG_PATH_INGEST"
 
-echo "Done: $OUT_BIN, $OUT_BIN_INGEST"
+OUT_BIN_CLANKER="$REPO_ROOT/clanker"
+PKG_PATH_CLANKER="./cmd/clanker"
 
+echo "Building $PKG_PATH_CLANKER -> $OUT_BIN_CLANKER"
+GO111MODULE=on CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" \
+  go build -trimpath -ldflags "-s -w" -o "$OUT_BIN_CLANKER" "$PKG_PATH_CLANKER"
 
+echo "Done: $OUT_BIN, $OUT_BIN_INGEST, $OUT_BIN_CLANKER"

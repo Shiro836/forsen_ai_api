@@ -35,6 +35,8 @@ func createMockValidators() (func(string) bool, func(string) bool, func(string) 
 		"15": true, "16": true, "17": true, "18": true, "19": true, "20": true,
 		"21": true, "22": true, "23": true, "24": true, "25": true, "26": true,
 		"27": true, "28": true, "29": true, "30": true, "31": true,
+		"166": true,
+		// "99" is intentionally absent — used as an invalid SFX in other tests.
 	}
 
 	checkVoice := func(voice string) bool {
@@ -718,31 +720,19 @@ func TestFilterPop(t *testing.T) {
 	fmt.Println(actions)
 
 	require.NoError(t, err)
+	// ProcessMessage emits whitespace-only Text actions between tokens; downstream
+	// (handler_universal/tts.go) filters those out. {.} is a filter-pop, not an SFX.
+	// SFX actions don't carry the current voice (only Filters + Sfx), by design.
 	assert.Equal(t, []Action{
-		{
-			Filters: []string{"9"},
-			Sfx:     "166",
-		},
-		{
-			Filters: []string{"9"},
-			Sfx:     "166",
-		},
-		{
-			Filters: []string{"9"},
-			Sfx:     ".",
-		},
-		{
-			Filters: []string{"9"},
-			Voice:   "cancer",
-			Text:    " Oh! Sorry about that mr. bast, I dropped my plates. ",
-		},
-		{
-			Filters: []string{"9"},
-			Sfx:     "166",
-		},
-		{
-			Filters: []string{"9"},
-			Text:    "OH! OH! OH! OH! OH! OH! OH!",
-		},
+		{Filters: []string{"9"}, Text: " "},
+		{Filters: []string{"9"}, Sfx: "166"},
+		{Filters: []string{"9"}, Text: " "},
+		{Filters: []string{"9"}, Sfx: "166"},
+		{Filters: []string{"9"}, Text: " "},
+		{Filters: []string{}, Text: " "},
+		{Filters: []string{}, Voice: "cancer", Text: " Oh! Sorry about that mr. bast, I dropped my plates. "},
+		{Filters: []string{"9"}, Voice: "cancer", Text: " "},
+		{Filters: []string{"9"}, Sfx: "166"},
+		{Filters: []string{"9"}, Voice: "cancer", Text: " OH! OH! OH! OH! OH! OH! OH!"},
 	}, actions)
 }

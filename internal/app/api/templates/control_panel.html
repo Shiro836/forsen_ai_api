@@ -161,6 +161,14 @@
 
             table = document.getElementById('messages_box');
 
+            // request/response are viewer-controlled text — must never go through innerHTML
+            function textDiv(text) {
+                let div = document.createElement('div');
+                div.className = 'break-words max-w-[400px]';
+                div.textContent = text;
+                return div;
+            }
+
             // Helper function to render images into a cell
             function renderImages(cell, imageUrls, useAbsolute) {
                 cell.innerHTML = '';
@@ -223,8 +231,8 @@
                             row.insertCell(-1).textContent = data['requested_by'];
                             row.insertCell(-1).textContent = data['type'];
                             row.insertCell(-1).textContent = data['char_name'];
-                            row.insertCell(-1).innerHTML = '<div class="break-words max-w-[400px]">' + data['request'] + '</div>';
-                            row.insertCell(-1).innerHTML = '<div class="break-words max-w-[400px]">' + data['response'] + '</div>';
+                            row.insertCell(-1).appendChild(textDiv(data['request']));
+                            row.insertCell(-1).appendChild(textDiv(data['response']));
                             row.insertCell(-1).textContent = data['status'];
                             row.insertCell(-1).innerHTML = '<div class="flex flex-col space-y-1">' +
                                 '<button id="delete_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Delete</button>' +
@@ -246,8 +254,8 @@
                             row.cells[0].textContent = data['requested_by'];
                             row.cells[1].textContent = data['type'];
                             row.cells[2].textContent = data['char_name'];
-                            row.cells[3].innerHTML = '<div class="break-words max-w-[400px]">' + data['request'] + '</div>';
-                            row.cells[4].innerHTML = '<div class="break-words max-w-[400px]">' + data['response'] + '</div>';
+                            row.cells[3].replaceChildren(textDiv(data['request']));
+                            row.cells[4].replaceChildren(textDiv(data['response']));
                             row.cells[5].textContent = data['status'];
                             row.cells[6].innerHTML = '<div class="flex flex-col space-y-1">' +
                                 '<button id="delete_' + id + '" class="{{template "button-2"}} py-1 px-3 text-sm w-min">Delete</button>' +

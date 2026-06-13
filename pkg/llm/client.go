@@ -49,9 +49,53 @@ type MessageContent struct {
 	ImageURL *ImageURL `json:"image_url,omitempty"`
 }
 
+type ToolFunctionDef struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
+}
+
+type Tool struct {
+	Type     string          `json:"type"`
+	Function ToolFunctionDef `json:"function"`
+}
+
+type ToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type ToolCall struct {
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function ToolCallFunction `json:"function"`
+}
+
 type Message struct {
-	Role    string           `json:"role"`
-	Content []MessageContent `json:"content"`
+	Role       string
+	Content    []MessageContent
+	StrContent string     // plain string content for tool result messages
+	ToolCalls  []ToolCall // set on assistant messages requesting tool calls
+	ToolCallID string     // set on tool result messages
+}
+
+func (m Message) MarshalJSON() ([]byte, error) {
+	raw := struct {
+		Role       string      `json:"role"`
+		Content    interface{} `json:"content"`
+		ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
+		ToolCallID string      `json:"tool_call_id,omitempty"`
+	}{
+		Role:       m.Role,
+		ToolCalls:  m.ToolCalls,
+		ToolCallID: m.ToolCallID,
+	}
+	if m.StrContent != "" {
+		raw.Content = m.StrContent
+	} else if m.Content != nil {
+		raw.Content = m.Content
+	}
+	return json.Marshal(raw)
 }
 
 type StructuredOutputs struct {
@@ -66,14 +110,21 @@ type ChatRequest struct {
 	Stop              []string           `json:"stop,omitempty"`
 	StructuredOutputs *StructuredOutputs `json:"structured_outputs,omitempty"`
 	Temperature       *float64           `json:"temperature,omitempty"`
+	Tools             []Tool             `json:"tools,omitempty"`
+}
+
+type ChatResponseMessage struct {
+	Content   string     `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+}
+
+type ChatResponseChoice struct {
+	Message      ChatResponseMessage `json:"message"`
+	FinishReason string              `json:"finish_reason"`
 }
 
 type ChatResponse struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
+	Choices []ChatResponseChoice `json:"choices"`
 }
 
 type Attachment struct {
@@ -148,11 +199,11 @@ func (c *Client) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 	out := make([]string, 0, len(resp.Choices))
 	for _, ch := range resp.Choices {
 		if ch.Text != "" {
-			out = append(out, ch.Text)
+			out = append(out, StripThinking(ch.Text))
 			continue
 		}
 		if ch.Message.Content != "" {
-			out = append(out, ch.Message.Content)
+			out = append(out, StripThinking(ch.Message.Content))
 			continue
 		}
 		out = append(out, "")
@@ -197,7 +248,7 @@ func (c *Client) AskMessages(ctx context.Context, messages []Message, images []A
 		Stop:      []string{"###", "<START>", "<END>"},
 	}
 
-	resp, err := c.reqChat(ctx, req)
+	resp, err := c.ReqChat(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("failed to do chat request: %w", err)
 	}
@@ -206,7 +257,7 @@ func (c *Client) AskMessages(ctx context.Context, messages []Message, images []A
 		return "", fmt.Errorf("no choices returned from AI")
 	}
 
-	return resp.Choices[0].Message.Content, nil
+	return StripThinking(resp.Choices[0].Message.Content), nil
 }
 
 func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
@@ -231,6 +282,31 @@ func (c *Client) Ask(ctx context.Context, prompt string) (string, error) {
 	return longest, nil
 }
 
+func (c *Client) AskChat(ctx context.Context, prompt string) (string, error) {
+	temp := 0.5
+	req := &ChatRequest{
+		Model: c.cfg.Model,
+		Messages: []Message{
+			{Role: "user", Content: []MessageContent{{Type: "text", Text: prompt}}},
+		},
+		MaxTokens:   c.cfg.MaxTokens,
+		MinTokens:   c.cfg.MinTokens,
+		Stop:        []string{"###", "<START>", "<END>"},
+		Temperature: &temp,
+	}
+
+	resp, err := c.ReqChat(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to do chat request: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices returned from AI")
+	}
+
+	return StripThinking(resp.Choices[0].Message.Content), nil
+}
+
 func (c *Client) AskGuided(ctx context.Context, messages []Message, schema json.RawMessage, temperature float64) (string, error) {
 	req := &ChatRequest{
 		Model:     c.cfg.Model,
@@ -243,7 +319,7 @@ func (c *Client) AskGuided(ctx context.Context, messages []Message, schema json.
 		Temperature: &temperature,
 	}
 
-	resp, err := c.reqChat(ctx, req)
+	resp, err := c.ReqChat(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("failed to do guided chat request: %w", err)
 	}
@@ -252,10 +328,25 @@ func (c *Client) AskGuided(ctx context.Context, messages []Message, schema json.
 		return "", fmt.Errorf("no choices returned from AI")
 	}
 
-	return resp.Choices[0].Message.Content, nil
+	return StripThinking(resp.Choices[0].Message.Content), nil
 }
 
-func (c *Client) reqChat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+func (c *Client) GetModel() string    { return c.cfg.Model }
+func (c *Client) GetMaxTokens() int    { return c.cfg.MaxTokens }
+
+// StripThinking removes chain-of-thought reasoning tokens from models
+// like Apriel that output thinking before a final response delimiter.
+func StripThinking(content string) string {
+	if idx := strings.Index(content, "[BEGIN FINAL RESPONSE]"); idx >= 0 {
+		content = content[idx+len("[BEGIN FINAL RESPONSE]"):]
+	}
+	if idx := strings.Index(content, "<|end|>"); idx >= 0 {
+		content = content[:idx]
+	}
+	return strings.TrimSpace(content)
+}
+
+func (c *Client) ReqChat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal chat request struct: %w", err)

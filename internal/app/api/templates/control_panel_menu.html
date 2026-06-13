@@ -8,7 +8,7 @@
             <div class="flex flex-col items-center pr-6">
                 <div class="font-bold">{{ .TwitchLogin }}</div>
             </div>
-            <button class="{{template "button-2"}} font-bold w-full px-8 py-1" hx-get="/control/{{.TwitchUserID}}" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true">Open</button>
+            <button class="{{template "button-2"}} font-bold w-full px-8 py-1" hx-get="/control/{{.TwitchUserID}}" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort">Open</button>
         </div>
         {{ end }}
     </div>

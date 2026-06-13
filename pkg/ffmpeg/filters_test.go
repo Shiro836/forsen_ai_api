@@ -86,7 +86,7 @@ func TestAllFiltersWithApplyStringFilters(t *testing.T) {
 	for _, filter := range allFilters {
 		t.Run(filter.name, func(t *testing.T) {
 			filterNames := []string{fmt.Sprintf("%d", filter.number)}
-			result, err := client.ApplyStringFilters(ctx, testAudio, filterNames)
+			result, err := client.ApplyStringFilters(ctx, testAudio, filterNames, false)
 			assert.NoError(err, "Filter %s (number %d) should not error", filter.name, filter.number)
 			assert.NotEmpty(result, "Filter %s (number %d) should produce non-empty result", filter.name, filter.number)
 
@@ -101,7 +101,7 @@ func TestAllFiltersWithApplyStringFilters(t *testing.T) {
 	t.Run("multiple_filters_sequence", func(t *testing.T) {
 		// Test a sequence of different filter types
 		filterSequence := []string{"1", "4", "6", "11", "13"} // room_echo, pitch_down, telephone, slower, right_side
-		result, err := client.ApplyStringFilters(ctx, testAudio, filterSequence)
+		result, err := client.ApplyStringFilters(ctx, testAudio, filterSequence, false)
 		assert.NoError(err, "Multiple filters sequence should not error")
 		assert.NotEmpty(result, "Multiple filters sequence should produce non-empty result")
 
@@ -113,7 +113,7 @@ func TestAllFiltersWithApplyStringFilters(t *testing.T) {
 
 	// Test empty filter list
 	t.Run("empty_filters", func(t *testing.T) {
-		result, err := client.ApplyStringFilters(ctx, testAudio, []string{})
+		result, err := client.ApplyStringFilters(ctx, testAudio, []string{}, false)
 		assert.NoError(err, "Empty filter list should not error")
 		assert.Equal(testAudio, result, "Empty filter list should return original audio")
 	})
@@ -121,15 +121,15 @@ func TestAllFiltersWithApplyStringFilters(t *testing.T) {
 	// Test invalid filter numbers
 	t.Run("invalid_filters", func(t *testing.T) {
 		// Test invalid filter number (too high)
-		_, err := client.ApplyStringFilters(ctx, testAudio, []string{"999"})
+		_, err := client.ApplyStringFilters(ctx, testAudio, []string{"999"}, false)
 		assert.Error(err, "Invalid filter number should error")
 
 		// Test invalid filter number (too low)
-		_, err = client.ApplyStringFilters(ctx, testAudio, []string{"0"})
+		_, err = client.ApplyStringFilters(ctx, testAudio, []string{"0"}, false)
 		assert.Error(err, "Invalid filter number should error")
 
 		// Test non-numeric filter name
-		_, err = client.ApplyStringFilters(ctx, testAudio, []string{"invalid"})
+		_, err = client.ApplyStringFilters(ctx, testAudio, []string{"invalid"}, false)
 		assert.Error(err, "Non-numeric filter name should error")
 	})
 
@@ -142,7 +142,7 @@ func TestAllFiltersWithApplyStringFilters(t *testing.T) {
 		}
 
 		// Apply all filters in one call
-		result, err := client.ApplyStringFilters(ctx, testAudio, allFilterNumbers)
+		result, err := client.ApplyStringFilters(ctx, testAudio, allFilterNumbers, false)
 		assert.NoError(err, "Applying all filters at once should not error")
 		assert.NotEmpty(result, "Applying all filters at once should produce non-empty result")
 
