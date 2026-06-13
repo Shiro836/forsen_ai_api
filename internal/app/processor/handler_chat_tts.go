@@ -122,8 +122,8 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 	}
 
 	eventWriter(&conns.DataEvent{
-		EventType: conns.EventTypeText,
-		EventData: []byte(" "),
+		EventType: conns.EventTypeSkip,
+		EventData: []byte(msgID.String()),
 	})
 
 	return nil

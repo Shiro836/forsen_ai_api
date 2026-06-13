@@ -7,6 +7,7 @@
     let stopTypewriter = false;
     let characterID = null;
     const audioSources = new Map();
+    const pending_skips = new Set();
 
     function cleanup() {
         console.log('Cleaning up try character');
@@ -384,22 +385,15 @@
             const dataStr = decoder.decode(data);
 
             switch (msg.type) {
-                case 'text':
-                    if (!dataStr || dataStr.trim() === '') {
-                        stopTypewriter = true;
-                        if (typewriterTimeoutId) {
-                            clearTimeout(typewriterTimeoutId);
-                            typewriterTimeoutId = null;
-                        }
-                        const textBox = document.getElementById("text_box");
-                        if (textBox) {
-                            textBox.innerHTML = "";
-                            currentResponse = "";
-                        }
-                    } else {
-                        updateText(dataStr);
+                case 'text': {
+                    let payload;
+                    try { payload = JSON.parse(dataStr); } catch (e) { break; }
+                    if (pending_skips.has(payload.msg_id)) {
+                        break;
                     }
+                    updateText(payload.text || "");
                     break;
+                }
                 case 'audio':
                     const dataJson = JSON.parse(dataStr);
                     playWavFile(base64ToArrayBuffer(dataJson.audio), dataJson.msg_id);
@@ -408,6 +402,7 @@
                     setImage(dataStr);
                     break;
                 case 'skip':
+                    pending_skips.add(dataStr);
                     // Stop the typewriter and clear display when skip event is received
                     stopTypewriter = true;
                     if (typewriterTimeoutId) {

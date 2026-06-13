@@ -271,13 +271,8 @@ The description should read like a clever commentary, not like someone talking a
 	}
 
 	eventWriter(&conns.DataEvent{
-		EventType: conns.EventTypeText,
-		EventData: []byte(" "),
-	})
-
-	eventWriter(&conns.DataEvent{
-		EventType: conns.EventTypeImage,
-		EventData: []byte(" "),
+		EventType: conns.EventTypeSkip,
+		EventData: []byte(msgID.String()),
 	})
 
 	return nil

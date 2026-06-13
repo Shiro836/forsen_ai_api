@@ -310,21 +310,15 @@ async function pageReady() {
             dataStr = decoder.decode(data);
 
             switch (msg.type) {
-                case 'text':
-                    // Empty or space text - just stop typewriter and clear
-                    if (!dataStr || dataStr.trim() === '') {
-                        stopTypewriter = true;
-                        if (typewriterTimeoutId) {
-                            clearTimeout(typewriterTimeoutId);
-                            typewriterTimeoutId = null;
-                        }
-                        const textBox = document.getElementById("text_box");
-                        textBox.innerHTML = "";
-                        currentResponse = "";
-                    } else {
-                        updateText(dataStr);
+                case 'text': {
+                    let payload;
+                    try { payload = JSON.parse(dataStr); } catch (e) { break; }
+                    if (pending_skips.has(payload.msg_id)) {
+                        break;
                     }
-                    break
+                    updateText(payload.text || "");
+                    break;
+                }
                 case 'audio':
                     dataJson = JSON.parse(dataStr);
                     playWavFile(base64ToArrayBuffer(dataJson.audio), dataJson.msg_id);

@@ -88,13 +88,8 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 	}
 
 	eventWriter(&conns.DataEvent{
-		EventType: conns.EventTypeText,
-		EventData: []byte(" "),
-	})
-
-	eventWriter(&conns.DataEvent{
-		EventType: conns.EventTypeImage,
-		EventData: []byte(" "),
+		EventType: conns.EventTypeSkip,
+		EventData: []byte(msgID.String()),
 	})
 
 	return nil

@@ -24,6 +24,20 @@ type audioMsg struct {
 	MsgID string `json:"msg_id"`
 }
 
+type textMsg struct {
+	Text  string `json:"text"`
+	MsgID string `json:"msg_id"`
+}
+
+func textEvent(text string, msgID uuid.UUID) *conns.DataEvent {
+	data, _ := json.Marshal(&textMsg{Text: text, MsgID: msgID.String()})
+
+	return &conns.DataEvent{
+		EventType: conns.EventTypeText,
+		EventData: data,
+	}
+}
+
 func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
 	ttsResult, ttsSegments, err := s.ttsEngine.TTS(ctx, msg, refAudio)
 	if err != nil {
@@ -86,10 +100,7 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 
 		if len(textPrefixes) == 0 {
 			// no timings from the engine: keep showing the full text upfront
-			eventWriter(&conns.DataEvent{
-				EventType: conns.EventTypeText,
-				EventData: []byte(msg),
-			})
+			eventWriter(textEvent(msg, msdID))
 		}
 
 		audioMsg, err := json.Marshal(&audioMsg{
@@ -128,20 +139,14 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 				elapsed := time.Since(startTime)
 
 				for nextSegment < len(textPrefixes) && elapsed >= textTimings[nextSegment].Start {
-					eventWriter(&conns.DataEvent{
-						EventType: conns.EventTypeText,
-						EventData: []byte(textPrefixes[nextSegment]),
-					})
+					eventWriter(textEvent(textPrefixes[nextSegment], msdID))
 					nextSegment++
 				}
 
 				if elapsed > audioLen {
 					if nextSegment < len(textPrefixes) {
 						// make sure the full text is visible at the end
-						eventWriter(&conns.DataEvent{
-							EventType: conns.EventTypeText,
-							EventData: []byte(textPrefixes[len(textPrefixes)-1]),
-						})
+						eventWriter(textEvent(textPrefixes[len(textPrefixes)-1], msdID))
 					}
 					return
 				}
