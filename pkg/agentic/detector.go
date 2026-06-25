@@ -12,9 +12,13 @@ import (
 	"github.com/google/uuid"
 )
 
+type GuidedClient interface {
+	AskGuided(ctx context.Context, messages []llm.Message, schema json.RawMessage, temperature float64) (string, error)
+}
+
 // Detector detects characters mentioned in prompts using LLM with guided JSON
 type Detector struct {
-	client *llm.Client
+	client GuidedClient
 }
 
 type detectionExample struct {
@@ -172,7 +176,7 @@ var defaultDetectionExamples = []detectionExample{
 }
 
 // NewDetector creates a new character detector
-func NewDetector(client *llm.Client) *Detector {
+func NewDetector(client GuidedClient) *Detector {
 	return &Detector{
 		client: client,
 	}

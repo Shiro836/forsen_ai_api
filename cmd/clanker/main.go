@@ -16,7 +16,7 @@ import (
 	"app/cfg"
 	"app/db"
 	"app/internal/app/clanker"
-	"app/pkg/llm"
+	"app/pkg/oai"
 
 	"gopkg.in/yaml.v3"
 )
@@ -44,12 +44,12 @@ func main() {
 	}
 	defer database.Close()
 
-	llmClient := llm.New(http.DefaultClient, &config.AgenticLLM)
+	aiClient := oai.New(config.OAI.AccessToken, config.OAI.URL, config.OAI.Model, config.OAI.MaxTokens)
 
 	svc, err := clanker.NewService(
 		logger.WithGroup("clanker"),
 		database,
-		llmClient,
+		aiClient,
 		&config.Clanker,
 	)
 	if err != nil {

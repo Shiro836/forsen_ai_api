@@ -25,13 +25,15 @@ type ClankerConfig struct {
 }
 
 type Config struct {
-	Api     api.Config     `yaml:"api"`
-	Ingest  IngestConfig   `yaml:"ingest"`
-	Clanker ClankerConfig  `yaml:"clanker"`
+	Api     api.Config    `yaml:"api"`
+	Ingest  IngestConfig  `yaml:"ingest"`
+	Clanker ClankerConfig `yaml:"clanker"`
 
 	LLM        llm.Config        `yaml:"llm"`
+	LLM2       llm.Config        `yaml:"llm2"`
 	AgenticLLM llm.Config        `yaml:"agentic_llm"`
 	ImageLLM   llm.Config        `yaml:"image_llm"`
+	OAI        llm.Config        `yaml:"oai"`
 	StyleTTS   ai.StyleTTSConfig `yaml:"tts"`
 	IndexTTS   ai.IndexTTSConfig `yaml:"index_tts"`
 	Whisper    whisperx.Config   `yaml:"whisper"`

@@ -139,6 +139,12 @@ func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
 
 	user.ID = id
 
+	if api.cfg.AutoApproveUsers {
+		if _, err := api.db.AutoGrantAccess(r.Context(), user, db.PermissionStreamer); err != nil {
+			api.logger.Error("auto approve user failed", "err", err, "twitch_login", user.TwitchLogin)
+		}
+	}
+
 	_ = api.handleNewUser(r.Context(), user)
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)

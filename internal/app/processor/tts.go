@@ -38,8 +38,15 @@ func textEvent(text string, msgID uuid.UUID) *conns.DataEvent {
 	}
 }
 
+// stripForTTS removes asterisks so the voice doesn't read out markdown bold or
+// *action* stage directions ("asterisk asterisk"). Words are kept and the
+// on-screen text is unaffected (callers pass the original separately to playTTS).
+func stripForTTS(msg string) string {
+	return strings.ReplaceAll(msg, "*", "")
+}
+
 func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
-	ttsResult, ttsSegments, err := s.ttsEngine.TTS(ctx, msg, refAudio)
+	ttsResult, ttsSegments, err := s.ttsEngine.TTS(ctx, stripForTTS(msg), refAudio)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -48,7 +55,7 @@ func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byt
 }
 
 func (s *Service) ChatTTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
-	ttsResult, ttsSegments, err := s.chatTTSEngine.TTS(ctx, msg, refAudio)
+	ttsResult, ttsSegments, err := s.chatTTSEngine.TTS(ctx, stripForTTS(msg), refAudio)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -224,6 +231,10 @@ func (s *Service) processUniversalTTSMessage(ctx context.Context, msg string, us
 			return false
 		}
 
+		if strings.EqualFold(filter, oldTTSFilter) {
+			return true
+		}
+
 		if ai.IsEmotion(filter) {
 			return true
 		}
@@ -324,9 +335,18 @@ actions_loop:
 				voiceRef = []byte{}
 			}
 
-			emotions, audioFilters := splitEmotionFilters(action.Filters)
+			filters := parseFilters(action.Filters)
+			audioFilters := filters.audioFilters
 
-			audio, timings, err := s.TTSWithTimings(ctx, ai.InsertEmotions(action.Text, emotions), voiceRef)
+			ttsText := ai.InsertEmotions(action.Text, filters.emotions)
+
+			var audio []byte
+			var timings []whisperx.Timiing
+			if filters.oldTTS {
+				audio, timings, err = s.ChatTTSWithTimings(ctx, ttsText, voiceRef)
+			} else {
+				audio, timings, err = s.TTSWithTimings(ctx, ttsText, voiceRef)
+			}
 			if err != nil {
 				logger.Error("error generating TTS for universal action", "err", err, "text", action.Text)
 				continue
@@ -403,7 +423,7 @@ actions_loop:
 				continue
 			}
 
-			_, sfxFilters := splitEmotionFilters(action.Filters)
+			sfxFilters := parseFilters(action.Filters).audioFilters
 
 			processedSFX, err := s.applyAudioEffects(ctx, sfxAudio, userSettings.DisableAudioNormalization, sfxFilters...)
 			if err != nil {
@@ -471,18 +491,29 @@ actions_loop:
 	return finalAudio, combinedText.String(), combinedTimings, nil
 }
 
-// splitEmotionFilters separates emotion tags from ffmpeg filter numbers in an
-// action's filter stack.
-func splitEmotionFilters(filters []string) (emotions, audioFilters []string) {
+// oldTTSFilter routes a segment through StyleTTS2 instead of IndexTTS.
+const oldTTSFilter = "old"
+
+type actionFilters struct {
+	emotions     []string
+	audioFilters []string
+	oldTTS       bool
+}
+
+func parseFilters(filters []string) actionFilters {
+	var r actionFilters
 	for _, f := range filters {
-		if ai.IsEmotion(f) {
-			emotions = append(emotions, f)
-		} else {
-			audioFilters = append(audioFilters, f)
+		switch {
+		case strings.EqualFold(f, oldTTSFilter):
+			r.oldTTS = true
+		case ai.IsEmotion(f):
+			r.emotions = append(r.emotions, f)
+		default:
+			r.audioFilters = append(r.audioFilters, f)
 		}
 	}
 
-	return emotions, audioFilters
+	return r
 }
 
 func (s *Service) getVoiceReference(ctx context.Context, logger *slog.Logger, voice string) (uuid.UUID, []byte, error) {

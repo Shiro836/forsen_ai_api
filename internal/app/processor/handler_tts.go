@@ -74,10 +74,7 @@ func (h *TTSHandler) Handle(ctx context.Context, input InteractionInput, eventWr
 		return nil
 	}
 
-	eventWriter(&conns.DataEvent{
-		EventType: conns.EventTypeText,
-		EventData: []byte(" "),
-	})
+	eventWriter(textEvent(" ", msgID))
 
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeImage,

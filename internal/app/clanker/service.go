@@ -13,7 +13,7 @@ import (
 
 	"app/cfg"
 	"app/db"
-	"app/pkg/llm"
+	"app/pkg/oai"
 
 	"github.com/nicklaw5/helix/v2"
 )
@@ -23,7 +23,7 @@ const numWorkers = 3
 type Service struct {
 	logger *slog.Logger
 	db     *db.DB
-	llm    *llm.Client
+	ai     *oai.Client
 	cfg    *cfg.ClankerConfig
 
 	helix *helix.Client
@@ -31,7 +31,7 @@ type Service struct {
 	wg    sync.WaitGroup
 }
 
-func NewService(logger *slog.Logger, database *db.DB, llmClient *llm.Client, clankerCfg *cfg.ClankerConfig) (*Service, error) {
+func NewService(logger *slog.Logger, database *db.DB, aiClient *oai.Client, clankerCfg *cfg.ClankerConfig) (*Service, error) {
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
@@ -70,7 +70,7 @@ func NewService(logger *slog.Logger, database *db.DB, llmClient *llm.Client, cla
 	return &Service{
 		logger: logger,
 		db:     database,
-		llm:    llmClient,
+		ai:     aiClient,
 		cfg:    clankerCfg,
 		helix:  helixClient,
 		jobs:   make(chan *db.ClankerMessage, numWorkers),

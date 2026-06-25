@@ -15,6 +15,7 @@ import (
 	"app/pkg/imagetag"
 	"app/pkg/llm"
 	"app/pkg/s3client"
+	"app/pkg/textfilter"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,14 +25,14 @@ import (
 
 type AIHandler struct {
 	logger   *slog.Logger
-	llmModel LLMClient
+	llmModel CharacterLLM
 	imageLlm LLMClient
 	db       *db.DB
 	s3       *s3client.Client
 	service  *Service
 }
 
-func NewAIHandler(logger *slog.Logger, llmModel LLMClient, imageLlm LLMClient, db *db.DB, s3 *s3client.Client, service *Service) *AIHandler {
+func NewAIHandler(logger *slog.Logger, llmModel CharacterLLM, imageLlm LLMClient, db *db.DB, s3 *s3client.Client, service *Service) *AIHandler {
 	return &AIHandler{
 		logger:   logger,
 		llmModel: llmModel,
@@ -184,9 +185,16 @@ The description should read like a clever commentary, not like someone talking a
 		})
 	}
 
+	skipLLMFilterPerUser := input.UserSettings.DisableLLMFilter
+	skipLLMFilter := input.SkipLLMFilterFully || skipLLMFilterPerUser
+
 	ttsUserMsg := imagetag.ReplaceImageTags(input.Message)
 	requestText := input.Requester + " asked me: " + ttsUserMsg
-	filteredRequestText := h.service.FilterText(ctx, input.UserSettings, requestText)
+	requestSpans, err := h.service.filterSpans(ctx, input.UserSettings, requestText, skipLLMFilter)
+	if err != nil {
+		return fmt.Errorf("failed to filter request: %w", err)
+	}
+	filteredRequestText := textfilter.Censor(requestText, requestSpans, "(filtered)")
 
 	requestAudio, textTimings, err := h.service.TTSWithTimings(ctx, filteredRequestText, input.Character.Data.VoiceReference)
 	if err != nil {
@@ -212,14 +220,9 @@ The description should read like a clever commentary, not like someone talking a
 		return nil
 	}
 
-	prompt, err := h.service.craftPrompt(input.Character, input.Requester, updatedMessage)
-	if err != nil {
-		return err
-	}
-
 	go func() {
 		defer close(llmResultDone)
-		llmResult, llmResultErr = h.llmModel.Ask(ctx, prompt)
+		llmResult, llmResultErr = h.llmModel.CharacterReply(ctx, input.Character, input.Requester, updatedMessage)
 	}()
 
 	select {
@@ -230,13 +233,19 @@ The description should read like a clever commentary, not like someone talking a
 		if len(llmResult) == 0 {
 			llmResult = "empty response"
 		}
-		h.db.UpdateMessageData(ctx, msgID, &db.MessageData{AIResponse: llmResult})
-		h.service.connManager.NotifyControlPanel(input.Broadcaster.ID)
 	case <-ctx.Done():
 		return nil
 	}
 
-	filteredResponse := h.service.FilterText(ctx, input.UserSettings, llmResult)
+	responseSpans, err := h.service.filterReplySpans(ctx, input.UserSettings, ttsUserMsg, llmResult, skipLLMFilter)
+	if err != nil {
+		return fmt.Errorf("failed to filter response: %w", err)
+	}
+
+	h.db.UpdateMessageData(ctx, msgID, &db.MessageData{AIResponse: llmResult, FilteredText: responseSpans})
+	h.service.connManager.NotifyControlPanel(input.Broadcaster.ID)
+
+	filteredResponse := textfilter.Censor(llmResult, responseSpans, "(filtered)")
 
 	responseTtsAudio, textTimings, err := h.service.TTSWithTimings(ctx, filteredResponse, input.Character.Data.VoiceReference)
 	if err != nil {
@@ -270,7 +279,7 @@ The description should read like a clever commentary, not like someone talking a
 		return nil
 	}
 
-	eventWriter(textEvent("", msgID))
+	eventWriter(textEvent(" ", msgID))
 
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeImage,

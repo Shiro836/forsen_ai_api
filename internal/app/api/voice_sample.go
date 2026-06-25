@@ -27,6 +27,7 @@ const filterSampleVoice = "les"
 // VoiceSampler synthesizes speech and applies TTS filters to audio.
 type VoiceSampler interface {
 	TTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error)
+	ChatTTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error)
 	ApplyFilters(ctx context.Context, audio []byte, filters ...string) ([]byte, error)
 }
 
@@ -138,6 +139,27 @@ func (c *VoiceSampleCache) GetEmotion(ctx context.Context, voice, emotion string
 	})
 }
 
+// GetOld synthesizes the sample text with the old StyleTTS2 engine ({old} filter).
+func (c *VoiceSampleCache) GetOld(ctx context.Context, voice string) ([]byte, error) {
+	return c.getOrGenerate(ctx, "old:"+voice, func(ctx context.Context) ([]byte, error) {
+		_, card, err := c.provider.GetVoiceReferenceByShortName(ctx, voice)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get voice reference: %w", err)
+		}
+
+		if len(card.VoiceReference) == 0 {
+			return nil, fmt.Errorf("voice '%s' has no voice reference", voice)
+		}
+
+		audio, _, err := c.sampler.ChatTTSWithTimings(ctx, voiceSampleText, card.VoiceReference)
+		if err != nil {
+			return nil, fmt.Errorf("failed to synthesize old tts sample: %w", err)
+		}
+
+		return audio, nil
+	})
+}
+
 // GetFiltered applies a TTS filter to the cached voice sample. Only the base
 // TTS synthesis is cached — the ffmpeg filter pass is cheap and runs per request.
 func (c *VoiceSampleCache) GetFiltered(ctx context.Context, voice string, filterID int) ([]byte, error) {
@@ -202,6 +224,20 @@ func (api *API) emotionSample(w http.ResponseWriter, r *http.Request) {
 	audio, err := api.voiceSamples.GetEmotion(r.Context(), filterSampleVoice, name)
 	if err != nil {
 		api.logger.Error("failed to get emotion sample", "emotion", name, "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("failed to generate sample"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(audio)
+}
+
+func (api *API) oldSample(w http.ResponseWriter, r *http.Request) {
+	audio, err := api.voiceSamples.GetOld(r.Context(), filterSampleVoice)
+	if err != nil {
+		api.logger.Error("failed to get old tts sample", "err", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("failed to generate sample"))
 		return

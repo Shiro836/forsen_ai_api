@@ -183,6 +183,10 @@ type UserSettings struct {
 	IngestAllMessages bool `json:"ingest_all_messages,omitempty"` // When true, ingest all chat messages, not just reward redemptions
 
 	DisableAudioNormalization bool `json:"disable_audio_normalization,omitempty"` // When true, skip loudnorm and alimiter on TTS audio
+
+	DisableLLMFilter bool `json:"disable_llm_filter,omitempty"` // When true, skip the LLM-based content filter
+
+	DisableRegexFilter bool `json:"disable_regex_filter,omitempty"` // When true, skip the regex/word-list content filter
 }
 
 func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {

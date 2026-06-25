@@ -1,10 +1,11 @@
+//go:build integration
+
 package agentic_test
 
 import (
 	"context"
 	"flag"
 	"log"
-	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -12,7 +13,7 @@ import (
 	"app/cfg"
 	"app/db"
 	"app/pkg/agentic"
-	"app/pkg/llm"
+	"app/pkg/oai"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -172,9 +173,7 @@ func TestDetectCharacters(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create LLM client from config
-			httpClient := &http.Client{Timeout: 30 * time.Second}
-			client := llm.New(httpClient, &testCfg.AgenticLLM)
+			client := oai.New(testCfg.OAI.AccessToken, testCfg.OAI.URL, testCfg.OAI.Model, testCfg.OAI.MaxTokens)
 			detector := agentic.NewDetector(client)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

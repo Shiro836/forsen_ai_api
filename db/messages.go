@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"app/pkg/textfilter"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -196,6 +198,8 @@ func (db *DB) UpdateMessageStatus(ctx context.Context, msgID uuid.UUID, status M
 
 type MessageData struct {
 	AIResponse string `json:"ai_response,omitzero"`
+
+	FilteredText []textfilter.Span `json:"filtered_text,omitempty"`
 
 	ShowImages *bool    `json:"show_images,omitempty"`
 	ImageIDs   []string `json:"image_ids,omitempty"`

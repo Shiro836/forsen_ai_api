@@ -51,6 +51,22 @@
                     {{ template "help-tip" "Skip loudness normalization and the soft limiter on TTS audio.\nAudio will be played as-is from the TTS engine." }}
                 </div>
 
+                <div class="flex items-center pb-2 pt-4">
+                    <label for="disable_llm_filter" class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="disable_llm_filter" name="disable_llm_filter" class="mr-2 w-4 h-4" {{ if .DisableLLMFilter }}checked{{ end }}>
+                        Disable LLM filter
+                    </label>
+                    {{ template "help-tip" "Skip the LLM-based content filter on AI requests and replies." }}
+                </div>
+
+                <div class="flex items-center pb-2 pt-4">
+                    <label for="disable_regex_filter" class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="disable_regex_filter" name="disable_regex_filter" class="mr-2 w-4 h-4" {{ if .DisableRegexFilter }}checked{{ end }}>
+                        Disable word-list filter
+                    </label>
+                    {{ template "help-tip" "Skip the regex/word-list content filter (built-in and your custom filters above)." }}
+                </div>
+
                 <div class="flex pt-4 justify-end pt-4 font-bold">
                     <button class='{{template "button-2"}} py-2 px-4 w-24' hx-post="/filters" hx-target="#filters_result">Update</button>
                 </div>

@@ -6,76 +6,73 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"app/db"
-	"app/pkg/charutil"
+	"app/pkg/textfilter"
 )
 
-func (s *Service) craftPrompt(char *db.Card, requester string, message string) (string, error) {
-	data := char.Data
-
-	prompt := &strings.Builder{}
-
-	prompt.WriteString(charutil.BuildCharacterContext(data.Name, data.Description, data.Personality, data.MessageExamples))
-
-	if len(data.SystemPrompt) != 0 {
-		prompt.WriteString(fmt.Sprintf("System Instructions: %s\n", data.SystemPrompt))
-	}
-
-	prompt.WriteString(fmt.Sprintf("Prompt: <START>###%s: %s\n###%s: ", requester, message, data.Name))
-
-	return prompt.String(), nil
+func (s *Service) FilterText(_ context.Context, userSettings *db.UserSettings, text string) string {
+	spans := textfilter.Merge(s.regexSpans(userSettings, text))
+	return textfilter.Censor(text, spans, "(filtered)")
 }
 
-func (s *Service) dialoguePrompt(char *db.Card, scenario string, history ...string) (string, error) {
-	data := char.Data
-
-	prompt := &strings.Builder{}
-
-	prompt.WriteString(charutil.BuildCharacterContext(data.Name, data.Description, data.Personality, data.MessageExamples))
-
-	if len(data.SystemPrompt) != 0 {
-		prompt.WriteString(fmt.Sprintf("System Instructions: %s\n", data.SystemPrompt))
+// filterSpans marks a standalone message: regex patterns plus the context-aware
+// LLM filter, merged.
+func (s *Service) filterSpans(ctx context.Context, userSettings *db.UserSettings, text string, skipLLM bool) ([]textfilter.Span, error) {
+	if skipLLM {
+		return textfilter.Merge(s.regexSpans(userSettings, text)), nil
 	}
-
-	if scenario != "" {
-		prompt.WriteString(fmt.Sprintf("Topic: %s\n", scenario))
+	llmSpans, err := s.llmFilter.Spans(ctx, text)
+	if err != nil {
+		return nil, err
 	}
-
-	prompt.WriteString(fmt.Sprintf("Task: Write the next single message spoken by %s. Return ONLY the message text.\n", data.Name))
-	prompt.WriteString("Do NOT include any speaker name prefixes (no \"Name:\"), do NOT write multiple turns, and do NOT add extra labels.\n")
-
-	for _, turn := range history {
-		if turn != "" {
-			prompt.WriteString(fmt.Sprintf("<START>###%s<END>\n", turn))
-		}
-	}
-
-	prompt.WriteString(fmt.Sprintf("<START>###%s: ", data.Name))
-
-	return prompt.String(), nil
+	return textfilter.Merge(s.regexSpans(userSettings, text), llmSpans), nil
 }
 
-func (s *Service) FilterText(ctx context.Context, userSettings *db.UserSettings, text string) string {
-	swears := GlobalSwears // regex patterns
+// filterReplySpans marks an AI reply, judging it against the prompt it answers
+// so context-dependent hate ("I hate them") is caught.
+func (s *Service) filterReplySpans(ctx context.Context, userSettings *db.UserSettings, prompt, reply string, skipLLM bool) ([]textfilter.Span, error) {
+	if skipLLM {
+		return textfilter.Merge(s.regexSpans(userSettings, reply)), nil
+	}
+	llmSpans, err := s.llmFilter.ReplySpans(ctx, prompt, reply)
+	if err != nil {
+		return nil, err
+	}
+	return textfilter.Merge(s.regexSpans(userSettings, reply), llmSpans), nil
+}
 
+// regexSpans returns the ranges matched by the built-in and per-user filter
+// patterns, as rune offsets over text.
+func (s *Service) regexSpans(userSettings *db.UserSettings, text string) []textfilter.Span {
+	if userSettings.DisableRegexFilter {
+		return nil
+	}
+
+	patterns := GlobalSwears
 	if len(userSettings.Filters) != 0 {
-		swears = slices.Concat(swears, strings.Split(userSettings.Filters, ","))
+		patterns = slices.Concat(patterns, strings.Split(userSettings.Filters, ","))
 	}
 
-	for _, exp := range swears {
+	var spans []textfilter.Span
+	for _, exp := range patterns {
 		exp = strings.TrimSpace(exp)
 		if exp == "" {
 			continue
 		}
 
-		r, err := regexp.Compile("(?i)" + exp) // makes them case-insensitive by default
+		r, err := regexp.Compile("(?i)" + exp)
 		if err != nil {
 			s.logger.Warn(fmt.Sprintf("failed compiling reg expression '%s'", exp), "err", err)
 			continue
 		}
-		text = r.ReplaceAllString(text, "(filtered)")
+		for _, m := range r.FindAllStringIndex(text, -1) {
+			spans = append(spans, textfilter.Span{
+				Start: utf8.RuneCountInString(text[:m[0]]),
+				End:   utf8.RuneCountInString(text[:m[1]]),
+			})
+		}
 	}
-
-	return text
+	return spans
 }

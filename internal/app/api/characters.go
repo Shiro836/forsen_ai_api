@@ -896,13 +896,14 @@ func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state 
 			msgID := uuid.New()
 
 			input := processor.InteractionInput{
-				Requester:    dbUser.TwitchLogin,
-				Broadcaster:  dbUser,
-				Message:      action.Text,
-				Character:    card,
-				UserSettings: userSettings,
-				MsgID:        msgID.String(),
-				State:        state,
+				Requester:          dbUser.TwitchLogin,
+				Broadcaster:        dbUser,
+				Message:            action.Text,
+				Character:          card,
+				UserSettings:       userSettings,
+				MsgID:              msgID.String(),
+				SkipLLMFilterFully: true,
+				State:              state,
 			}
 
 			select {

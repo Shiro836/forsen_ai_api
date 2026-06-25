@@ -121,7 +121,7 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 		return nil
 	}
 
-	eventWriter(textEvent("", msgID))
+	eventWriter(textEvent(" ", msgID))
 
 	return nil
 }

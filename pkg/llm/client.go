@@ -110,7 +110,11 @@ type ChatRequest struct {
 	Stop              []string           `json:"stop,omitempty"`
 	StructuredOutputs *StructuredOutputs `json:"structured_outputs,omitempty"`
 	Temperature       *float64           `json:"temperature,omitempty"`
+	MinP              *float64           `json:"min_p,omitempty"`
+	RepetitionPenalty *float64           `json:"repetition_penalty,omitempty"`
 	Tools             []Tool             `json:"tools,omitempty"`
+	// ChatTemplateKwargs passes extra vars into the model's jinja chat template.
+	ChatTemplateKwargs map[string]any `json:"chat_template_kwargs,omitempty"`
 }
 
 type ChatResponseMessage struct {
@@ -331,8 +335,8 @@ func (c *Client) AskGuided(ctx context.Context, messages []Message, schema json.
 	return StripThinking(resp.Choices[0].Message.Content), nil
 }
 
-func (c *Client) GetModel() string    { return c.cfg.Model }
-func (c *Client) GetMaxTokens() int    { return c.cfg.MaxTokens }
+func (c *Client) GetModel() string  { return c.cfg.Model }
+func (c *Client) GetMaxTokens() int { return c.cfg.MaxTokens }
 
 // StripThinking removes chain-of-thought reasoning tokens from models
 // like Apriel that output thinking before a final response delimiter.

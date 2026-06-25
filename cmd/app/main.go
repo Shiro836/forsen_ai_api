@@ -25,6 +25,8 @@ import (
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
+	"app/pkg/llmfilter"
+	"app/pkg/oai"
 	"app/pkg/s3client"
 	"app/pkg/twitch"
 	"app/pkg/whisperx"
@@ -67,8 +69,13 @@ func main() {
 	defer cancel()
 
 	llmModel := llm.New(httpClient, &cfg.LLM)
-	agenticLLM := llm.New(httpClient, &cfg.AgenticLLM)
 	imageLlm := llm.New(httpClient, &cfg.ImageLLM)
+
+	// Character replies use cydonia (chat format). To fall back to lexi, swap to:
+	//   var characterLlm processor.CharacterLLM = llm.CompletionClient{Client: llmModel}
+	var characterLlm processor.CharacterLLM = llm.ChatClient{Client: llm.New(httpClient, &cfg.LLM2)}
+	oaiClient := oai.New(cfg.OAI.AccessToken, cfg.OAI.URL, cfg.OAI.Model, cfg.OAI.MaxTokens)
+	textFilter := llmfilter.New(oaiClient)
 	ffmpegClient := ffmpeg.New(&cfg.Ffmpeg)
 	chatTTSEngine := ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
 	indexClient := ai.NewIndexTTSClient(httpClient, &cfg.IndexTTS)
@@ -94,16 +101,16 @@ func main() {
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
 
 	// 1. Create Service (Shared Dependencies)
-	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, chatTTSEngine, whisper, llmModel, imageLlm, connManager)
+	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, chatTTSEngine, whisper, llmModel, imageLlm, textFilter, connManager)
 
 	// 2. Create Handlers
-	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), llmModel, imageLlm, db, s3, procService)
+	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), characterLlm, imageLlm, db, s3, procService)
 	ttsHandler := processor.NewTTSHandler(logger.WithGroup("tts_handler"), db, procService)
 	universalHandler := processor.NewUniversalHandler(logger.WithGroup("universal_handler"), db, procService)
 
-	agenticDetector := agentic.NewDetector(agenticLLM)
-	agenticPlanner := agentic.NewPlanner(agenticLLM)
-	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, agenticLLM, procService)
+	agenticDetector := agentic.NewDetector(oaiClient)
+	agenticPlanner := agentic.NewPlanner(oaiClient)
+	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, characterLlm, procService)
 	chatTTSHandler := processor.NewChatTTSHandler(logger.WithGroup("chat_tts_handler"), db, procService)
 
 	// 3. Create Processor with Handlers

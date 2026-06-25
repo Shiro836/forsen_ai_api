@@ -37,9 +37,10 @@
     </div>
 
     <!-- Input area -->
-    <div class="flex gap-2 items-stretch">
-        <input type="text" id="message_input" autocomplete="off"
-            class="flex-1 px-4 py-2 border-2 {{template "ui-border-clr"}} rounded {{template "input-class"}}" />
+    <div class="flex gap-2 items-end">
+        <textarea id="message_input" rows="3" autocomplete="off" autofocus
+            placeholder="Type a message…"
+            class="flex-1 px-4 py-2 border-2 {{template "ui-border-clr"}} rounded resize-none min-h-24 max-h-64 overflow-y-auto text-lg {{template "input-class"}}"></textarea>
         {{ if .AgenticMode }}
         <button id="agentic_button" class="px-6 py-2 border-2 {{template "button-2"}} font-semibold">
             Generate

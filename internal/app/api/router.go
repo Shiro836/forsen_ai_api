@@ -29,6 +29,10 @@ import (
 type Config struct {
 	Port    int           `yaml:"port"`
 	Timeout time.Duration `yaml:"timeout"`
+
+	// AutoApproveUsers, when true, immediately grants streamer access on request
+	// instead of putting it in the mod approval queue.
+	AutoApproveUsers bool `yaml:"auto_approve_users"`
 }
 
 type API struct {
@@ -131,10 +135,8 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))
 
-		// Images upload and retrieval
+		// Images embed page (upload + serve routes are public, registered below)
 		router.Get("/images", api.navPublic(api.imagesPage))
-		router.Post("/images", http.HandlerFunc(api.imagesUpload))
-		router.Get("/images/{id}", http.HandlerFunc(api.imageGet))
 
 		// Public voices list (short names with images)
 		router.Get("/voices", api.navPublic(api.voicesPublic))
@@ -142,6 +144,7 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/sounds/{id}", http.HandlerFunc(api.soundGet))
 		router.Get("/filters/{id}/sample", http.HandlerFunc(api.filterSample))
 		router.Get("/emotions/{name}/sample", http.HandlerFunc(api.emotionSample))
+		router.Get("/extra/old/sample", http.HandlerFunc(api.oldSample))
 
 		// START No perms routes
 
@@ -287,9 +290,11 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/empty", api.elem(empty))
 	})
 
-	// Public image pages (outside auth so anyone can access)
+	// Public image pages and upload/serve (outside auth so anyone can access)
 	router.Get("/i", api.navPublic(api.sharePage))
 	router.Get("/i/{id}", http.HandlerFunc(api.imagePreview))
+	router.Post("/images", http.HandlerFunc(api.imagesUpload))
+	router.Get("/images/{id}", http.HandlerFunc(api.imageGet))
 
 	router.Handle("/static/*", http.FileServerFS(staticFS))
 	router.Handle("/favicon.ico", http.RedirectHandler("/static/logo.jpg", http.StatusMovedPermanently))

@@ -17,6 +17,8 @@ type filters struct {
 	Token                     string
 	IngestAllMessages         bool
 	DisableAudioNormalization bool
+	DisableLLMFilter          bool
+	DisableRegexFilter        bool
 }
 
 func (api *API) filters(r *http.Request) template.HTML {
@@ -59,6 +61,8 @@ func (api *API) filters(r *http.Request) template.HTML {
 		Token:                     settings.Token,
 		IngestAllMessages:         settings.IngestAllMessages,
 		DisableAudioNormalization: settings.DisableAudioNormalization,
+		DisableLLMFilter:          settings.DisableLLMFilter,
+		DisableRegexFilter:        settings.DisableRegexFilter,
 	})
 }
 
@@ -110,6 +114,8 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 	settings.Filters = normalizeFilters(r.Form.Get("filters"))
 	settings.IngestAllMessages = r.Form.Get("ingest_all_messages") == "on"
 	settings.DisableAudioNormalization = r.Form.Get("disable_audio_normalization") == "on"
+	settings.DisableLLMFilter = r.Form.Get("disable_llm_filter") == "on"
+	settings.DisableRegexFilter = r.Form.Get("disable_regex_filter") == "on"
 
 	ttsLimitStr := r.Form.Get("tts_limit")
 	if ttsLimitStr != "" {

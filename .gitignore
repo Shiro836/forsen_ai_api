@@ -18,3 +18,5 @@ pkg/ai/res/*
 pkg/ffmpeg/refs/*
 pkg/ffmpeg/tmp/*
 pkg/whisperx/refs/*
+
+services/

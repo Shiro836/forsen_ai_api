@@ -4,6 +4,7 @@ import (
 	"app/db"
 	"app/pkg/ctxstore"
 	immediateticker "app/pkg/immediate_ticker"
+	"app/pkg/textfilter"
 	"app/pkg/ws"
 	"encoding/json"
 	"errors"
@@ -386,6 +387,8 @@ loop:
 					Request:  dbMessage.TwitchMessage.Message,
 					Response: msgData.AIResponse,
 
+					FilteredText: msgData.FilteredText,
+
 					Status: dbMessage.Status.String(),
 
 					ShowImages: msgData.ShowImages != nil && *msgData.ShowImages,
@@ -445,6 +448,9 @@ type msgUpsert struct {
 
 	Request  string `json:"request"`
 	Response string `json:"response"`
+
+	// FilteredText marks the ranges of Response the panel should highlight.
+	FilteredText []textfilter.Span `json:"filtered_text,omitempty"`
 
 	Status string `json:"status"`
 

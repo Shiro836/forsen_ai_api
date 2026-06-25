@@ -26,11 +26,11 @@ type AgenticHandler struct {
 	db       *db.DB
 	detector *agentic.Detector
 	planner  *agentic.Planner
-	llmModel LLMClient
+	llmModel CharacterLLM
 	service  *Service
 }
 
-func NewAgenticHandler(logger *slog.Logger, db *db.DB, detector *agentic.Detector, planner *agentic.Planner, llmModel LLMClient, service *Service) *AgenticHandler {
+func NewAgenticHandler(logger *slog.Logger, db *db.DB, detector *agentic.Detector, planner *agentic.Planner, llmModel CharacterLLM, service *Service) *AgenticHandler {
 	return &AgenticHandler{
 		logger:   logger,
 		db:       db,
@@ -107,13 +107,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 		return fmt.Errorf("character card not found for %s", firstSpeakerName)
 	}
 
-	firstPrompt, err := h.service.dialoguePrompt(firstCard, input.Message)
-	if err != nil {
-		logger.Error("failed to craft first dialogue prompt", "err", err)
-		return fmt.Errorf("failed to craft first dialogue prompt: %w", err)
-	}
-
-	firstResponse, err := h.llmModel.AskChat(ctx, firstPrompt)
+	firstResponse, err := h.llmModel.DialogueReply(ctx, firstCard, input.Message)
 	if err != nil {
 		logger.Error("failed to generate first dialogue response", "err", err)
 		return fmt.Errorf("failed to generate first dialogue response: %w", err)
@@ -232,12 +226,7 @@ func (h *AgenticHandler) prepareNextAgenticTurn(
 		return nil, fmt.Errorf("character card not found for speaker %s", nextSpeakerName)
 	}
 
-	prompt, err := h.service.dialoguePrompt(nextCard, scenario, collectHistoryTurns(*history)...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to craft prompt: %w", err)
-	}
-
-	response, err := h.llmModel.AskChat(ctx, prompt)
+	response, err := h.llmModel.DialogueReply(ctx, nextCard, scenario, collectHistoryTurns(*history)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate response: %w", err)
 	}

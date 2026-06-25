@@ -81,6 +81,7 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 			p.status = $1
 		AND
 			p.permission = $2
+		ORDER BY p.id ASC
 	`, permissionStatus, permission)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get permitted users: %w", err)
@@ -204,6 +205,27 @@ func (db *DB) RequestAccess(ctx context.Context, user *User, permission Permissi
 	}
 
 	return nil
+}
+
+// AutoGrantAccess grants the permission as granted only if the user has no
+// existing permission record, so it never overrides a moderator's prior
+// decision (e.g. a denied user). Returns true if a new grant was created.
+// It is used for auto-approving newly created users.
+func (db *DB) AutoGrantAccess(ctx context.Context, user *User, permission Permission) (bool, error) {
+	if !IsValidPermission(permission) {
+		return false, fmt.Errorf("invalid permission: %d", permission)
+	}
+
+	tag, err := db.Exec(ctx, `
+		INSERT INTO permissions (twitch_login, twitch_user_id, permission, status)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (twitch_user_id, permission) DO NOTHING
+	`, user.TwitchLogin, user.TwitchUserID, permission, PermissionStatusGranted)
+	if err != nil {
+		return false, fmt.Errorf("failed to auto grant access: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
 }
 
 func (db *DB) HasPermission(ctx context.Context, twitchUserID int, permission Permission) (bool, PermissionStatus, error) {

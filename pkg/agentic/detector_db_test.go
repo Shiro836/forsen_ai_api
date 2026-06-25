@@ -1,3 +1,5 @@
+//go:build integration
+
 package agentic_test
 
 import (
@@ -8,9 +10,8 @@ import (
 	"app/cfg"
 	"app/db"
 	"app/pkg/agentic"
-	"app/pkg/llm"
+	"app/pkg/oai"
 
-	"net/http"
 	"os"
 
 	"github.com/stretchr/testify/assert"
@@ -34,9 +35,7 @@ func TestDetectCharacters_DBIntegration(t *testing.T) {
 	database, err := db.New(ctx, &testCfg.DB)
 	require.NoError(t, err)
 
-	// Create LLM client
-	httpClient := &http.Client{Timeout: 30 * time.Second}
-	client := llm.New(httpClient, &testCfg.AgenticLLM)
+	client := oai.New(testCfg.OAI.AccessToken, testCfg.OAI.URL, testCfg.OAI.Model, testCfg.OAI.MaxTokens)
 	detector := agentic.NewDetector(client)
 
 	// Fetch all characters from DB

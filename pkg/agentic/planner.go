@@ -12,7 +12,7 @@ import (
 )
 
 type Planner struct {
-	client *llm.Client
+	client GuidedClient
 }
 
 type FirstSpeakerPlan struct {
@@ -28,7 +28,7 @@ type NextSpeaker struct {
 	NextSpeakerName string `json:"next_speaker_name"`
 }
 
-func NewPlanner(client *llm.Client) *Planner {
+func NewPlanner(client GuidedClient) *Planner {
 	return &Planner{
 		client: client,
 	}

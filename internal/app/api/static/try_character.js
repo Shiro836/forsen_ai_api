@@ -219,6 +219,14 @@
 
         console.log('Sending:', message);
         ws.send(message);
+
+        input.focus();
+    }
+
+    function autoResizeInput(input) {
+        if (!input) return;
+        input.style.height = 'auto';
+        input.style.height = input.scrollHeight + 'px';
     }
 
     function init() {
@@ -291,18 +299,8 @@
         }
 
         if (input) {
-            input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    initAudio();
-                    if (agenticMode) {
-                        sendAction('agentic');
-                    } else if (universalMode) {
-                        sendAction('universal_tts');
-                    } else {
-                        sendAction('ai');
-                    }
-                }
-            });
+            input.addEventListener('input', () => autoResizeInput(input));
+            input.focus();
         }
 
         // Initial state

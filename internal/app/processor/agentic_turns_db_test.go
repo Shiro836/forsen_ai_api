@@ -1,3 +1,5 @@
+//go:build integration
+
 package processor
 
 import (
@@ -166,7 +168,7 @@ func TestAgenticHandle_DBIntegration(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	svc := NewService(logger, database, nil, ff, &stubTTSEngine{}, &stubTTSEngine{}, nil, nil, nil, nil)
+	svc := NewService(logger, database, nil, ff, &stubTTSEngine{}, &stubTTSEngine{}, nil, nil, nil, nil, nil)
 	h := NewAgenticHandler(logger, database, detector, planner, dialogueLLM, svc)
 
 	msgID := uuid.New().String()
@@ -276,7 +278,7 @@ func TestAgenticHandle_RealLLM_DBIntegration_PrintDialoguePrompts(t *testing.T) 
 	shortWav, err := ff.TrimToWav(ctx, refWav, 250*time.Millisecond)
 	require.NoError(t, err)
 
-	svc := NewService(logger, database, nil, ff, &fixedAudioTTSEngine{audio: shortWav}, &fixedAudioTTSEngine{audio: shortWav}, nil, nil, nil, nil)
+	svc := NewService(logger, database, nil, ff, &fixedAudioTTSEngine{audio: shortWav}, &fixedAudioTTSEngine{audio: shortWav}, nil, nil, nil, nil, nil)
 
 	h := NewAgenticHandler(logger, database, detector, planner, dialogueLLM, svc)
 
@@ -346,6 +348,21 @@ func (s *stubDialogueLLM) AskMessages(ctx context.Context, messages []llm.Messag
 	return "ok.", nil
 }
 
+func (s *stubDialogueLLM) reply(name string) string {
+	if resp, ok := s.bySpeaker[name]; ok {
+		return resp
+	}
+	return "ok."
+}
+
+func (s *stubDialogueLLM) CharacterReply(ctx context.Context, card *db.Card, requester, message string) (string, error) {
+	return s.reply(card.Name), nil
+}
+
+func (s *stubDialogueLLM) DialogueReply(ctx context.Context, card *db.Card, scenario string, history ...string) (string, error) {
+	return s.reply(card.Name), nil
+}
+
 type stubTTSEngine struct{}
 
 func (s *stubTTSEngine) TTS(ctx context.Context, text string, voiceReference []byte) ([]byte, []whisperx.Timiing, error) {
@@ -391,6 +408,24 @@ func (p *printingDialogueLLM) AskChat(ctx context.Context, prompt string) (strin
 
 func (p *printingDialogueLLM) AskMessages(ctx context.Context, messages []llm.Message, attachments []llm.Attachment) (string, error) {
 	return p.inner.AskMessages(ctx, messages, attachments)
+}
+
+func (p *printingDialogueLLM) CharacterReply(ctx context.Context, card *db.Card, requester, message string) (string, error) {
+	return llm.CompletionClient{Client: p.inner}.CharacterReply(ctx, card, requester, message)
+}
+
+func (p *printingDialogueLLM) DialogueReply(ctx context.Context, card *db.Card, scenario string, history ...string) (string, error) {
+	idx := atomic.AddInt64(&p.callIdx, 1) - 1
+
+	if !agenticTurnsOnly {
+		fmt.Printf("\n===== dialogue #%d: %s | scenario=%q | history=%v =====\n", idx, card.Name, scenario, history)
+
+		if p.maxPrompts > 0 && idx >= p.maxPrompts-1 {
+			return "", fmt.Errorf("stopping after printing dialogue #%d", idx)
+		}
+	}
+
+	return llm.CompletionClient{Client: p.inner}.DialogueReply(ctx, card, scenario, history...)
 }
 
 func tinySilenceWav(d time.Duration, sampleRate int, channels int) []byte {

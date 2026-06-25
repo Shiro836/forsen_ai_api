@@ -43,6 +43,23 @@
     }
   }
 
+  document.addEventListener('copy', function(e) {
+    const active = document.activeElement;
+    const isTypingTarget = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+    if (isTypingTarget) return;
+
+    // Don't hijack Ctrl+C when the user is actually selecting text to copy.
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) return;
+
+    const copyBtn = resultsEl && resultsEl.querySelector('[data-copy-link]');
+    if (!copyBtn) return;
+
+    // Reuse the Copy link button so it shows its "Copied!" feedback.
+    e.preventDefault();
+    copyBtn.click();
+  });
+
   document.addEventListener('paste', function(e) {
     const active = document.activeElement;
     const isTypingTarget = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
