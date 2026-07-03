@@ -22,7 +22,8 @@ type CompletionClient struct{ *Client }
 // over /v1/chat/completions (the cydonia format).
 type ChatClient struct{ *Client }
 
-func (c CompletionClient) CharacterReply(ctx context.Context, card *db.Card, requester, message string) (string, error) {
+// CharacterReply ignores images: the raw completions endpoint is text-only.
+func (c CompletionClient) CharacterReply(ctx context.Context, card *db.Card, requester, message string, _ []Attachment) (string, error) {
 	d := card.Data
 	var b strings.Builder
 	b.WriteString(charutil.BuildCharacterContext(d.Name, d.Description, d.Personality, d.MessageExamples))
@@ -54,8 +55,12 @@ func (c CompletionClient) DialogueReply(ctx context.Context, card *db.Card, scen
 	return c.Ask(ctx, b.String())
 }
 
-func (c ChatClient) CharacterReply(ctx context.Context, card *db.Card, requester, message string) (string, error) {
-	msgs := append(chatSystemAndExamples(card.Data), Message{Role: "user", StrContent: message})
+func (c ChatClient) CharacterReply(ctx context.Context, card *db.Card, requester, message string, images []Attachment) (string, error) {
+	user := Message{Role: "user", StrContent: message}
+	if parts := imageParts(images); len(parts) > 0 {
+		user = Message{Role: "user", Content: append([]MessageContent{{Type: "text", Text: message}}, parts...)}
+	}
+	msgs := append(chatSystemAndExamples(card.Data), user)
 	return c.chatReply(ctx, msgs)
 }
 
@@ -134,6 +139,7 @@ func chatSystemPrompt(d *db.CardData) string {
 	if d.SystemPrompt != "" {
 		fmt.Fprintf(&b, "%s\n", d.SystemPrompt)
 	}
+	b.WriteString("Keep replies to about 1-10 spoken sentences by default; go longer only when the request itself calls for it — a story, a detailed ranking, step-by-step instructions.\n")
 	b.WriteString("Your replies are spoken aloud by a text-to-speech voice, so talk the way the character would actually speak out loud.")
 	return b.String()
 }

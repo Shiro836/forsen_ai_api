@@ -33,6 +33,9 @@ type Config struct {
 	LLM2       llm.Config        `yaml:"llm2"`
 	AgenticLLM llm.Config        `yaml:"agentic_llm"`
 	ImageLLM   llm.Config        `yaml:"image_llm"`
+	// NativeImages sends user images to the character model directly instead
+	// of injecting an ImageLLM-written description into the message text.
+	NativeImages bool `yaml:"native_images"`
 	OAI        llm.Config        `yaml:"oai"`
 	StyleTTS   ai.StyleTTSConfig `yaml:"tts"`
 	IndexTTS   ai.IndexTTSConfig `yaml:"index_tts"`

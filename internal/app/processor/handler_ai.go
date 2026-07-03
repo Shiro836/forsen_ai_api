@@ -24,22 +24,24 @@ import (
 )
 
 type AIHandler struct {
-	logger   *slog.Logger
-	llmModel CharacterLLM
-	imageLlm LLMClient
-	db       *db.DB
-	s3       *s3client.Client
-	service  *Service
+	logger       *slog.Logger
+	llmModel     CharacterLLM
+	imageLlm     LLMClient
+	nativeImages bool
+	db           *db.DB
+	s3           *s3client.Client
+	service      *Service
 }
 
-func NewAIHandler(logger *slog.Logger, llmModel CharacterLLM, imageLlm LLMClient, db *db.DB, s3 *s3client.Client, service *Service) *AIHandler {
+func NewAIHandler(logger *slog.Logger, llmModel CharacterLLM, imageLlm LLMClient, nativeImages bool, db *db.DB, s3 *s3client.Client, service *Service) *AIHandler {
 	return &AIHandler{
-		logger:   logger,
-		llmModel: llmModel,
-		imageLlm: imageLlm,
-		db:       db,
-		s3:       s3,
-		service:  service,
+		logger:       logger,
+		llmModel:     llmModel,
+		imageLlm:     imageLlm,
+		nativeImages: nativeImages,
+		db:           db,
+		s3:           s3,
+		service:      service,
 	}
 }
 
@@ -49,7 +51,6 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 	timer := prometheus.NewTimer(monitoring.AppMetrics.AIQueryTime)
 	defer timer.ObserveDuration()
 
-	// Increment AI redeems for the character
 	if input.Character != nil {
 		if err := h.db.IncrementCharRedeems(ctx, input.Character.ID); err != nil {
 			logger.Warn("failed to increment ai redeems", "err", err)
@@ -61,7 +62,6 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 		return fmt.Errorf("invalid msg id: %w", err)
 	}
 
-	// Fetch message data to see if there are images
 	msg, err := h.db.GetMessageByID(ctx, msgID)
 	if err != nil {
 		logger.Warn("failed to get message by id", "err", err)
@@ -87,79 +87,27 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 		}
 	}
 
-	imageAnalysisDone := make(chan struct{})
-	if len(imageIDs) == 0 || h.s3 == nil || h.imageLlm == nil {
-		close(imageAnalysisDone)
+	var attachments []llm.Attachment
+	imagesDone := make(chan struct{})
+	if len(imageIDs) == 0 || h.s3 == nil || (!h.nativeImages && h.imageLlm == nil) {
+		close(imagesDone)
 	} else {
 		go func(origMsg string, ids []string) {
 			defer func() {
 				if r := recover(); r != nil {
-					logger.Error("panic in image analysis goroutine", "r", r)
+					logger.Error("panic in image processing goroutine", "r", r)
 					updatedMessage = origMsg
+					attachments = nil
 				}
-				close(imageAnalysisDone)
+				close(imagesDone)
 			}()
 
-			localMsg := origMsg
-			replacedCount := 0
-			var wg sync.WaitGroup
-			type res struct {
-				id       string
-				analysis string
-				ok       bool
+			images := h.fetchImages(ctx, logger, ids)
+			if h.nativeImages {
+				updatedMessage, attachments = attachImages(origMsg, images)
+			} else {
+				updatedMessage = h.describeImages(ctx, logger, origMsg, images)
 			}
-			resultsCh := make(chan res, len(ids))
-
-			for _, id := range ids {
-				id := id
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					obj, err := h.s3.GetObject(ctx, s3client.UserImagesBucket, id)
-					if err != nil {
-						logger.Warn("failed to fetch image from s3", "id", id, "err", err)
-						resultsCh <- res{id: id, ok: false}
-						return
-					}
-					data, err := io.ReadAll(obj)
-					obj.Close()
-					if err != nil {
-						logger.Warn("failed to read image from s3", "id", id, "err", err)
-						resultsCh <- res{id: id, ok: false}
-						return
-					}
-
-					messages := []llm.Message{
-						{Role: "system", Content: []llm.MessageContent{{Type: "text", Text: "."}}},
-						{Role: "user", Content: []llm.MessageContent{{Type: "text", Text: `Describe the image as if you are a witty streamer's AI co-host in a witty, playful style while staying in third person. 
-Do not use first-person expressions like "I" or "we," and avoid conversational greetings. 
-The description should read like a clever commentary, not like someone talking about themselves.  in 4 to 20 sentences. No markdown.`}}},
-					}
-					analysis, err := h.imageLlm.AskMessages(ctx, messages, []llm.Attachment{{Data: data, ContentType: "image/png"}})
-					if err != nil || len(analysis) == 0 {
-						logger.Warn("image analysis failed", "id", id, "err", err)
-						resultsCh <- res{id: id, ok: false}
-						return
-					}
-					resultsCh <- res{id: id, analysis: analysis, ok: true}
-				}()
-			}
-
-			go func() {
-				wg.Wait()
-				close(resultsCh)
-			}()
-
-			for r := range resultsCh {
-				if !r.ok {
-					localMsg = strings.Replace(localMsg, "<img:"+r.id+">", "", 1)
-					continue
-				}
-				wrapped := "<image_" + r.id + ":{" + r.analysis + "}>"
-				localMsg = strings.Replace(localMsg, "<img:"+r.id+">", wrapped, 1)
-				replacedCount++
-			}
-			updatedMessage = localMsg
 		}(updatedMessage, imageIDs)
 	}
 
@@ -211,7 +159,7 @@ The description should read like a clever commentary, not like someone talking a
 	}
 
 	select {
-	case <-imageAnalysisDone:
+	case <-imagesDone:
 	case <-ctx.Done():
 		return nil
 	}
@@ -222,7 +170,7 @@ The description should read like a clever commentary, not like someone talking a
 
 	go func() {
 		defer close(llmResultDone)
-		llmResult, llmResultErr = h.llmModel.CharacterReply(ctx, input.Character, input.Requester, updatedMessage)
+		llmResult, llmResultErr = h.llmModel.CharacterReply(ctx, input.Character, input.Requester, updatedMessage, attachments)
 	}()
 
 	select {
@@ -287,4 +235,89 @@ The description should read like a clever commentary, not like someone talking a
 	})
 
 	return nil
+}
+
+type fetchedImage struct {
+	id   string
+	data []byte
+}
+
+func (h *AIHandler) fetchImages(ctx context.Context, logger *slog.Logger, ids []string) []fetchedImage {
+	images := make([]fetchedImage, len(ids))
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		images[i] = fetchedImage{id: id}
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			obj, err := h.s3.GetObject(ctx, s3client.UserImagesBucket, id)
+			if err != nil {
+				logger.Warn("failed to fetch image from s3", "id", id, "err", err)
+				return
+			}
+			defer obj.Close()
+			data, err := io.ReadAll(obj)
+			if err != nil {
+				logger.Warn("failed to read image from s3", "id", id, "err", err)
+				return
+			}
+			images[i].data = data
+		}(i, id)
+	}
+	wg.Wait()
+	return images
+}
+
+// attachImages prepares the message for a vision-capable character model:
+// image tags become "image_N" references and the bytes ride along as
+// attachments in the same order.
+func attachImages(msg string, images []fetchedImage) (string, []llm.Attachment) {
+	attachments := make([]llm.Attachment, 0, len(images))
+	for _, img := range images {
+		if img.data == nil {
+			msg = strings.Replace(msg, "<img:"+img.id+">", "", 1)
+			continue
+		}
+		attachments = append(attachments, llm.Attachment{Data: img.data, ContentType: "image/png"})
+	}
+	return imagetag.ReplaceImageTags(msg), attachments
+}
+
+// describeImages is the text-only fallback: a separate vision model describes
+// each image and the description is injected into the message in place of the
+// tag.
+func (h *AIHandler) describeImages(ctx context.Context, logger *slog.Logger, msg string, images []fetchedImage) string {
+	analyses := make([]string, len(images))
+	var wg sync.WaitGroup
+	for i, img := range images {
+		if img.data == nil {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, img fetchedImage) {
+			defer wg.Done()
+			messages := []llm.Message{
+				{Role: "system", Content: []llm.MessageContent{{Type: "text", Text: "."}}},
+				{Role: "user", Content: []llm.MessageContent{{Type: "text", Text: `Describe the image as if you are a witty streamer's AI co-host in a witty, playful style while staying in third person.
+Do not use first-person expressions like "I" or "we," and avoid conversational greetings.
+The description should read like a clever commentary, not like someone talking about themselves.  in 4 to 20 sentences. No markdown.`}}},
+			}
+			analysis, err := h.imageLlm.AskMessages(ctx, messages, []llm.Attachment{{Data: img.data, ContentType: "image/png"}})
+			if err != nil || len(analysis) == 0 {
+				logger.Warn("image analysis failed", "id", img.id, "err", err)
+				return
+			}
+			analyses[i] = analysis
+		}(i, img)
+	}
+	wg.Wait()
+
+	for i, img := range images {
+		if analyses[i] == "" {
+			msg = strings.Replace(msg, "<img:"+img.id+">", "", 1)
+			continue
+		}
+		msg = strings.Replace(msg, "<img:"+img.id+">", "<image_"+img.id+":{"+analyses[i]+"}>", 1)
+	}
+	return msg
 }

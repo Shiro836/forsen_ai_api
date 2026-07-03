@@ -38,6 +38,22 @@ func textEvent(text string, msgID uuid.UUID) *conns.DataEvent {
 	}
 }
 
+type skipMsg struct {
+	MsgID   string `json:"msg_id"`
+	Current bool   `json:"current"`
+}
+
+// skipEvent tells the overlay to drop in-flight events for the message;
+// current=true additionally wipes the screen.
+func skipEvent(msgID uuid.UUID, current bool) *conns.DataEvent {
+	data, _ := json.Marshal(&skipMsg{MsgID: msgID.String(), Current: current})
+
+	return &conns.DataEvent{
+		EventType: conns.EventTypeSkip,
+		EventData: data,
+	}
+}
+
 // stripForTTS removes asterisks so the voice doesn't read out markdown bold or
 // *action* stage directions ("asterisk asterisk"). Words are kept and the
 // on-screen text is unaffected (callers pass the original separately to playTTS).
@@ -136,10 +152,7 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 				return
 			case <-ticker.C:
 				if state.IsSkipped(msdID) {
-					eventWriter(&conns.DataEvent{
-						EventType: conns.EventTypeSkip,
-						EventData: []byte(msdID.String()),
-					})
+					eventWriter(skipEvent(msdID, true))
 					return
 				}
 
@@ -296,199 +309,6 @@ func (s *Service) playUniversalTTS(ctx context.Context, logger *slog.Logger, eve
 	}
 
 	return s.playTTS(ctx, logger, eventWriter, combinedText, msgID, combinedAudio, combinedTimings, state, userSettings)
-}
-
-func (s *Service) craftUniversalTTSAudio(ctx context.Context, logger *slog.Logger, actions []ttsprocessor.Action, userSettings *db.UserSettings) ([]byte, string, []whisperx.Timiing, error) {
-	var combinedAudio [][]byte
-	var combinedText strings.Builder
-	var combinedTimings []whisperx.Timiing
-	currentOffset := time.Duration(0)
-	sfxAccumulated := time.Duration(0)
-
-	concatPadding := 500 * time.Millisecond
-	defaultVoice := "obiwan"
-
-	ttsLimit := db.DefaultTtsLimitSeconds // Default to 80 seconds
-	if userSettings.TtsLimit != nil {
-		ttsLimit = *userSettings.TtsLimit
-	}
-	maxDuration := time.Duration(ttsLimit) * time.Second
-
-	// Total SFX duration limit (0 = unlimited)
-	sfxTotalLimit := db.DefaultSfxTotalLimit
-	if userSettings.SfxTotalLimit != nil {
-		sfxTotalLimit = *userSettings.SfxTotalLimit
-	}
-	maxSfxDuration := time.Duration(sfxTotalLimit) * time.Second
-
-actions_loop:
-	for _, action := range actions {
-		if action.Text != "" && action.Text != " " {
-			voice := action.Voice
-			if voice == "" {
-				voice = defaultVoice
-			}
-
-			_, voiceRef, err := s.getVoiceReference(ctx, logger, voice)
-			if err != nil {
-				logger.Error("error getting voice reference", "err", err, "voice", action.Voice)
-				voiceRef = []byte{}
-			}
-
-			filters := parseFilters(action.Filters)
-			audioFilters := filters.audioFilters
-
-			ttsText := ai.InsertEmotions(action.Text, filters.emotions)
-
-			var audio []byte
-			var timings []whisperx.Timiing
-			if filters.oldTTS {
-				audio, timings, err = s.ChatTTSWithTimings(ctx, ttsText, voiceRef)
-			} else {
-				audio, timings, err = s.TTSWithTimings(ctx, ttsText, voiceRef)
-			}
-			if err != nil {
-				logger.Error("error generating TTS for universal action", "err", err, "text", action.Text)
-				continue
-			}
-
-			originalAudioLen, err := s.getAudioLength(ctx, audio)
-			if err != nil {
-				logger.Error("error getting audio length", "err", err)
-				continue
-			}
-
-			processedAudio, err := s.applyAudioEffects(ctx, audio, userSettings.DisableAudioNormalization, audioFilters...)
-			if err != nil {
-				logger.Error("error applying audio effects", "err", err, "filters", audioFilters)
-
-				processedAudio = audio
-			}
-
-			processedAudioLen, err := s.getAudioLength(ctx, processedAudio)
-			if err != nil {
-				logger.Error("error getting audio length", "err", err)
-				continue
-			}
-
-			if originalAudioLen != 0 {
-				change := float64(processedAudioLen) / float64(originalAudioLen)
-
-				if change > 1.05 || change < 0.95 {
-					for i := range timings {
-						timings[i].Start = time.Duration(float64(timings[i].Start) * change)
-						timings[i].End = time.Duration(float64(timings[i].End) * change)
-					}
-				}
-			}
-
-			combinedAudio = append(combinedAudio, processedAudio)
-
-			if combinedText.Len() > 0 {
-				combinedText.WriteString(" ")
-			}
-			combinedText.WriteString(action.Text)
-
-			for i := range timings {
-				timings[i].Start += currentOffset
-				timings[i].End += currentOffset
-			}
-			combinedTimings = append(combinedTimings, timings...)
-
-			audioLen, err := s.getAudioLength(ctx, processedAudio)
-			if err != nil {
-				logger.Error("error getting audio length", "err", err)
-				continue
-			}
-
-			currentOffset += audioLen
-			currentOffset += concatPadding
-
-			if currentOffset > maxDuration {
-				logger.Info("stopping universal TTS generation due to length limit", "current_duration", currentOffset, "max_duration", maxDuration)
-				break actions_loop
-			}
-		}
-
-		if action.Sfx != "" {
-			sfxAudio, err := s.getSFX(action.Sfx)
-			if err != nil {
-				logger.Error("error generating SFX", "err", err, "sfx", action.Sfx)
-
-				if combinedText.Len() > 0 {
-					combinedText.WriteString(" ")
-				}
-				combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
-
-				continue
-			}
-
-			sfxFilters := parseFilters(action.Filters).audioFilters
-
-			processedSFX, err := s.applyAudioEffects(ctx, sfxAudio, userSettings.DisableAudioNormalization, sfxFilters...)
-			if err != nil {
-				logger.Error("error applying audio effects to SFX", "err", err, "filters", sfxFilters)
-
-				processedSFX = sfxAudio
-			}
-
-			sfxLen, err := s.getAudioLength(ctx, processedSFX)
-			if err != nil {
-				logger.Error("error getting SFX length", "err", err)
-
-				continue
-			}
-
-			// Enforce total SFX duration limit (if > 0). If the SFX would exceed the limit, cut it to fit.
-			if maxSfxDuration > 0 && sfxAccumulated+sfxLen > maxSfxDuration {
-				remaining := maxSfxDuration - sfxAccumulated
-				if remaining <= 0 {
-					logger.Info("skipping SFX due to total SFX length limit (no remaining budget)", "sfx", action.Sfx, "accumulated", sfxAccumulated, "max_sfx_duration", maxSfxDuration)
-					continue
-				}
-
-				cutSFX, err := s.ffmpeg.CutAudio(ctx, processedSFX, remaining)
-				if err != nil {
-					logger.Warn("failed to cut SFX to fit total limit; skipping SFX", "err", err)
-					continue
-				}
-
-				processedSFX = cutSFX
-				sfxLen = remaining
-			}
-
-			combinedAudio = append(combinedAudio, processedSFX)
-
-			if combinedText.Len() > 0 {
-				combinedText.WriteString(" ")
-			}
-			combinedText.WriteString(fmt.Sprintf("[%s]", action.Sfx))
-
-			sfxAccumulated += sfxLen
-			currentOffset += sfxLen
-
-			if currentOffset > maxDuration {
-				logger.Info("stopping universal TTS generation due to length limit", "current_duration", currentOffset, "max_duration", maxDuration)
-				break actions_loop
-			}
-		}
-	}
-
-	for i := range combinedTimings {
-		combinedTimings[i].Start = min(combinedTimings[i].Start, maxDuration)
-		combinedTimings[i].End = min(combinedTimings[i].End, maxDuration)
-	}
-
-	if len(combinedAudio) == 0 {
-		return nil, "", nil, fmt.Errorf("no audio generated from actions")
-	}
-
-	finalAudio, err := s.ffmpeg.ConcatenateAudio(ctx, concatPadding, combinedAudio...)
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("error concatenating audio: %w", err)
-	}
-
-	return finalAudio, combinedText.String(), combinedTimings, nil
 }
 
 // oldTTSFilter routes a segment through StyleTTS2 instead of IndexTTS.

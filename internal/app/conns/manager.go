@@ -251,8 +251,6 @@ func (m *Manager) DisableUser(userID uuid.UUID) {
 func (m *Manager) HandleUser(user *db.User) {
 	logger := m.logger.With("user", user.TwitchLogin)
 
-	// logger.Debug("trying to unlock mutex for HandleUser")
-
 	m.rwMutex.Lock()
 	if m.runningUsers[user.ID] {
 		m.rwMutex.Unlock()
@@ -273,7 +271,7 @@ func (m *Manager) HandleUser(user *db.User) {
 		defer m.wg.Done()
 
 		// subscribe to control updates via watermill and bridge to chan for processor
-		updates := make(chan *Update)
+		updates := make(chan *Update, 64)
 		msgs, err := m.bus.Subscribe(userCtx, m.controlTopic(user.ID))
 		if err != nil {
 			logger.Error("failed to subscribe to control topic", "err", err)
@@ -298,6 +296,7 @@ func (m *Manager) HandleUser(user *db.User) {
 						select {
 						case updates <- &u:
 						default:
+							logger.Warn("dropped control update, processor too slow", "update_type", u.UpdateType)
 						}
 					}
 					msg.Ack()

@@ -215,8 +215,25 @@ func (c *Client) reqAi(ctx context.Context, req *aiReq) ([]string, error) {
 	return out, nil
 }
 
+func imageParts(images []Attachment) []MessageContent {
+	parts := make([]MessageContent, 0, len(images))
+	for _, att := range images {
+		if len(att.Data) == 0 {
+			continue
+		}
+		ctype := att.ContentType
+		if ctype == "" {
+			ctype = "image/png"
+		}
+		encoded := base64.StdEncoding.EncodeToString(att.Data)
+		imageURL := fmt.Sprintf("data:%s;base64,%s", ctype, encoded)
+		parts = append(parts, MessageContent{Type: "image_url", ImageURL: &ImageURL{URL: imageURL}})
+	}
+	return parts
+}
+
 func (c *Client) AskMessages(ctx context.Context, messages []Message, images []Attachment) (string, error) {
-	if len(images) > 0 {
+	if parts := imageParts(images); len(parts) > 0 {
 		idx := -1
 		for i := len(messages) - 1; i >= 0; i-- {
 			if messages[i].Role == "user" {
@@ -230,18 +247,7 @@ func (c *Client) AskMessages(ctx context.Context, messages []Message, images []A
 			idx = len(messages) - 1
 		}
 
-		for _, att := range images {
-			if len(att.Data) == 0 {
-				continue
-			}
-			ctype := att.ContentType
-			if ctype == "" {
-				ctype = "image/png"
-			}
-			encoded := base64.StdEncoding.EncodeToString(att.Data)
-			imageURL := fmt.Sprintf("data:%s;base64,%s", ctype, encoded)
-			messages[idx].Content = append(messages[idx].Content, MessageContent{Type: "image_url", ImageURL: &ImageURL{URL: imageURL}})
-		}
+		messages[idx].Content = append(messages[idx].Content, parts...)
 	}
 
 	req := &ChatRequest{

@@ -52,7 +52,7 @@ func TestCompletionClient_CharacterReply(t *testing.T) {
 	h := &capturingHTTP{}
 	c := CompletionClient{Client: New(h, &Config{URL: "http://x", Model: "lexi", MaxTokens: 200})}
 
-	out, err := c.CharacterReply(context.Background(), testCard(), "bob", "hello there")
+	out, err := c.CharacterReply(context.Background(), testCard(), "bob", "hello there", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestChatClient_CharacterReply(t *testing.T) {
 	h := &capturingHTTP{}
 	c := ChatClient{Client: New(h, &Config{URL: "http://x", Model: "cydonia", MaxTokens: 200})}
 
-	out, err := c.CharacterReply(context.Background(), testCard(), "bob", "say hi")
+	out, err := c.CharacterReply(context.Background(), testCard(), "bob", "say hi", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestChatClient_SkipsEmptyExamples(t *testing.T) {
 		},
 	}}
 
-	if _, err := c.CharacterReply(context.Background(), card, "bob", "yo"); err != nil {
+	if _, err := c.CharacterReply(context.Background(), card, "bob", "yo", nil); err != nil {
 		t.Fatal(err)
 	}
 	body := string(h.body)
@@ -206,7 +206,7 @@ func strconvQuote(s string) string {
 
 func TestChatClient_CollapsesBlankLines(t *testing.T) {
 	c := ChatClient{Client: New(fixedReplyHTTP{reply: "one\n\n\ntwo\n\nthree"}, &Config{URL: "http://x", Model: "cydonia", MaxTokens: 200})}
-	out, err := c.CharacterReply(context.Background(), testCard(), "bob", "hi")
+	out, err := c.CharacterReply(context.Background(), testCard(), "bob", "hi", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

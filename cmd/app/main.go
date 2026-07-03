@@ -59,7 +59,6 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	// logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	slog.SetDefault(logger)
 
@@ -82,7 +81,6 @@ func main() {
 	ttsEngine := ai.NewIndexTTSEngine(indexClient, ffmpegClient)
 	whisper := whisperx.New(httpClient, &cfg.Whisper)
 
-	// init s3 client
 	s3, err := s3client.New(ctx, &cfg.S3)
 	if err != nil {
 		log.Fatal("failed to init s3 client: ", err)
@@ -100,11 +98,9 @@ func main() {
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
 
-	// 1. Create Service (Shared Dependencies)
 	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, chatTTSEngine, whisper, llmModel, imageLlm, textFilter, connManager)
 
-	// 2. Create Handlers
-	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), characterLlm, imageLlm, db, s3, procService)
+	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), characterLlm, imageLlm, cfg.NativeImages, db, s3, procService)
 	ttsHandler := processor.NewTTSHandler(logger.WithGroup("tts_handler"), db, procService)
 	universalHandler := processor.NewUniversalHandler(logger.WithGroup("universal_handler"), db, procService)
 
@@ -113,7 +109,6 @@ func main() {
 	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, characterLlm, procService)
 	chatTTSHandler := processor.NewChatTTSHandler(logger.WithGroup("chat_tts_handler"), db, procService)
 
-	// 3. Create Processor with Handlers
 	proc := processor.NewProcessor(logger.WithGroup("processor"), db, connManager, aiHandler, ttsHandler, universalHandler, agenticHandler, chatTTSHandler)
 
 	conns.SetProcessor(connManager, proc)

@@ -10,17 +10,14 @@ import (
 )
 
 type Metrics struct {
-	TTSQueryTime        prometheus.Histogram
-	TTSErrors           *prometheus.CounterVec
-	ChatTTSQueryTime    prometheus.Histogram
-	ChatTTSErrors       *prometheus.CounterVec
-	AIQueryTime         prometheus.Histogram
-	AIErrors            *prometheus.CounterVec
-	AgenticQueryTime    prometheus.Histogram
-	UniversalQueryTime  prometheus.Histogram
-	AIUserRequests      *prometheus.CounterVec
-	RewardRedeems       *prometheus.CounterVec
-	NvidiaStats         *prometheus.GaugeVec
+	TTSQueryTime       prometheus.Histogram
+	ChatTTSQueryTime   prometheus.Histogram
+	AIQueryTime        prometheus.Histogram
+	AgenticQueryTime   prometheus.Histogram
+	UniversalQueryTime prometheus.Histogram
+	HandlerErrors      *prometheus.CounterVec
+	RewardRedeems      *prometheus.CounterVec
+	NvidiaStats        *prometheus.GaugeVec
 }
 
 var AppMetrics = &Metrics{
@@ -30,33 +27,18 @@ var AppMetrics = &Metrics{
 		Name:      "request_seconds",
 		Buckets:   metrics.RequestSecondsBuckets,
 	}),
-	TTSErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "processor",
-		Subsystem: "tts",
-		Name:      "errors_total",
-	}, []string{"err_code"}),
 	ChatTTSQueryTime: prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "processor",
 		Subsystem: "chat_tts",
 		Name:      "request_seconds",
 		Buckets:   metrics.RequestSecondsBuckets,
 	}),
-	ChatTTSErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "processor",
-		Subsystem: "chat_tts",
-		Name:      "errors_total",
-	}, []string{"err_code"}),
 	AIQueryTime: prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "processor",
 		Subsystem: "ai",
 		Name:      "request_seconds",
 		Buckets:   metrics.RequestSecondsBuckets,
 	}),
-	AIErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace: "processor",
-		Subsystem: "ai",
-		Name:      "errors_total",
-	}, []string{"err_code"}),
 	AgenticQueryTime: prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "processor",
 		Subsystem: "agentic",
@@ -69,11 +51,12 @@ var AppMetrics = &Metrics{
 		Name:      "request_seconds",
 		Buckets:   metrics.RequestSecondsBuckets,
 	}),
-	AIUserRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
+	HandlerErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "processor",
-		Subsystem: "ai",
-		Name:      "request_total",
-	}, []string{"user_name"}),
+		Subsystem: "handler",
+		Name:      "errors_total",
+		Help:      "Failed message-handler runs, per reward flow",
+	}, []string{"flow"}),
 	RewardRedeems: prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "processor",
 		Subsystem: "rewards",
@@ -92,14 +75,11 @@ func RegisterMetrics(reg prometheus.Registerer) {
 	llm.RegisterMetrics(reg)
 
 	reg.MustRegister(AppMetrics.TTSQueryTime)
-	reg.MustRegister(AppMetrics.TTSErrors)
 	reg.MustRegister(AppMetrics.ChatTTSQueryTime)
-	reg.MustRegister(AppMetrics.ChatTTSErrors)
 	reg.MustRegister(AppMetrics.AIQueryTime)
-	reg.MustRegister(AppMetrics.AIErrors)
 	reg.MustRegister(AppMetrics.AgenticQueryTime)
 	reg.MustRegister(AppMetrics.UniversalQueryTime)
-	reg.MustRegister(AppMetrics.AIUserRequests)
+	reg.MustRegister(AppMetrics.HandlerErrors)
 	reg.MustRegister(AppMetrics.RewardRedeems)
 	reg.MustRegister(AppMetrics.NvidiaStats)
 }

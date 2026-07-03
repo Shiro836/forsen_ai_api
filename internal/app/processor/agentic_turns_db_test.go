@@ -355,7 +355,7 @@ func (s *stubDialogueLLM) reply(name string) string {
 	return "ok."
 }
 
-func (s *stubDialogueLLM) CharacterReply(ctx context.Context, card *db.Card, requester, message string) (string, error) {
+func (s *stubDialogueLLM) CharacterReply(ctx context.Context, card *db.Card, requester, message string, _ []llm.Attachment) (string, error) {
 	return s.reply(card.Name), nil
 }
 
@@ -410,8 +410,8 @@ func (p *printingDialogueLLM) AskMessages(ctx context.Context, messages []llm.Me
 	return p.inner.AskMessages(ctx, messages, attachments)
 }
 
-func (p *printingDialogueLLM) CharacterReply(ctx context.Context, card *db.Card, requester, message string) (string, error) {
-	return llm.CompletionClient{Client: p.inner}.CharacterReply(ctx, card, requester, message)
+func (p *printingDialogueLLM) CharacterReply(ctx context.Context, card *db.Card, requester, message string, images []llm.Attachment) (string, error) {
+	return llm.CompletionClient{Client: p.inner}.CharacterReply(ctx, card, requester, message, images)
 }
 
 func (p *printingDialogueLLM) DialogueReply(ctx context.Context, card *db.Card, scenario string, history ...string) (string, error) {

@@ -21,7 +21,7 @@ func TestChatClient_Live(t *testing.T) {
 		&Config{URL: "http://localhost:3334", Model: "cydonia", MaxTokens: 120, MinTokens: 1},
 	)}
 
-	out, err := c.CharacterReply(context.Background(), testCard(), "tester", "say something nice to me for once")
+	out, err := c.CharacterReply(context.Background(), testCard(), "tester", "say something nice to me for once", nil)
 	if err != nil {
 		t.Fatalf("live cydonia call failed (is llm_text2 up on :3334?): %v", err)
 	}

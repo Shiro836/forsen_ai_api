@@ -118,6 +118,16 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	return p.processLoop(ctx, eventWriter, broadcaster, state)
 }
 
+// recordHandlerError counts a failed handler run, except when the processor's
+// context is already cancelled — shutdown or a restart signal aborts handlers
+// mid-message, and that noise would drown real failures on the error graph.
+func recordHandlerError(ctx context.Context, flow string) {
+	if ctx.Err() != nil {
+		return
+	}
+	monitoring.AppMetrics.HandlerErrors.WithLabelValues(flow).Inc()
+}
+
 func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState) error {
 	logger := p.logger.With("user", broadcaster.TwitchLogin, "component", "process_loop")
 	for {
@@ -147,11 +157,6 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 
 		if err := p.processNextMessage(ctx, eventWriter, broadcaster, state, msg); err != nil {
 			logger.Error("error processing message", "msg_id", msg.ID, "err", err)
-			// Continue processing other messages unless it's a critical error?
-			// The original code returned error on some failures.
-			// processNextMessage will return error if it's critical.
-			// But we want to keep the loop running.
-			// Let's log and continue.
 			continue
 		}
 	}
@@ -205,6 +210,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 			State:        state,
 		}
 		if err := p.chatTTSHandler.Handle(ctx, input, eventWriter); err != nil {
+			recordHandlerError(ctx, "chat_tts")
 			return fmt.Errorf("chat tts handler error: %w", err)
 		}
 		return nil
@@ -258,19 +264,23 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 	switch rewardType {
 	case db.TwitchRewardTTS:
 		if err := p.ttsHandler.Handle(ctx, input, eventWriter); err != nil {
+			recordHandlerError(ctx, "tts")
 			return fmt.Errorf("tts handler error: %w", err)
 		}
 	case db.TwitchRewardUniversalTTS:
 		input.Character = nil
 		if err := p.universalHandler.Handle(ctx, input, eventWriter); err != nil {
+			recordHandlerError(ctx, "universal")
 			return fmt.Errorf("universal handler error: %w", err)
 		}
 	case db.TwitchRewardAI:
 		if err := p.aiHandler.Handle(ctx, input, eventWriter); err != nil {
+			recordHandlerError(ctx, "ai")
 			return fmt.Errorf("ai handler error: %w", err)
 		}
 	case db.TwitchRewardAgentic:
 		if err := p.agenticHandler.Handle(ctx, input, eventWriter); err != nil {
+			recordHandlerError(ctx, "agentic")
 			return fmt.Errorf("agentic handler error: %w", err)
 		}
 	default:
@@ -287,10 +297,7 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 	// Helpers for control actions
 	skipMessage := func(msgID uuid.UUID) {
 		state.AddSkipped(msgID)
-		eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeSkip,
-			EventData: []byte(msgID.String()),
-		})
+		eventWriter(skipEvent(msgID, state.GetCurrent() == msgID))
 		if err := p.db.UpdateMessageStatus(ctx, msgID, db.MsgStatusDeleted); err != nil {
 			logger.Error("error updating message status", "err", err)
 		}

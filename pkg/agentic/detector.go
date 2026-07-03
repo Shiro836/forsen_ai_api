@@ -188,7 +188,6 @@ func (d *Detector) DetectCharacters(ctx context.Context, prompt string, characte
 		return nil, nil
 	}
 
-	// Build lookup maps: name -> CharacterBasicInfo
 	nameToChar := make(map[string]db.CharacterBasicInfo)
 	var validNames []string
 
@@ -209,7 +208,6 @@ func (d *Detector) DetectCharacters(ctx context.Context, prompt string, characte
 		return nil, fmt.Errorf("failed to marshal schema: %w", err)
 	}
 
-	// Construct system prompt
 	systemPrompt := strings.Join([]string{
 		"You are a careful character detection assistant.",
 		"Use the provided character catalog and rules to decide which characters are clearly referenced.",
@@ -218,7 +216,6 @@ func (d *Detector) DetectCharacters(ctx context.Context, prompt string, characte
 		"Return only names from the catalog and prefer returning nothing when unsure.",
 	}, " ")
 
-	// Construct user prompt with character list
 	charCatalog := buildCharacterCatalog(characters)
 	detectionRules := detectionRules()
 	exampleSection := newPromptAugmentor(defaultDetectionExamples).render()

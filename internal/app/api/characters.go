@@ -62,27 +62,6 @@ func (api *API) characters(r *http.Request) template.HTML {
 		})
 	}
 
-	// existingRewards := make(map[string]struct{}, len(charCards)) // TODO: cache this
-	// twitchClient, err := api.twitchClient.NewHelixClient(user.TwitchAccessToken, user.TwitchRefreshToken)
-	// if err != nil {
-	// 	return getHtml("error.html", &htmlErr{
-	// 		ErrorCode:    http.StatusInternalServerError,
-	// 		ErrorMessage: "NewHelixClient: " + err.Error(),
-	// 	})
-	// }
-
-	// resp, err := twitchClient.GetCustomRewards(&helix.GetCustomRewardsParams{
-	// 	BroadcasterID:         strconv.Itoa(user.TwitchUserID),
-	// 	OnlyManageableRewards: true,
-	// })
-	// if err == nil {
-	// 	for _, reward := range resp.Data.ChannelCustomRewards {
-	// 		existingRewards[reward.ID] = struct{}{}
-	// 	}
-	// } else {
-	// 	fmt.Println(err) // TODO: log
-	// }
-
 	chars := make([]*charElem, 0, len(charCards))
 	isAdmin := false
 	if perms, err := api.db.GetUserPermissions(r.Context(), user.ID, db.PermissionStatusGranted); err == nil {
@@ -384,7 +363,6 @@ func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWri
 
 	api.imageCache.Invalidate(card.ID)
 
-	// w.Header().Add("hx-redirect", "/characters/"+card.ID.String())
 	_, _ = w.Write([]byte("Success"))
 }
 
@@ -438,7 +416,6 @@ func (api *API) insertCharacter(user *db.User, card *db.Card, w http.ResponseWri
 
 	w.Header().Add("hx-redirect", "/characters/"+cardID.String())
 	_, _ = w.Write([]byte("Success"))
-	// w.WriteHeader(http.StatusOK)
 }
 
 func (api *API) upsertCharacter(w http.ResponseWriter, r *http.Request) {
@@ -522,16 +499,9 @@ func (api *API) newMessageExample(r *http.Request) template.HTML {
 	})
 }
 
+// charImage is deliberately unauthenticated: OBS browser sources fetch it
+// without a session.
 func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
-	// user := ctxstore.GetUser(r.Context())
-	// if user == nil {
-	// 	_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-	// 		ErrorCode:    http.StatusUnauthorized,
-	// 		ErrorMessage: "not authorized",
-	// 	})
-	// 	return
-	// } // for use in obs
-
 	characterIDStr := chi.URLParam(r, "character_id")
 	characterID, err := uuid.Parse(characterIDStr)
 	if err != nil {

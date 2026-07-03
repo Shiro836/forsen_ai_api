@@ -75,10 +75,7 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 				}
 				if has {
 					input.State.AddSkipped(msgID)
-					eventWriter(&conns.DataEvent{
-						EventType: conns.EventTypeSkip,
-						EventData: []byte(msgID.String()),
-					})
+					eventWriter(skipEvent(msgID, true))
 					return
 				}
 			}

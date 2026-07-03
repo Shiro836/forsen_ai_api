@@ -38,7 +38,7 @@ type LLMClient interface {
 // CharacterLLM builds a model's character/dialogue prompt in its own format and
 // generates the reply. Each model (completion vs chat) implements it differently.
 type CharacterLLM interface {
-	CharacterReply(ctx context.Context, card *db.Card, requester, message string) (string, error)
+	CharacterReply(ctx context.Context, card *db.Card, requester, message string, images []llm.Attachment) (string, error)
 	DialogueReply(ctx context.Context, card *db.Card, scenario string, history ...string) (string, error)
 }
 

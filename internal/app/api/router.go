@@ -183,9 +183,6 @@ func (api *API) NewRouter() *chi.Mux {
 
 			router.Get("/new_message_example/{id}", api.elem(api.newMessageExample))
 
-			// router.Get("/characters/{character_id}/image", api.charImage)
-			// router.Get("/characters/{character_id}/audio", api.charAudio)
-
 			router.Post("/characters/{character_id}/reward_tts", api.reward(db.TwitchRewardTTS))
 			router.Post("/characters/{character_id}/reward_ai", api.reward(db.TwitchRewardAI))
 

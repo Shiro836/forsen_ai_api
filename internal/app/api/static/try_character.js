@@ -1,4 +1,3 @@
-// Try Character functionality
 (function () {
     let ws = null;
     let audioContext = null;
@@ -19,7 +18,6 @@
             clearTimeout(typewriterTimeoutId);
             typewriterTimeoutId = null;
         }
-        // Stop all audio sources
         for (const [id, source] of audioSources.entries()) {
             try {
                 source.stop();
@@ -50,7 +48,6 @@
             audioContext.resume();
         }
 
-        // Use a unique ID for tracking if msgId not provided
         const audioId = msgId || `audio_${Date.now()}_${Math.random()}`;
 
         audioContext.decodeAudioData(arrayBuffer, function (buffer) {
@@ -166,24 +163,20 @@
     }
 
     function stopCurrentAction() {
-        // Stop the typewriter effect
         stopTypewriter = true;
         if (typewriterTimeoutId) {
             clearTimeout(typewriterTimeoutId);
             typewriterTimeoutId = null;
         }
 
-        // Stop all audio
         stopAllAudio();
 
-        // Clear the text box
         const textBox = document.getElementById("text_box");
         if (textBox) {
             textBox.innerHTML = "";
             currentResponse = "";
         }
 
-        // Send stop action to backend
         if (ws && ws.readyState === WebSocket.OPEN) {
             const message = JSON.stringify({
                 action: "stop",
@@ -193,7 +186,6 @@
             ws.send(message);
         }
 
-        // Re-enable buttons
         enableButtons();
     }
 
@@ -235,7 +227,6 @@
 
         if (!tryContainer) return;
 
-        // Cleanup any previous connection
         cleanup();
 
         const agenticMode = tryContainer.dataset.agenticMode === "true";
@@ -256,7 +247,6 @@
             }
         };
 
-        // Set up event listeners
         const ttsBtn = document.getElementById("tts_button");
         const universalTtsBtn = document.getElementById("universal_tts_button");
         const aiBtn = document.getElementById("ai_button");
@@ -303,12 +293,10 @@
             input.focus();
         }
 
-        // Initial state
         disableButtons();
         // Stop button should always be enabled
         if (stopBtn) stopBtn.disabled = false;
 
-        // Connect function needs to know about agentic/universal mode
         connect(agenticMode, universalMode);
     }
 
@@ -355,7 +343,6 @@
             const currentContainer = container?.querySelector('[data-try-page="true"]');
 
             if (currentContainer) {
-                // Check if we are still on the same page context
                 if (agenticMode && currentContainer.dataset.agenticMode === "true") {
                     setTimeout(() => connect(true, false), 1000);
                 } else if (universalMode && currentContainer.dataset.universalMode === "true") {
@@ -400,14 +387,19 @@
                     setImage(dataStr);
                     break;
                 case 'skip':
-                    pending_skips.add(dataStr);
-                    // Stop the typewriter and clear display when skip event is received
+                    let skipId = dataStr;
+                    try {
+                        const payload = JSON.parse(dataStr);
+                        if (payload && payload.msg_id) {
+                            skipId = payload.msg_id;
+                        }
+                    } catch (e) { }
+                    pending_skips.add(skipId);
                     stopTypewriter = true;
                     if (typewriterTimeoutId) {
                         clearTimeout(typewriterTimeoutId);
                         typewriterTimeoutId = null;
                     }
-                    // Stop all audio
                     stopAllAudio();
                     const textBox = document.getElementById("text_box");
                     if (textBox) {
@@ -425,16 +417,13 @@
         };
     }
 
-    // Initialize on page load
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
 
-    // Handle htmx content swaps
     document.body.addEventListener('htmx:afterSwap', function (event) {
-        // Check if the swapped content has our try character container
         if (event.detail.target.querySelector('[data-try-page="true"]')) {
             init();
         }

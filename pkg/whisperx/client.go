@@ -107,8 +107,6 @@ func (c *Client) Align(ctx context.Context, text string, audio []byte, audioLen 
 		return nil, fmt.Errorf("failed to read http response body: %w", err)
 	}
 
-	// fmt.Println(string(respBody))
-
 	var alignResponse alignResponse
 	if err := json.Unmarshal(respBody, &alignResponse); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal http response body: %w", err)

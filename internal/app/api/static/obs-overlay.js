@@ -93,19 +93,17 @@ async function pageReady() {
     const audio_sources = new Map();
     const pending_skips = new Set();
 
-    // Track current message and image visibility
     let currentMsgId = null;
     let showImages = false;
     let currentImageURLs = [];
 
     function playWavFile(arrayBuffer, msg_id) {
-        // If skip already requested for this message, do not start playback
         if (pending_skips.has(msg_id)) {
             return;
         }
 
         audioContext.decodeAudioData(arrayBuffer, function (buffer) {
-            // Check skip after decode
+            // re-check: a skip may have arrived during the async decode
             if (pending_skips.has(msg_id)) {
                 return;
             }
@@ -131,7 +129,6 @@ async function pageReady() {
     let stopTypewriter = false;
 
     function updateText(responseText) {
-        // Clear any pending typewriter
         if (typewriterTimeoutId) {
             clearTimeout(typewriterTimeoutId);
             typewriterTimeoutId = null;
@@ -221,24 +218,29 @@ async function pageReady() {
         console.log('showed images ', String(currentImageURLs.length));
     }
 
-    function skip(msg_id) {
-        console.log('skip requested for:', msg_id);
-        console.log('current audio sources:', audio_sources);
+    function skip(msg_id, wipe) {
+        console.log('skip requested for:', msg_id, 'wipe:', wipe);
 
         pending_skips.add(msg_id);
+
+        const src = audio_sources.get(msg_id);
+        if (src) {
+            try { src.stop(); } catch (e) { }
+            audio_sources.delete(msg_id);
+            // its audio was playing here, so the screen is showing it
+            wipe = true;
+        }
+
+        if (!wipe) {
+            return;
+        }
+
         stopTypewriter = true;
         if (typewriterTimeoutId) {
             clearTimeout(typewriterTimeoutId);
             typewriterTimeoutId = null;
         }
 
-        const src = audio_sources.get(msg_id);
-        if (src) {
-            try { src.stop(); } catch (e) { }
-            audio_sources.delete(msg_id);
-        }
-
-        // Always clean up text and image
         updateText(" ");
         set_image("");
     }
@@ -358,9 +360,19 @@ async function pageReady() {
                     showImages = false;
                     renderPromptImages();
                     break
-                case 'skip':
-                    skip(dataStr)
-                    break
+                case 'skip': {
+                    let skipId = dataStr;
+                    let wipe = true;
+                    try {
+                        const payload = JSON.parse(dataStr);
+                        if (payload && payload.msg_id) {
+                            skipId = payload.msg_id;
+                            wipe = payload.current !== false;
+                        }
+                    } catch (e) { }
+                    skip(skipId, wipe);
+                    break;
+                }
                 case 'ping':
                     break
                 default:

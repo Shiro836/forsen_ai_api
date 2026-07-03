@@ -30,8 +30,6 @@ func (c *Client) FfprobePath(ctx context.Context, path string) (*FfprobeResult, 
 		return nil, fmt.Errorf("exec ffprobe: %w", err)
 	}
 
-	// fmt.Println(string(res))
-
 	var result *ffprobeResult
 	err = json.Unmarshal(res, &result)
 	if err != nil {

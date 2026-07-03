@@ -61,10 +61,8 @@ func (c *Client) ConcatenateAudio(ctx context.Context, padding time.Duration, au
 		return audioFiles[0], nil
 	}
 
-	// Create temporary files for each audio input
 	tempFiles := make([]string, len(audioFiles))
 	defer func() {
-		// Clean up temporary files
 		for _, tempFile := range tempFiles {
 			if tempFile != "" {
 				os.Remove(tempFile)
@@ -72,7 +70,6 @@ func (c *Client) ConcatenateAudio(ctx context.Context, padding time.Duration, au
 		}
 	}()
 
-	// Write each audio file to a temporary file
 	for i, audioData := range audioFiles {
 		tempFile := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
 		err := os.WriteFile(tempFile, audioData, 0644)
@@ -82,12 +79,10 @@ func (c *Client) ConcatenateAudio(ctx context.Context, padding time.Duration, au
 		tempFiles[i] = tempFile
 	}
 
-	// Create output file path with .mp3 extension
 	outputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString()+".mp3")
 	defer os.Remove(outputPath)
 
-	// Build ffmpeg command for concatenation
-	// Using the concat filter for better compatibility
+	// concat filter instead of the concat demuxer: handles mismatched codecs/rates
 	args := []string{
 		"-i", tempFiles[0], // First input
 	}

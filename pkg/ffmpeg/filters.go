@@ -176,7 +176,6 @@ func getBackgroundAudio(filterType FilterType) []byte {
 
 // mixWithBackgroundAudio mixes the input audio with background audio
 func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, backgroundAudioData []byte, filterType FilterType, disableLimiter bool) ([]byte, error) {
-	// Create temporary input file
 	inputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
 	err := os.WriteFile(inputPath, audioData, 0644)
 	if err != nil {
@@ -184,14 +183,12 @@ func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, b
 	}
 	defer os.Remove(inputPath)
 
-	// Create temporary background file
 	var backgroundPath string
 
 	if filterType == FilterRoomEcho || filterType == FilterHallEcho || filterType == FilterGhost {
-		// For room and hall echo, use .wav extension for impulse response
+		// echo filters take an impulse response, which is stored as .wav
 		backgroundPath = path.Join(c.cfg.TmpDir, prefix+uuid.NewString()+".wav")
 	} else {
-		// For other background audio, use .mp3 extension
 		backgroundPath = path.Join(c.cfg.TmpDir, prefix+uuid.NewString()+".mp3")
 	}
 
@@ -201,7 +198,6 @@ func (c *Client) mixWithBackgroundAudio(ctx context.Context, audioData []byte, b
 	}
 	defer os.Remove(backgroundPath)
 
-	// Create temporary output file
 	outputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString()+".mp3")
 	defer os.Remove(outputPath)
 
