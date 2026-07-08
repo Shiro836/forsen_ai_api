@@ -24,14 +24,17 @@ body {
     top: 3vh;
     left: 50%;
     transform: translateX(-50%);
-    width: min(86vw, 1400px);
+    /* scales with both axes: ~40px at 1080p, ~19px at the OBS default 800x600,
+       clamped so tiny strips stay legible and 4K doesn't turn into a billboard */
+    font-size: clamp(13px, calc(1.5vh + 1.3vw), 72px);
+    width: min(86vw, 30em);
     display: flex;
     justify-content: center;
     pointer-events: none;
 }
 
 #caption_zone .op-window {
-    font-size: 30pt;
+    font-size: inherit;
 }
 
 /* --- character: absolute anchor, bottom-left, never moves ---
@@ -49,8 +52,13 @@ body {
 
 #char_image {
     display: block;
-    max-height: 70vh;
+    /* fixed proportional height (not max): the stage must look identical at
+       800x600 and 4K, so small source images upscale rather than shrink the
+       character relative to the scene */
+    height: 70vh;
+    width: auto;
     max-width: 42vw;
+    object-fit: contain;
     opacity: 0;
     transform: scale(0.94) translateY(12px);
     transform-origin: 50% 100%;

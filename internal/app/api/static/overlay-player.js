@@ -27,6 +27,13 @@ window.OverlayPlayer = class OverlayPlayer {
         this.lastActiveEl = null;
 
         this._alive = true;
+        // line wrapping changes on resize, so the karaoke window must re-scroll
+        // to the active word at its new position
+        this._onResize = () => {
+            if (this.lastActiveEl) this._scrollTo(this.lastActiveEl);
+        };
+        window.addEventListener('resize', this._onResize);
+
         const loop = () => {
             if (!this._alive) return;
             this._renderFrame();
@@ -37,6 +44,7 @@ window.OverlayPlayer = class OverlayPlayer {
 
     destroy() {
         this._alive = false;
+        window.removeEventListener('resize', this._onResize);
         this.reset();
         try { this.analyser.disconnect(); } catch (e) { }
         try { this.masterGain.disconnect(); } catch (e) { }
