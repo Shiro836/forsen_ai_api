@@ -56,16 +56,25 @@ func (api *API) obsOverlay(r *http.Request) template.HTML {
 	})
 }
 
-// overlayJSVersion is a content hash of the embedded overlay JS; the script
-// tag carries it as ?v= so a remote-triggered reload actually fetches new JS
-// instead of the OBS browser-source cache.
+// overlayJSVersion is a content hash of every overlay asset; the script and
+// stylesheet tags carry it as ?v= so a remote-triggered reload actually
+// fetches new files instead of the OBS browser-source cache — a CSS-only
+// tweak must bust the cache just like a JS change.
 var overlayJSVersion = sync.OnceValue(func() string {
-	data, err := staticFS.ReadFile("static/obs-overlay.js")
-	if err != nil {
-		return "dev"
+	h := sha256.New()
+	for _, name := range []string{
+		"static/obs-overlay.js",
+		"static/overlay-player.js",
+		"static/obs-overlay.css",
+		"static/overlay-player.css",
+	} {
+		data, err := staticFS.ReadFile(name)
+		if err != nil {
+			return "dev"
+		}
+		h.Write(data)
 	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:8])
+	return hex.EncodeToString(h.Sum(nil)[:8])
 })
 
 type obsAction struct {
