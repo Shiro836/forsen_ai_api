@@ -1,85 +1,189 @@
+/* Overlay v2: fixed stage, karaoke caption, twitch palette.
+   Layout contract: nothing on the stage ever moves because something else
+   grew — the character is an absolute anchor, the caption lives in a
+   reserved zone and grows inward. */
+
+@font-face {
+    font-family: "Overlay Sans";
+    src: url("/static/fonts/noto-sans-latin-500.woff2") format("woff2");
+    font-weight: 500;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+
+@font-face {
+    font-family: "Overlay Sans";
+    src: url("/static/fonts/noto-sans-cyrillic-500.woff2") format("woff2");
+    font-weight: 500;
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+    font-family: "Overlay Sans";
+    src: url("/static/fonts/noto-sans-latin-700.woff2") format("woff2");
+    font-weight: 700;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+
+@font-face {
+    font-family: "Overlay Sans";
+    src: url("/static/fonts/noto-sans-cyrillic-700.woff2") format("woff2");
+    font-weight: 700;
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+:root {
+    --accent: #A970FF;
+    --accent-deep: #9146FF;
+    --glass: rgba(13, 17, 28, 0.55);
+    --glass-border: rgba(169, 112, 255, 0.28);
+}
+
+* {
+    box-sizing: border-box;
+}
+
 body {
-    color: #fff;
-    background: transparent;
-    font-family: "Noto Sans", sans-serif, "Roboto", "Arial";
     margin: 0;
-    min-width: 100vh;
-    min-height: 100vh;
-}
-
-main {
-    display: flex;
-    flex-direction: column;
     width: 100vw;
-    max-width: 100vw;
-    max-height: 100vh;
-    filter: drop-shadow(4px 4px 4px #000);
-}
-
-#response_box {
-    height: 0;
+    height: 100vh;
     overflow: hidden;
-    transition: height 0.5s linear;
-    max-height: fit-content;
-    padding: 5px;
+    background: transparent;
+    font-family: "Overlay Sans", "Noto Sans", sans-serif;
+    color: #fff;
 }
 
-#text_box {
-    text-align: center;
-    overflow: hidden;
-    scrollbar-width: none;
-    font-size: 28pt;
-    font-weight: bold;
-    white-space: normal;
-    word-break: break-word;
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: .4em;
-}
+/* --- caption zone: reserved, never pushes anything --- */
 
-#text_box span {
-    animation: wordFadeIn 0.2s linear;
-    animation-fill-mode: forwards;
-}
-
-#text-box::-webkit-scrollbar {
-    display: none;
-}
-
-.character {
+#caption_zone {
+    position: absolute;
+    top: 3vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(86vw, 1400px);
     display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
-    gap: 12px;
-    margin: 10px 0;
-    height: 70vh;
-    width: 100%;
+    justify-content: center;
+    pointer-events: none;
+}
+
+#caption_card {
+    max-width: 100%;
+    padding: 0.45em 0.85em;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+    transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#caption_card.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+/* window: at most ~3 lines visible, older lines slide up out of view */
+#caption_window {
+    max-height: calc(3 * 1.35em);
     overflow: hidden;
+    font-size: 30pt;
+    font-weight: 700;
+    line-height: 1.35;
+    text-align: center;
+}
+
+#caption_text {
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+}
+
+#caption_text .w {
+    display: inline-block;
+    white-space: pre-wrap;
+    opacity: 0.4;
+    transform-origin: 50% 80%;
+    animation: wordIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: opacity 0.15s ease-out, color 0.12s ease-out, transform 0.12s ease-out;
+}
+
+#caption_text .w.active {
+    opacity: 1;
+    color: var(--accent);
+    transform: scale(1.12);
+    text-shadow: 0 0 18px rgba(169, 112, 255, 0.65), 0 0 40px rgba(145, 70, 255, 0.35);
+}
+
+#caption_text .w.spoken {
+    opacity: 0.85;
+    color: #fff;
+    transform: scale(1);
+}
+
+@keyframes wordIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.8) translateY(0.35em);
+    }
+    60% {
+        transform: scale(1.06) translateY(-0.03em);
+    }
+    100% {
+        opacity: 0.4;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* --- character: absolute anchor, bottom-left, never moves ---
+   entrance animation lives on the img; the voice-amplitude pulse lives on the
+   anchor (updated per frame, must not fight the entrance transition) */
+
+#char_anchor {
+    position: absolute;
+    left: 2vw;
+    bottom: 0;
+    transform-origin: 50% 100%;
+    transform: scale(var(--pulse, 1));
+    will-change: transform;
 }
 
 #char_image {
+    display: block;
+    max-height: 70vh;
+    max-width: 42vw;
     opacity: 0;
-    transition: opacity 0.5s linear;
-    height: 100%;
-    max-height: 100%;
-    width: auto;
-    max-width: 50vw;
-    flex-shrink: 0;
+    transform: scale(0.94) translateY(12px);
+    transform-origin: 50% 100%;
+    transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+    filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.5));
 }
 
+#char_image.visible {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+/* --- prompt images: reserved right column --- */
+
 #images_container {
+    position: absolute;
+    right: 2vw;
+    bottom: 4vh;
+    top: 22vh;
+    width: 34vw;
     display: none;
     flex-direction: column;
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden;
-    gap: 8px;
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: 100%;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
 }
 
 #images_container .img_slot {
-    height: calc(100% / var(--img-count, 1));
+    flex: 1 1 0;
+    min-height: 0;
     width: 100%;
     display: flex;
     align-items: center;
@@ -89,20 +193,7 @@ main {
 #images_container .img_slot img {
     max-height: 100%;
     max-width: 100%;
-    height: auto;
-    width: auto;
     object-fit: contain;
-    border-radius: .3em;
-}
-
-@keyframes wordFadeIn {
-    0% {
-        transform: translateY(100%);
-        opacity: 0;
-    }
-
-    100% {
-        transform: translateY(0%);
-        opacity: 1;
-    }
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }

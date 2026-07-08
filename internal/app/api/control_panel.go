@@ -259,6 +259,8 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 				api.connManager.HideImages(targetUser.ID, upd.ID)
 			case ActionCleanOverlayString:
 				api.connManager.CleanOverlay(targetUser.ID)
+			case ActionReloadOverlayString:
+				api.connManager.ReloadOverlay(targetUser.ID)
 			default:
 				logger.Error("unknown action", "action", upd.Action)
 			}
@@ -475,6 +477,7 @@ const (
 	ActionImagesShowString   ActionString = "show_images"
 	ActionImagesHideString   ActionString = "hide_images"
 	ActionCleanOverlayString ActionString = "clean_overlay"
+	ActionReloadOverlayString ActionString = "reload_overlay"
 )
 
 func (a ActionString) Action() Action {

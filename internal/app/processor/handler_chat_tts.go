@@ -107,7 +107,7 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 		return nil
 	}
 
-	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, filteredRequest, msgID, requestAudio, textTimings, input.State, input.UserSettings)
+	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.Broadcaster.ID, filteredRequest, msgID, requestAudio, textTimings, input.State, input.UserSettings)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 		return nil
 	}
 
-	eventWriter(textEvent(" ", msgID))
+	eventWriter(cleanEvent())
 
 	return nil
 }

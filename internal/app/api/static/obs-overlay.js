@@ -1,389 +1,562 @@
-let serverConnection;
+// Overlay v2 (see adr/overlay-v2.md).
+//
+// Two websockets: /ws (JSON control: track_meta, skip, snapshot, images,
+// clean, reload, ping + client actions) and /ws-audio (binary frames:
+// [1B type][4B BE header len][header JSON][mp3]). Audio chunks are
+// self-contained — text, word timings and track offset ride in the header —
+// so a mid-track (re)connect can join at any chunk. Karaoke paints against
+// the AudioContext clock, never against event arrival.
+//
+// State machine per track: unseen -> buffering -> active -> done, terminal
+// skipped. Any socket loss = full reset of both sockets and all state.
+
 let audioContext;
-let currentToken = "";
 let token = "";
+let currentToken = "";
 let isCapturingToken = false;
-
-document.documentElement.addEventListener('click', () => {
-    if (audioContext.state === 'suspended') {
-        audioContext.resume();
-    }
-
-    if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    }
-});
 
 const startKey = '0';
 const endKey = '1';
-
 const skipKey = '2';
 const showImagesKey = '3';
 
 let skipHandler = null;
 let showImagesHandler = null;
 
-function sendSkip() {
-    console.log('skip requested');
-    if (skipHandler) {
-        skipHandler();
+document.documentElement.addEventListener('click', () => {
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
     }
-}
-
-function sendShowImages() {
-    console.log('show images requested');
-    if (showImagesHandler) {
-        showImagesHandler();
-    }
-}
+});
 
 window.addEventListener('keydown', (event) => {
     const key = event.key;
 
     if (key === skipKey) {
-        sendSkip();
-
+        if (skipHandler) skipHandler();
         return;
     }
-
     if (key === showImagesKey) {
-        sendShowImages();
-
+        if (showImagesHandler) showImagesHandler();
         return;
     }
-
     if (key === startKey) {
         currentToken = "";
         isCapturingToken = true;
-        console.log('Started capturing token');
-
         return;
     }
-
     if (key === endKey) {
         if (isCapturingToken) {
             isCapturingToken = false;
-            token = currentToken; // Save the complete token
-            console.log('Token captured:', token);
+            token = currentToken;
+            console.log('Token captured');
         }
-
         return;
     }
-
     if (isCapturingToken && key.length === 1) {
         currentToken += key;
-        console.log('Token so far:', currentToken);
     }
 });
 
 function base64ToArrayBuffer(base64) {
-    var binaryString = window.atob(base64);
-    var len = binaryString.length;
-    var bytes = new Uint8Array(len);
-    for (var i = 0; i < len; i++) {
+    const binaryString = window.atob(base64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
     }
-
     return bytes.buffer;
 }
 
 async function pageReady() {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)({});
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-    const audio_sources = new Map();
-    const pending_skips = new Set();
+    // sources -> masterGain -> analyser -> destination; the analyser drives
+    // the character's voice pulse
+    const masterGain = audioContext.createGain();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    masterGain.connect(analyser);
+    analyser.connect(audioContext.destination);
+    const analyserData = new Uint8Array(analyser.fftSize);
 
-    let currentMsgId = null;
+    const captionCard = document.getElementById('caption_card');
+    const captionWindow = document.getElementById('caption_window');
+    const captionText = document.getElementById('caption_text');
+    const charAnchor = document.getElementById('char_anchor');
+    const charImg = document.getElementById('char_image');
+    const imagesContainer = document.getElementById('images_container');
+
+    // ---- state ----
+
+    let controlWs = null;
+    let audioWs = null;
+    let resetting = false;
+    let generation = 0; // bumped on every reset; async decodes check it
+
+    const pendingSkips = new Set(); // msg_id, never pruned (reset clears)
+    const tracks = new Map();       // track_id -> track
+    const playQueue = [];           // track_ids in first-chunk arrival order
+    let activeTrackId = null;
+
     let showImages = false;
     let currentImageURLs = [];
 
-    function playWavFile(arrayBuffer, msg_id) {
-        if (pending_skips.has(msg_id)) {
-            return;
-        }
+    function newTrack(trackId, msgId) {
+        return {
+            id: trackId,
+            msgId: msgId,
+            chunks: [],       // received, not yet scheduled (buffering)
+            sources: [],      // live AudioBufferSourceNodes
+            words: [],        // {w, s, e, el}
+            done: false,
+            queued: false,    // in playQueue (a meta-created track isn't, until audio arrives)
+            totalDurMs: 0,
+            maxChunkEndMs: 0,
+            anchor: 0,        // audioContext.currentTime for track ms 0
+        };
+    }
 
-        audioContext.decodeAudioData(arrayBuffer, function (buffer) {
-            // re-check: a skip may have arrived during the async decode
-            if (pending_skips.has(msg_id)) {
-                return;
-            }
+    function ensureTrack(trackId, msgId) {
+        let t = tracks.get(trackId);
+        if (!t) {
+            t = newTrack(trackId, msgId);
+            tracks.set(trackId, t);
+        }
+        return t;
+    }
+
+    // ---- caption rendering ----
+
+    function clearCaption() {
+        captionText.innerHTML = '';
+        captionText.style.transform = 'translateY(0)';
+        captionCard.classList.remove('visible');
+    }
+
+    function appendWords(track, words) {
+        for (const w of words) {
+            const el = document.createElement('span');
+            el.className = 'w';
+            el.textContent = w.w + ' ';
+            captionText.appendChild(el);
+            track.words.push({ w: w.w, s: w.s, e: w.e, el: el });
+        }
+        captionCard.classList.add('visible');
+    }
+
+    // keep the active word inside the 3-line window: shift the text up so the
+    // active line is the window's last visible line
+    function scrollCaptionTo(el) {
+        const lineHeight = el.offsetHeight || 1;
+        const windowHeight = captionWindow.clientHeight;
+        const shift = Math.max(0, el.offsetTop + lineHeight - windowHeight);
+        captionText.style.transform = `translateY(${-shift}px)`;
+    }
+
+    // ---- playback ----
+
+    function trackTimeMs(track) {
+        return (audioContext.currentTime - track.anchor) * 1000;
+    }
+
+    function scheduleChunk(track, chunk) {
+        const gen = generation;
+        audioContext.decodeAudioData(chunk.mp3, (buffer) => {
+            if (gen !== generation) return;
+            if (pendingSkips.has(track.msgId)) return;
+            if (tracks.get(track.id) !== track) return;
 
             const source = audioContext.createBufferSource();
             source.buffer = buffer;
-            source.channelCount = 1;
-            source.connect(audioContext.destination);
+            source.connect(masterGain);
 
-            source.onended = () => {
-                currentMsgId = null;
-                audio_sources.delete(msg_id);
-            };
-
-            audio_sources.set(msg_id, source);
-            source.start();
-            currentMsgId = msg_id;
+            const startAt = Math.max(audioContext.currentTime, track.anchor + chunk.offsetMs / 1000);
+            source.start(startAt);
+            track.sources.push(source);
+        }, (err) => {
+            console.error('chunk decode failed', err);
         });
+
+        track.maxChunkEndMs = Math.max(track.maxChunkEndMs, chunk.offsetMs + chunk.durMs);
+        appendWords(track, chunk.words || []);
     }
 
-    let currentResponse = "";
-    let typewriterTimeoutId = null;
-    let stopTypewriter = false;
+    function activateTrack(trackId) {
+        const track = tracks.get(trackId);
+        if (!track) return;
 
-    function updateText(responseText) {
-        if (typewriterTimeoutId) {
-            clearTimeout(typewriterTimeoutId);
-            typewriterTimeoutId = null;
+        console.log('activate track', trackId.slice(0, 8));
+        activeTrackId = trackId;
+        clearCaption();
+        lastActiveEl = null;
+        track.words = [];
+
+        // anchor so that the first buffered chunk plays immediately and the
+        // karaoke clock is correct even when joining mid-track (offset > 0)
+        const firstOffset = track.chunks.length ? track.chunks[0].offsetMs : 0;
+        track.anchor = audioContext.currentTime + 0.05 - firstOffset / 1000;
+
+        for (const chunk of track.chunks) {
+            scheduleChunk(track, chunk);
         }
-        stopTypewriter = false;
-
-        const textBox = document.getElementById("text_box");
-
-        if (!responseText) {
-            textBox.innerHTML = "";
-            currentResponse = "";
-            return;
-        }
-
-        let text = responseText;
-        const responseBox = document.getElementById("response_box");
-
-        if (responseText.startsWith(currentResponse)) {
-            text = responseText.slice(currentResponse.length);
-        } else {
-            textBox.innerHTML = "";
-        }
-        currentResponse = responseText;
-
-        const args = text.split(" ");
-        let i = 0;
-        const typeWriter = () => {
-            if (stopTypewriter || i >= args.length) {
-                typewriterTimeoutId = null;
-                return;
-            }
-
-            let word = args[i];
-            if (args.length > i + 1) {
-                word += ' ';
-            }
-
-            const wordEl = document.createElement("span");
-            wordEl.innerText = word;
-            textBox.appendChild(wordEl);
-            responseBox.style.height = textBox.clientHeight + "px";
-            responseBox.scrollTo({ top: responseBox.scrollHeight });
-
-            i++;
-            typewriterTimeoutId = setTimeout(typeWriter, 200);
-        }
-        typeWriter();
+        track.chunks = [];
     }
 
-    function set_image(url) {
-        const charImg = document.getElementById("char_image");
+    function tryActivate() {
+        while (activeTrackId === null && playQueue.length > 0) {
+            const next = playQueue.shift();
+            if (!tracks.has(next)) continue;
+            activateTrack(next);
+        }
+    }
+
+    function finishTrack(track) {
+        // caption stays on screen until the next track or a clean/skip
+        for (const w of track.words) {
+            w.el.classList.remove('active');
+            w.el.classList.add('spoken');
+        }
+        tracks.delete(track.id);
+        if (activeTrackId === track.id) {
+            activeTrackId = null;
+        }
+        tryActivate();
+    }
+
+    function killTracksOfMsg(msgId) {
+        let killedActive = false;
+        for (const [id, track] of tracks) {
+            if (track.msgId !== msgId) continue;
+            for (const src of track.sources) {
+                try { src.stop(); } catch (e) { }
+            }
+            tracks.delete(id);
+            const qi = playQueue.indexOf(id);
+            if (qi >= 0) playQueue.splice(qi, 1);
+            if (activeTrackId === id) {
+                activeTrackId = null;
+                killedActive = true;
+            }
+        }
+        return killedActive;
+    }
+
+    function skip(msgId, wipe) {
+        pendingSkips.add(msgId);
+        const killedActive = killTracksOfMsg(msgId);
+
+        if (killedActive || wipe) {
+            clearCaption();
+            setCharImage("");
+        }
+        tryActivate();
+    }
+
+    function clearStage() {
+        clearCaption();
+        setCharImage("");
+        currentImageURLs = [];
         showImages = false;
+        renderPromptImages();
+    }
 
+    // ---- character & prompt images ----
+
+    function setCharImage(url) {
+        showImages = false;
         if (!url || url.length <= 1) {
-            charImg.style.opacity = "0";
-            // also clear any prompt images
+            charImg.classList.remove('visible');
             currentImageURLs = [];
             renderPromptImages();
             return;
         }
-
         renderPromptImages();
         charImg.src = url;
-        charImg.style.opacity = "1";
+        charImg.classList.add('visible');
     }
 
     function renderPromptImages() {
-        const imagesContainer = document.getElementById('images_container');
         imagesContainer.innerHTML = '';
         if (!showImages || currentImageURLs.length === 0) {
             imagesContainer.style.display = 'none';
             return;
         }
-        // Set image count for CSS to size evenly without distorting ratios
-        imagesContainer.style.setProperty('--img-count', String(currentImageURLs.length));
-        for (let i = 0; i < currentImageURLs.length; i++) {
+        for (const raw of currentImageURLs) {
             const slot = document.createElement('div');
             slot.className = 'img_slot';
             const img = document.createElement('img');
-            // Ensure absolute URL for overlay context
-            const url = currentImageURLs[i].startsWith('http') ? currentImageURLs[i] : (window.location.origin + currentImageURLs[i]);
-            img.src = url;
+            img.src = raw.startsWith('http') ? raw : (window.location.origin + raw);
             slot.appendChild(img);
             imagesContainer.appendChild(slot);
         }
         imagesContainer.style.display = 'flex';
-        console.log('showed images ', String(currentImageURLs.length));
     }
 
-    function skip(msg_id, wipe) {
-        console.log('skip requested for:', msg_id, 'wipe:', wipe);
+    function activeMsgId() {
+        const track = tracks.get(activeTrackId);
+        return track ? track.msgId : null;
+    }
 
-        pending_skips.add(msg_id);
+    // ---- render loop: karaoke highlight + voice pulse + end detection ----
 
-        const src = audio_sources.get(msg_id);
-        if (src) {
-            try { src.stop(); } catch (e) { }
-            audio_sources.delete(msg_id);
-            // its audio was playing here, so the screen is showing it
-            wipe = true;
+    let lastActiveEl = null;
+    let pulse = 1;
+
+    function renderLoop() {
+        const track = tracks.get(activeTrackId);
+        if (track) {
+            const t = trackTimeMs(track);
+            let activeEl = null;
+
+            for (const w of track.words) {
+                if (t >= w.e) {
+                    if (!w.el.classList.contains('spoken')) {
+                        w.el.classList.remove('active');
+                        w.el.classList.add('spoken');
+                    }
+                } else if (t >= w.s) {
+                    activeEl = w.el;
+                    if (!w.el.classList.contains('active')) {
+                        w.el.classList.add('active');
+                        w.el.classList.remove('spoken');
+                    }
+                }
+            }
+
+            if (activeEl && activeEl !== lastActiveEl) {
+                scrollCaptionTo(activeEl);
+                lastActiveEl = activeEl;
+            }
+
+            const endMs = track.done ? Math.max(track.totalDurMs, track.maxChunkEndMs) : Infinity;
+            if (t >= endMs) {
+                finishTrack(track);
+            }
         }
 
-        if (!wipe) {
+        // voice pulse from output RMS
+        analyser.getByteTimeDomainData(analyserData);
+        let sum = 0;
+        for (let i = 0; i < analyserData.length; i++) {
+            const v = (analyserData[i] - 128) / 128;
+            sum += v * v;
+        }
+        const rms = Math.sqrt(sum / analyserData.length);
+        const target = 1 + Math.min(rms * 0.1, 0.025);
+        pulse += (target - pulse) * 0.3;
+        charAnchor.style.setProperty('--pulse', pulse.toFixed(4));
+
+        requestAnimationFrame(renderLoop);
+    }
+    requestAnimationFrame(renderLoop);
+
+    // ---- audio socket frame handling ----
+
+    function handleAudioFrame(buf) {
+        const view = new DataView(buf);
+        const frameType = view.getUint8(0);
+        if (frameType === 3) return; // ping
+
+        const headerLen = view.getUint32(1, false);
+        const headerBytes = new Uint8Array(buf, 5, headerLen);
+        const header = JSON.parse(new TextDecoder('utf-8').decode(headerBytes));
+
+        if (frameType === 2) { // track_done
+            // the bus does not guarantee cross-frame order: done can overtake
+            // the first chunk, so it must create the track rather than drop
+            const track = ensureTrack(header.track_id, header.msg_id);
+            track.done = true;
+            track.totalDurMs = header.total_dur_ms || 0;
             return;
         }
 
-        stopTypewriter = true;
-        if (typewriterTimeoutId) {
-            clearTimeout(typewriterTimeoutId);
-            typewriterTimeoutId = null;
+        if (frameType !== 1) return;
+
+        if (pendingSkips.has(header.msg_id)) return;
+
+        const mp3 = buf.slice(5 + headerLen);
+        const chunk = {
+            offsetMs: header.offset_ms || 0,
+            durMs: header.dur_ms || 0,
+            text: header.text || '',
+            words: header.words || [],
+            mp3: mp3,
+        };
+
+        console.log('chunk', header.track_id.slice(0, 8), 'seq', header.seq, 'offset', header.offset_ms, 'words', (header.words || []).length);
+
+        const track = ensureTrack(header.track_id, header.msg_id);
+
+        if (activeTrackId === track.id) {
+            scheduleChunk(track, chunk);
+        } else {
+            track.chunks.push(chunk);
+            if (!track.queued) {
+                track.queued = true;
+                playQueue.push(track.id);
+            }
         }
 
-        updateText(" ");
-        set_image("");
+        tryActivate();
+    }
+
+    // ---- control socket event handling ----
+
+    function handleControlEvent(msg) {
+        const dataStr = new TextDecoder('utf-8').decode(base64ToArrayBuffer(msg.data));
+
+        switch (msg.type) {
+            case 'track_meta': {
+                // registers the track -> msg mapping ahead of audio; words ride
+                // in the chunks themselves
+                try {
+                    const meta = JSON.parse(dataStr);
+                    if (!pendingSkips.has(meta.msg_id)) {
+                        ensureTrack(meta.track_id, meta.msg_id);
+                    }
+                } catch (e) { }
+                break;
+            }
+            case 'snapshot': {
+                try {
+                    const snap = JSON.parse(dataStr);
+                    for (const id of (snap.skipped || [])) {
+                        pendingSkips.add(id);
+                    }
+                } catch (e) { }
+                break;
+            }
+            case 'skip': {
+                try {
+                    const payload = JSON.parse(dataStr);
+                    skip(payload.msg_id, payload.current !== false);
+                } catch (e) {
+                    skip(dataStr, true);
+                }
+                break;
+            }
+            case 'clean':
+                clearStage();
+                break;
+            case 'reload':
+                location.reload();
+                break;
+            case 'image':
+                setCharImage(dataStr);
+                break;
+            case 'prompt_image': {
+                try {
+                    const payload = JSON.parse(dataStr);
+                    currentImageURLs = Array.isArray(payload.image_ids) ? payload.image_ids.map(id => `/images/${id}`) : [];
+                    showImages = !!payload.show_images;
+                    renderPromptImages();
+                } catch (e) {
+                    console.error('failed to parse prompt_image payload', e);
+                }
+                break;
+            }
+            case 'show_images':
+                if (activeMsgId() === dataStr) {
+                    showImages = true;
+                    renderPromptImages();
+                }
+                break;
+            case 'hide_images':
+                if (activeMsgId() === dataStr) {
+                    showImages = false;
+                    renderPromptImages();
+                }
+                break;
+            case 'ping':
+                break;
+            default:
+                // unknown types are future protocol: ignore silently
+                break;
+        }
+    }
+
+    // ---- sockets: any loss resets everything ----
+
+    function fullReset() {
+        if (resetting) return;
+        resetting = true;
+        generation++;
+
+        for (const [, track] of tracks) {
+            for (const src of track.sources) {
+                try { src.stop(); } catch (e) { }
+            }
+        }
+        tracks.clear();
+        playQueue.length = 0;
+        activeTrackId = null;
+        pendingSkips.clear();
+        clearStage();
+
+        skipHandler = null;
+        showImagesHandler = null;
+
+        try { if (controlWs) controlWs.close(); } catch (e) { }
+        try { if (audioWs) audioWs.close(); } catch (e) { }
+        controlWs = null;
+        audioWs = null;
+
+        setTimeout(() => {
+            resetting = false;
+            connect();
+        }, 1000);
     }
 
     function connect() {
-        ws = new WebSocket(`wss://${window.location.host + "/ws" + window.location.pathname}`);
-        ws.binaryType = 'arraybuffer'
+        const base = `wss://${window.location.host}`;
+        const path = window.location.pathname;
 
-        ws.onopen = function () {
-            console.log('Socket is open!');
+        controlWs = new WebSocket(`${base}/ws${path}`);
+        controlWs.binaryType = 'arraybuffer';
 
-            if (!skipHandler) {
-                skipHandler = function () {
-                    ws.send(JSON.stringify({
-                        'action': 'skip',
-                        'token': token
-                    }));
-                };
-            }
-
-            if (!showImagesHandler) {
-                showImagesHandler = function () {
-                    ws.send(JSON.stringify({
-                        'action': 'show_images',
-                        'token': token
-                    }));
-                };
+        controlWs.onopen = () => {
+            console.log('control socket open');
+            skipHandler = () => {
+                controlWs.send(JSON.stringify({ action: 'skip', token: token }));
+            };
+            showImagesHandler = () => {
+                controlWs.send(JSON.stringify({ action: 'show_images', token: token }));
+            };
+        };
+        controlWs.onmessage = (event) => {
+            try {
+                const decoded = new TextDecoder('utf-8').decode(new Uint8Array(event.data));
+                handleControlEvent(JSON.parse(decoded));
+            } catch (e) {
+                console.error('bad control message', e);
             }
         };
-
-        ws.onerror = function (err) {
-            console.error('Socket encountered error: ', err.message, 'Closing socket');
-            ws.close();
+        controlWs.onerror = () => { try { controlWs.close(); } catch (e) { } };
+        controlWs.onclose = () => {
+            console.log('control socket closed, resetting');
+            fullReset();
         };
 
-        ws.onclose = function (e) {
-            console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+        audioWs = new WebSocket(`${base}/ws-audio${path}`);
+        audioWs.binaryType = 'arraybuffer';
 
-            if (skipHandler) {
-                skipHandler = null;
-            }
-
-            if (showImagesHandler) {
-                showImagesHandler = null;
-            }
-
-            for (const [id, src] of audio_sources.entries()) {
-                try { src.stop(); } catch (err) { }
-                audio_sources.delete(id);
-            }
-
-            updateText(" ");
-            set_image("");
-
-            setTimeout(function () {
-                connect();
-            }, 1000);
+        audioWs.onopen = () => {
+            console.log('audio socket open');
         };
 
-        ws.onmessage = function (event) {
-            let uint8Array = new Uint8Array(event.data);
-
-            let decoder = new TextDecoder('utf-8');
-            let utf8String = decoder.decode(uint8Array);
-
-            msg = JSON.parse(utf8String)
-
-            data = base64ToArrayBuffer(msg.data);
-            dataStr = decoder.decode(data);
-
-            switch (msg.type) {
-                case 'text': {
-                    let payload;
-                    try { payload = JSON.parse(dataStr); } catch (e) { break; }
-                    if (pending_skips.has(payload.msg_id)) {
-                        break;
-                    }
-                    updateText(payload.text || "");
-                    break;
-                }
-                case 'audio':
-                    dataJson = JSON.parse(dataStr);
-                    playWavFile(base64ToArrayBuffer(dataJson.audio), dataJson.msg_id);
-                    break
-                case 'image':
-                    set_image(dataStr)
-                    break
-                case 'prompt_image':
-                    try {
-                        const payload = JSON.parse(dataStr);
-                        currentImageURLs = Array.isArray(payload.image_ids) ? payload.image_ids.map(id => `/images/${id}`) : [];
-
-                        console.log('showImages', payload.show_images);
-                        showImages = !!payload.show_images;
-                        console.log('showImages', showImages);
-
-                        renderPromptImages();
-                    } catch (e) {
-                        console.error('failed to parse prompt_image payload', e);
-                    }
-                    break
-                case 'show_images':
-                    msgID = dataStr;
-
-                    if (currentMsgId !== msgID) {
-                        return;
-                    }
-
-                    showImages = true;
-                    renderPromptImages();
-                    break
-                case 'hide_images':
-                    msgID = dataStr;
-                    if (currentMsgId !== msgID) {
-                        return;
-                    }
-                    showImages = false;
-                    renderPromptImages();
-                    break
-                case 'skip': {
-                    let skipId = dataStr;
-                    let wipe = true;
-                    try {
-                        const payload = JSON.parse(dataStr);
-                        if (payload && payload.msg_id) {
-                            skipId = payload.msg_id;
-                            wipe = payload.current !== false;
-                        }
-                    } catch (e) { }
-                    skip(skipId, wipe);
-                    break;
-                }
-                case 'ping':
-                    break
-                default:
-                    console.log('unknown type')
-                    break;
+        audioWs.onmessage = (event) => {
+            try {
+                handleAudioFrame(event.data);
+            } catch (e) {
+                console.error('bad audio frame', e);
             }
         };
-
-        pending_skips.clear();
+        audioWs.onerror = () => { try { audioWs.close(); } catch (e) { } };
+        audioWs.onclose = () => {
+            console.log('audio socket closed, resetting');
+            fullReset();
+        };
     }
 
     connect();
 }
-

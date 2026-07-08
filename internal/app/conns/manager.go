@@ -29,7 +29,19 @@ type Manager struct {
 	// watermill in-memory pubsub for per-user data events
 	bus *Watermill
 
+	// live overlay state per user, for the connect snapshot; registered by the
+	// processor for the lifetime of one Process run
+	overlayStates     map[uuid.UUID]OverlayState
+	overlayStatesLock sync.RWMutex
+
 	logger *slog.Logger
+}
+
+// OverlayState is the processor-owned state a reconnecting overlay needs to
+// resynchronize: which messages are skipped and which one is playing.
+type OverlayState interface {
+	SkippedList() []string
+	CurrentID() string
 }
 
 func NewConnectionManager(ctx context.Context, logger *slog.Logger, processor Processor) *Manager {
@@ -40,9 +52,10 @@ func NewConnectionManager(ctx context.Context, logger *slog.Logger, processor Pr
 
 		logger: logger,
 
-		bus:          NewWatermill(),
-		runningUsers: make(map[uuid.UUID]bool, 100),
-		userCancels:  make(map[uuid.UUID]context.CancelFunc, 100),
+		bus:           NewWatermill(),
+		runningUsers:  make(map[uuid.UUID]bool, 100),
+		userCancels:   make(map[uuid.UUID]context.CancelFunc, 100),
+		overlayStates: make(map[uuid.UUID]OverlayState, 100),
 	}
 }
 
@@ -74,6 +87,10 @@ const (
 	EventTypeShowImages
 	EventTypeHideImages
 	EventTypePing
+	EventTypeTrackMeta
+	EventTypeSnapshot
+	EventTypeClean
+	EventTypeReload
 )
 
 type EventType int
@@ -98,10 +115,25 @@ func (et EventType) String() string {
 		return "show_images"
 	case EventTypeHideImages:
 		return "hide_images"
+	case EventTypeTrackMeta:
+		return "track_meta"
+	case EventTypeSnapshot:
+		return "snapshot"
+	case EventTypeClean:
+		return "clean"
+	case EventTypeReload:
+		return "reload"
 	default:
 		return "unknown"
 	}
 }
+
+// Audio-socket binary frame types (overlay-v2): [1B type][4B BE header len][header JSON][payload].
+const (
+	AudioFrameChunk     byte = 1
+	AudioFrameTrackDone byte = 2
+	AudioFramePing      byte = 3
+)
 
 type DataEvent struct {
 	EventType EventType `json:"type"`
@@ -208,6 +240,87 @@ func (m *Manager) TryWrite(userID uuid.UUID, event *DataEvent) bool {
 	}
 	_ = m.bus.Publish(m.ctx, m.topic(userID), data)
 	return true
+}
+
+func (m *Manager) audioTopic(userID uuid.UUID) string {
+	return "user.audio." + userID.String()
+}
+
+// TryWriteAudio publishes a pre-assembled binary overlay frame on the audio
+// topic. Audio rides its own topic so chunk bursts can never evict control
+// events (skip, meta) from the shared drop-on-full subscriber buffer.
+func (m *Manager) TryWriteAudio(userID uuid.UUID, frame []byte) bool {
+	_ = m.bus.Publish(m.ctx, m.audioTopic(userID), frame)
+	return true
+}
+
+// SubscribeAudio delivers raw binary frames for the audio websocket. Same
+// drop-on-full semantics as Subscribe.
+func (m *Manager) SubscribeAudio(userID uuid.UUID) (<-chan []byte, func()) {
+	out := make(chan []byte, 64)
+
+	ctx, cancel := context.WithCancel(m.ctx)
+	msgs, err := m.bus.Subscribe(ctx, m.audioTopic(userID))
+	if err != nil {
+		cancel()
+		close(out)
+		return out, func() {}
+	}
+
+	go func() {
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-msgs:
+				if !ok {
+					return
+				}
+				select {
+				case out <- msg.Payload:
+				default:
+				}
+				msg.Ack()
+			}
+		}
+	}()
+
+	return out, func() { cancel() }
+}
+
+// RegisterOverlayState exposes a processor's live state for connect snapshots.
+func (m *Manager) RegisterOverlayState(userID uuid.UUID, st OverlayState) {
+	m.overlayStatesLock.Lock()
+	defer m.overlayStatesLock.Unlock()
+	m.overlayStates[userID] = st
+}
+
+func (m *Manager) UnregisterOverlayState(userID uuid.UUID) {
+	m.overlayStatesLock.Lock()
+	defer m.overlayStatesLock.Unlock()
+	delete(m.overlayStates, userID)
+}
+
+// OverlaySnapshot returns the skip set and current message for a fresh overlay
+// connection; empty snapshot when no processor is running.
+func (m *Manager) OverlaySnapshot(userID uuid.UUID) (skipped []string, current string) {
+	m.overlayStatesLock.RLock()
+	st := m.overlayStates[userID]
+	m.overlayStatesLock.RUnlock()
+	if st == nil {
+		return nil, ""
+	}
+	return st.SkippedList(), st.CurrentID()
+}
+
+// ReloadOverlay tells every connected overlay of the user to location.reload()
+// — the escape hatch from the OBS browser-source cache after JS deploys.
+func (m *Manager) ReloadOverlay(userID uuid.UUID) {
+	m.TryWrite(userID, &DataEvent{
+		EventType: EventTypeReload,
+		EventData: []byte("reload"),
+	})
 }
 
 func (m *Manager) NotifyUpdateSettings(userID uuid.UUID) {

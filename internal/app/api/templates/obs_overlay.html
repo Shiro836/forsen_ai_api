@@ -4,22 +4,24 @@
         <title>BAJ AI &ndash; Overlay</title>
         <meta name="description" content="BAJ AI - Overlay">
 
-        <script src="/static/obs-overlay.js"></script>
-        <link rel="stylesheet" href="/static/obs-overlay.css">
+        <script src="/static/obs-overlay.js?v={{.JSVersion}}"></script>
+        <link rel="stylesheet" href="/static/obs-overlay.css?v={{.JSVersion}}">
     </head>
 
     <body>
-        <main>
-            <div id="response_box">
-                <div id="text_box"></div>
+        <div id="caption_zone">
+            <div id="caption_card">
+                <div id="caption_window">
+                    <div id="caption_text"></div>
+                </div>
             </div>
-            <div class="character">
-                <img style="max-height: 70vh;" id="char_image" src="">
-                <div id="images_container"></div>
-            </div>
-            <script>
-                pageReady();
-            </script>
-        </main>
+        </div>
+        <div id="char_anchor">
+            <img id="char_image" src="" alt="">
+        </div>
+        <div id="images_container"></div>
+        <script>
+            pageReady();
+        </script>
     </body>
 </html>

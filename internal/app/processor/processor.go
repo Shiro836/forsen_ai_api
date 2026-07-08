@@ -80,6 +80,28 @@ func (s *ProcessorState) IsSkipped(id uuid.UUID) bool {
 	return ok
 }
 
+// SkippedList snapshots the skip set for a freshly connected overlay.
+func (s *ProcessorState) SkippedList() []string {
+	s.skippedMsgIDsLock.Lock()
+	defer s.skippedMsgIDsLock.Unlock()
+	ids := make([]string, 0, len(s.skippedMsgIDs))
+	for id := range s.skippedMsgIDs {
+		ids = append(ids, id.String())
+	}
+	return ids
+}
+
+// CurrentID reports the playing message for a freshly connected overlay;
+// empty when idle.
+func (s *ProcessorState) CurrentID() string {
+	s.currentMsgIDLock.Lock()
+	defer s.currentMsgIDLock.Unlock()
+	if s.currentMsgID == uuid.Nil {
+		return ""
+	}
+	return s.currentMsgID.String()
+}
+
 func (s *ProcessorState) SetCurrent(id uuid.UUID) {
 	s.currentMsgIDLock.Lock()
 	defer s.currentMsgIDLock.Unlock()
@@ -104,7 +126,7 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 		}
 	}()
 
-	eventWriter(textEvent(" ", uuid.Nil))
+	eventWriter(cleanEvent())
 
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeImage,
@@ -112,6 +134,8 @@ func (p *Processor) Process(ctx context.Context, updates chan *conns.Update, eve
 	})
 
 	state := NewProcessorState()
+	p.connManager.RegisterOverlayState(broadcaster.ID, state)
+	defer p.connManager.UnregisterOverlayState(broadcaster.ID)
 
 	go p.handleControlSignals(ctx, updates, eventWriter, broadcaster, state, cancel)
 
@@ -355,7 +379,7 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 				updateImageState(msgID, false)
 
 			case conns.CleanOverlay:
-				eventWriter(textEvent(" ", uuid.Nil))
+				eventWriter(cleanEvent())
 				eventWriter(&conns.DataEvent{
 					EventType: conns.EventTypeImage,
 					EventData: []byte(" "),

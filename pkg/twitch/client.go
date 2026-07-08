@@ -43,13 +43,16 @@ type userTokenData struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func (c *Client) CodeHandler(code string) (*db.User, error) {
+// CodeHandler exchanges an OAuth code for tokens. host must be the host the
+// authorize redirect actually used — Twitch rejects the exchange when
+// redirect_uri differs from the one in the authorize request.
+func (c *Client) CodeHandler(code string, host string) (*db.User, error) {
 	data := url.Values{}
 	data.Set("client_id", c.cfg.ClientID)
 	data.Set("client_secret", c.cfg.Secret)
 	data.Set("code", code)
 	data.Set("grant_type", "authorization_code")
-	data.Set("redirect_uri", "https://forsen.fun/twitch_redirect_handler")
+	data.Set("redirect_uri", "https://"+host+"/twitch_redirect_handler")
 
 	encodedData := data.Encode()
 

@@ -76,7 +76,7 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 		return nil
 	}
 
-	requestTtsDone, err := h.service.playUniversalTTS(ctx, logger, eventWriter, actions, msgID, input.State, input.UserSettings)
+	requestTtsDone, err := h.service.playUniversalTTS(ctx, logger, eventWriter, input.Broadcaster.ID, actions, msgID, input.State, input.UserSettings)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 		return nil
 	}
 
-	eventWriter(textEvent(" ", msgID))
+	eventWriter(cleanEvent())
 
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeImage,

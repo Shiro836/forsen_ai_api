@@ -54,16 +54,11 @@ func (h *TTSHandler) Handle(ctx context.Context, input InteractionInput, eventWr
 	ttsMsg := imagetag.ReplaceImageTags(input.Message)
 	filteredRequest := h.service.FilterText(ctx, input.UserSettings, ttsMsg)
 
-	requestAudio, textTimings, err := h.service.TTSWithTimings(ctx, filteredRequest, input.Character.Data.VoiceReference)
-	if err != nil {
-		return err
-	}
-
 	if input.State.IsSkipped(msgID) {
 		return nil
 	}
 
-	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, filteredRequest, msgID, requestAudio, textTimings, input.State, input.UserSettings)
+	requestTtsDone, err := h.service.playTTSStreaming(ctx, logger, eventWriter, input.Broadcaster.ID, filteredRequest, msgID, input.Character.Data.VoiceReference, input.State, input.UserSettings)
 	if err != nil {
 		return err
 	}
@@ -74,7 +69,7 @@ func (h *TTSHandler) Handle(ctx context.Context, input InteractionInput, eventWr
 		return nil
 	}
 
-	eventWriter(textEvent(" ", msgID))
+	eventWriter(cleanEvent())
 
 	eventWriter(&conns.DataEvent{
 		EventType: conns.EventTypeImage,

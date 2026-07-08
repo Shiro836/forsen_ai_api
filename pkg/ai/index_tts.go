@@ -255,40 +255,16 @@ func (e *IndexTTSEngine) TTS(ctx context.Context, text string, voiceReference []
 
 	text, emotions := ExtractEmotions(text)
 
-	processedReference, err := e.trimVoiceReference(ctx, voiceReference)
+	refPath, err := e.referencePath(ctx, voiceReference)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	tmpFile, err := os.CreateTemp(e.tmpDir, "indextts-*.wav")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create temp voice file: %w", err)
-	}
-
-	tmpPath := tmpFile.Name()
-
-	defer func() {
-		_ = os.Remove(tmpPath)
-	}()
-
-	if _, err := tmpFile.Write(processedReference); err != nil {
-		tmpFile.Close()
-		return nil, nil, fmt.Errorf("failed to write temp voice file: %w", err)
-	}
-
-	if err := tmpFile.Close(); err != nil {
-		return nil, nil, fmt.Errorf("failed to close temp voice file: %w", err)
-	}
-
-	if err := os.Chmod(tmpPath, 0o644); err != nil {
-		return nil, nil, fmt.Errorf("failed to set temp voice file permissions: %w", err)
-	}
-
 	req := &IndexTTS2Request{
 		Text:             text,
-		SpeakerAudioPath: tmpPath,
+		SpeakerAudioPath: refPath,
 		EmoControlMethod: EmoControlMethodAudioReference,
-		EmoRefPath:       &tmpPath,
+		EmoRefPath:       &refPath,
 	}
 
 	if vec := EmotionVector(emotions); vec != nil {

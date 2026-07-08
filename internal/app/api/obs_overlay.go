@@ -4,11 +4,14 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/ws"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -46,10 +49,24 @@ func (api *API) obsOverlay(r *http.Request) template.HTML {
 
 	return getHtml("obs_overlay.html", struct {
 		TwitchLogin string
+		JSVersion   string
 	}{
 		TwitchLogin: twitchLogin,
+		JSVersion:   overlayJSVersion(),
 	})
 }
+
+// overlayJSVersion is a content hash of the embedded overlay JS; the script
+// tag carries it as ?v= so a remote-triggered reload actually fetches new JS
+// instead of the OBS browser-source cache.
+var overlayJSVersion = sync.OnceValue(func() string {
+	data, err := staticFS.ReadFile("static/obs-overlay.js")
+	if err != nil {
+		return "dev"
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:8])
+})
 
 type obsAction struct {
 	Action string `json:"action"`
@@ -114,6 +131,18 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	dataCh, unsubscribe := api.connManager.Subscribe(user.ID)
 	defer unsubscribe()
+
+	// first frame: resync a (re)connecting overlay — restores pending_skips
+	// before any late chunk of a skipped message can play (see overlay-v2 ADR,
+	// skip-vs-reconnect race)
+	skipped, current := api.connManager.OverlaySnapshot(user.ID)
+	snapshot, _ := json.Marshal(struct {
+		Skipped      []string `json:"skipped"`
+		CurrentMsgID string   `json:"current_msg_id"`
+	}{Skipped: skipped, CurrentMsgID: current})
+	if err := sendData(wsClient, conns.EventTypeSnapshot.String(), snapshot); err != nil {
+		logger.Error("failed to send snapshot", "err", err)
+	}
 
 	// READ FROM WS
 	go func() {

@@ -150,6 +150,7 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/{twitch_login}", api.elemNoPermissions(api.obsOverlay))
 		router.Get("/ws/{twitch_login}", api.wsHandler) // permission is checked based on param cuz there is no auth cookie in obs
+		router.Get("/ws-audio/{twitch_login}", api.wsAudioHandler)
 
 		router.Get("/characters/{character_id}/image", api.charImage)
 

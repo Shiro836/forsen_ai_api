@@ -111,7 +111,7 @@ func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := api.twitchClient.CodeHandler(code)
+	user, err := api.twitchClient.CodeHandler(code, r.Host)
 	if err != nil {
 		submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
 

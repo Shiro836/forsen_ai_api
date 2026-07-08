@@ -130,7 +130,11 @@ func (s *Service) ChatTTSWithTimings(ctx context.Context, msg string, refAudio [
 	return ttsResult, ttsSegments, nil
 }
 
-func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
+// playTTS plays finished batch audio through the overlay-v2 track protocol:
+// one self-contained chunk frame on the audio socket, then track_done. Word
+// timings ride in the chunk header; the overlay paints karaoke against its
+// own audio clock, so no per-word events are needed anymore.
+func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, userID uuid.UUID, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
 	mp3Audio, err := s.ffmpeg.Ffmpeg2Mp3(ctx, audio, userSettings.DisableAudioNormalization)
 	if err == nil {
 		audio = mp3Audio
@@ -159,9 +163,7 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 		textTimings[len(textTimings)-1].End = audioLen
 	}
 
-	// cumulative original-text prefixes revealed as the corresponding timing
-	// starts; the overlay's typewriter appends only the new suffix of each event
-	textPrefixes := timingTextPrefixes(msg, textTimings)
+	words := wordsFromTimings(msg, textTimings, audioLen)
 
 	done := make(chan struct{})
 
@@ -172,30 +174,24 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 			return
 		}
 
-		if len(textPrefixes) == 0 {
-			// no timings from the engine: keep showing the full text upfront
-			eventWriter(textEvent(msg, msdID))
-		}
+		trackID := uuid.New()
 
-		audioMsg, err := json.Marshal(&audioMsg{
-			Audio: audio,
-			MsgID: msdID.String(),
-		})
-		if err != nil {
-			logger.Error("error marshaling audio message", "err", err)
-			return
-		}
+		eventWriter(trackMetaEvent(msdID, trackID, msg))
 
-		eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeAudio,
-			EventData: audioMsg,
-		})
+		s.connManager.TryWriteAudio(userID, chunkFrame(&chunkHeader{
+			MsgID:   msdID.String(),
+			TrackID: trackID.String(),
+			Seq:     0,
+			DurMs:   audioLen.Milliseconds(),
+			Text:    msg,
+			Words:   words,
+		}, audio))
+
+		s.connManager.TryWriteAudio(userID, trackDoneFrame(msdID, trackID, audioLen))
 
 		startTime := time.Now()
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
-
-		nextSegment := 0
 
 		for {
 			select {
@@ -207,18 +203,7 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 					return
 				}
 
-				elapsed := time.Since(startTime)
-
-				for nextSegment < len(textPrefixes) && elapsed >= textTimings[nextSegment].Start {
-					eventWriter(textEvent(textPrefixes[nextSegment], msdID))
-					nextSegment++
-				}
-
-				if elapsed > audioLen {
-					if nextSegment < len(textPrefixes) {
-						// make sure the full text is visible at the end
-						eventWriter(textEvent(textPrefixes[len(textPrefixes)-1], msdID))
-					}
+				if time.Since(startTime) > audioLen {
 					return
 				}
 			}
@@ -359,7 +344,7 @@ func (s *Service) processUniversalTTSMessage(ctx context.Context, msg string, us
 	return limitedActions, nil
 }
 
-func (s *Service) playUniversalTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, actions []ttsprocessor.Action, msgID uuid.UUID, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
+func (s *Service) playUniversalTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, userID uuid.UUID, actions []ttsprocessor.Action, msgID uuid.UUID, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
 	combinedAudio, combinedText, combinedTimings, err := s.craftUniversalTTSAudio(ctx, logger, actions, userSettings)
 	if err != nil {
 		done := make(chan struct{})
@@ -368,7 +353,7 @@ func (s *Service) playUniversalTTS(ctx context.Context, logger *slog.Logger, eve
 		return done, err
 	}
 
-	return s.playTTS(ctx, logger, eventWriter, combinedText, msgID, combinedAudio, combinedTimings, state, userSettings)
+	return s.playTTS(ctx, logger, eventWriter, userID, combinedText, msgID, combinedAudio, combinedTimings, state, userSettings)
 }
 
 // oldTTSFilter routes a segment through StyleTTS2 instead of IndexTTS.
