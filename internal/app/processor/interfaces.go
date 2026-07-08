@@ -24,6 +24,10 @@ type InteractionInput struct {
 	UserSettings *db.UserSettings
 	MsgID        string // UUID as string
 
+	// AudioWriter receives the overlay-v2 binary audio frames for this
+	// interaction; control events keep going through the EventWriter
+	AudioWriter conns.AudioWriter
+
 	SkipLLMFilterFully bool
 
 	State *ProcessorState

@@ -132,7 +132,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 			EventData: []byte(fmt.Sprintf("/characters/%s/image", currentTurn.card.ID)),
 		})
 
-		done, err := h.service.playTTS(ctx, logger, eventWriter, input.Broadcaster.ID, currentTurn.text, msgUUID, currentTurn.audio, currentTurn.timings, input.State, input.UserSettings)
+		done, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, currentTurn.text, msgUUID, currentTurn.audio, currentTurn.timings, input.State, input.UserSettings)
 		if err != nil {
 			logger.Error("failed to play TTS", "err", err)
 			break

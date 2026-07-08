@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 )
 
 type charsElem struct {
@@ -821,7 +822,7 @@ type TryHandler interface {
 	Handle(ctx context.Context, input processor.InteractionInput, writer conns.EventWriter) error
 }
 
-func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state *processor.ProcessorState, eventWriter conns.EventWriter, card *db.Card, dbUser *db.User, userSettings *db.UserSettings) <-chan tryJob {
+func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state *processor.ProcessorState, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, card *db.Card, dbUser *db.User, userSettings *db.UserSettings) <-chan tryJob {
 	jobCh := make(chan tryJob)
 
 	go func() {
@@ -874,6 +875,7 @@ func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state 
 				MsgID:              msgID.String(),
 				SkipLLMFilterFully: true,
 				State:              state,
+				AudioWriter:        audioWriter,
 			}
 
 			select {
@@ -930,6 +932,20 @@ func (api *API) serveTryWS(w http.ResponseWriter, r *http.Request, card *db.Card
 		}
 	})
 
+	// audio frames go straight to this try socket as raw binary (Send is
+	// mutex-protected); the page tells them apart from the JSON envelope by
+	// the first byte
+	audioWriter := conns.AudioWriter(func(frame []byte) bool {
+		if err := wsClient.Send(&ws.Message{
+			MsgType: websocket.BinaryMessage,
+			Message: frame,
+		}); err != nil {
+			logger.Warn("failed to send audio frame to try ws", "err", err)
+			return false
+		}
+		return true
+	})
+
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
@@ -961,7 +977,7 @@ func (api *API) serveTryWS(w http.ResponseWriter, r *http.Request, card *db.Card
 		}
 	}()
 
-	jobCh := api.readTryCommands(ctx, wsClient, state, eventWriter, card, user, userSettings)
+	jobCh := api.readTryCommands(ctx, wsClient, state, eventWriter, audioWriter, card, user, userSettings)
 
 	for job := range jobCh {
 		if msgID, err := uuid.Parse(job.Input.MsgID); err == nil {

@@ -153,7 +153,7 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 		return nil
 	}
 
-	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.Broadcaster.ID, filteredRequestText, msgID, requestAudio, textTimings, input.State, input.UserSettings)
+	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, filteredRequestText, msgID, requestAudio, textTimings, input.State, input.UserSettings)
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 		return nil
 	}
 
-	responseTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.Broadcaster.ID, filteredResponse, msgID, responseTtsAudio, textTimings, input.State, input.UserSettings)
+	responseTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, filteredResponse, msgID, responseTtsAudio, textTimings, input.State, input.UserSettings)
 	if err != nil {
 		return err
 	}

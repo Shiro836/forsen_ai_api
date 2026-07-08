@@ -8,6 +8,11 @@ import (
 
 type EventWriter func(event *DataEvent) bool
 
+// AudioWriter delivers a binary overlay-v2 audio frame (chunk/track_done) to
+// whatever sink owns the playback: the user's audio topic for the OBS overlay,
+// or a try-page websocket directly.
+type AudioWriter func(frame []byte) bool
+
 const (
 	RestartProcessor UpdateType = iota
 	SkipMessage

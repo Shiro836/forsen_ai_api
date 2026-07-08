@@ -107,7 +107,7 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 		return nil
 	}
 
-	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.Broadcaster.ID, filteredRequest, msgID, requestAudio, textTimings, input.State, input.UserSettings)
+	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, filteredRequest, msgID, requestAudio, textTimings, input.State, input.UserSettings)
 	if err != nil {
 		return err
 	}

@@ -1,42 +1,7 @@
-/* Overlay v2: fixed stage, karaoke caption, twitch palette.
+/* OBS overlay layout (visuals of the caption live in overlay-player.css).
    Layout contract: nothing on the stage ever moves because something else
    grew — the character is an absolute anchor, the caption lives in a
    reserved zone and grows inward. */
-
-@font-face {
-    font-family: "Overlay Sans";
-    src: url("/static/fonts/noto-sans-latin-500.woff2") format("woff2");
-    font-weight: 500;
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-
-@font-face {
-    font-family: "Overlay Sans";
-    src: url("/static/fonts/noto-sans-cyrillic-500.woff2") format("woff2");
-    font-weight: 500;
-    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
-}
-
-@font-face {
-    font-family: "Overlay Sans";
-    src: url("/static/fonts/noto-sans-latin-700.woff2") format("woff2");
-    font-weight: 700;
-    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
-}
-
-@font-face {
-    font-family: "Overlay Sans";
-    src: url("/static/fonts/noto-sans-cyrillic-700.woff2") format("woff2");
-    font-weight: 700;
-    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
-}
-
-:root {
-    --accent: #A970FF;
-    --accent-deep: #9146FF;
-    --glass: rgba(13, 17, 28, 0.55);
-    --glass-border: rgba(169, 112, 255, 0.28);
-}
 
 * {
     box-sizing: border-box;
@@ -65,75 +30,8 @@ body {
     pointer-events: none;
 }
 
-#caption_card {
-    max-width: 100%;
-    padding: 0.45em 0.85em;
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    border-radius: 16px;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
-    opacity: 0;
-    transform: translateY(-8px) scale(0.98);
-    transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-                transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-#caption_card.visible {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-}
-
-/* window: at most ~3 lines visible, older lines slide up out of view */
-#caption_window {
-    max-height: calc(3 * 1.35em);
-    overflow: hidden;
+#caption_zone .op-window {
     font-size: 30pt;
-    font-weight: 700;
-    line-height: 1.35;
-    text-align: center;
-}
-
-#caption_text {
-    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
-    will-change: transform;
-}
-
-#caption_text .w {
-    display: inline-block;
-    white-space: pre-wrap;
-    opacity: 0.4;
-    transform-origin: 50% 80%;
-    animation: wordIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    transition: opacity 0.15s ease-out, color 0.12s ease-out, transform 0.12s ease-out;
-}
-
-#caption_text .w.active {
-    opacity: 1;
-    color: var(--accent);
-    transform: scale(1.12);
-    text-shadow: 0 0 18px rgba(169, 112, 255, 0.65), 0 0 40px rgba(145, 70, 255, 0.35);
-}
-
-#caption_text .w.spoken {
-    opacity: 0.85;
-    color: #fff;
-    transform: scale(1);
-}
-
-@keyframes wordIn {
-    0% {
-        opacity: 0;
-        transform: scale(0.8) translateY(0.35em);
-    }
-    60% {
-        transform: scale(1.06) translateY(-0.03em);
-    }
-    100% {
-        opacity: 0.4;
-        transform: scale(1) translateY(0);
-    }
 }
 
 /* --- character: absolute anchor, bottom-left, never moves ---

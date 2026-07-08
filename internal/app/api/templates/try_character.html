@@ -12,28 +12,28 @@
         </h1>
     </div>
 
-    <!-- Character display area -->
-    <div class="flex-1 flex gap-4">
-        <!-- Character image -->
-        <div class="w-64 h-64 border-2 {{template "ui-border-clr"}} rounded flex items-center justify-center bg-gray-50
-            dark:bg-gray-900">
-            {{ if .AgenticMode }}
-            <img id="char_image" src="/static/doctorWTF.png"
-                class="max-w-full max-h-full object-contain transition-opacity duration-300" alt="Character">
-            {{ else if .UniversalMode }}
-            <img id="char_image" src="/static/doctorWTF.png"
-                class="max-w-full max-h-full object-contain transition-opacity duration-300" alt="Character">
-            {{ else }}
-            <img id="char_image" src="/characters/{{ .CharacterID }}/image"
-                class="max-w-full max-h-full object-contain transition-opacity duration-300" alt="Character">
-            {{ end }}
+    <!-- Stage: same visual language as the OBS overlay -->
+    <div id="try_stage" class="flex-1 relative rounded-xl overflow-hidden"
+        style="background: radial-gradient(120% 120% at 50% 0%, #1b2436 0%, #0d111c 60%, #090c14 100%); min-height: 20rem;">
+
+        <div class="absolute top-4 left-1/2 -translate-x-1/2 w-[92%] flex justify-center pointer-events-none">
+            <div id="try_caption_card" class="op-card">
+                <div id="try_caption_window" class="op-window" style="font-size: 18pt;">
+                    <div id="try_caption_text" class="op-text"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- Response display -->
-        <div class="flex-1 border-2 {{template "ui-border-clr"}} rounded p-4 overflow-y-auto bg-gray-50
-            dark:bg-gray-900">
-            <div id="text_box" class="text-lg whitespace-pre-wrap"></div>
-        </div>
+        {{ if .AgenticMode }}
+        <img id="char_image" src="/static/doctorWTF.png"
+            style="position: absolute; left: 1rem; bottom: 0; max-height: 70%; max-width: 40%; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0,0,0,.5));" alt="Character">
+        {{ else if .UniversalMode }}
+        <img id="char_image" src="/static/doctorWTF.png"
+            style="position: absolute; left: 1rem; bottom: 0; max-height: 70%; max-width: 40%; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0,0,0,.5));" alt="Character">
+        {{ else }}
+        <img id="char_image" src="/characters/{{ .CharacterID }}/image"
+            style="position: absolute; left: 1rem; bottom: 0; max-height: 70%; max-width: 40%; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0,0,0,.5));" alt="Character">
+        {{ end }}
     </div>
 
     <!-- Input area -->
@@ -64,4 +64,6 @@
 
 </div>
 
+<link rel="stylesheet" href="/static/overlay-player.css">
+<script src="/static/overlay-player.js"></script>
 <script src="/static/try_character.js"></script>

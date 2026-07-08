@@ -217,10 +217,10 @@ func (s *Service) alignChunkWords(ctx context.Context, logger *slog.Logger, text
 // batch path when the engine can't stream or fails before the first chunk.
 // The returned channel closes when playback (wall clock) is over, matching
 // playTTS semantics.
-func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, userID uuid.UUID, msg string, msgID uuid.UUID, voiceRef []byte, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
+func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, msg string, msgID uuid.UUID, voiceRef []byte, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
 	streamer, ok := s.ttsEngine.(ai.StreamingTTSEngine)
 	if !ok {
-		return s.playTTSBatchFromText(ctx, logger, eventWriter, userID, msg, msgID, voiceRef, state, userSettings)
+		return s.playTTSBatchFromText(ctx, logger, eventWriter, audioWriter, msg, msgID, voiceRef, state, userSettings)
 	}
 
 	ttsLimit := db.DefaultTtsLimitSeconds
@@ -299,7 +299,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 				emitted = true
 			}
 
-			s.connManager.TryWriteAudio(userID, chunkFrame(&chunkHeader{
+			audioWriter(chunkFrame(&chunkHeader{
 				MsgID:    msgID.String(),
 				TrackID:  trackID.String(),
 				Seq:      seq,
@@ -332,7 +332,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 				return
 			}
 			logger.Warn("stream produced no chunks, falling back to batch TTS", "err", streamErr)
-			fallbackDone, err := s.playTTSBatchFromText(ctx, logger, eventWriter, userID, msg, msgID, voiceRef, state, userSettings)
+			fallbackDone, err := s.playTTSBatchFromText(ctx, logger, eventWriter, audioWriter, msg, msgID, voiceRef, state, userSettings)
 			if err != nil {
 				logger.Error("batch fallback failed", "err", err)
 				return
@@ -349,7 +349,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 			logger.Warn("stream failed mid-track", "err", streamErr)
 		}
 
-		s.connManager.TryWriteAudio(userID, trackDoneFrame(msgID, trackID, offset))
+		audioWriter(trackDoneFrame(msgID, trackID, offset))
 
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
@@ -375,7 +375,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 
 // playTTSBatchFromText is the streaming path's fallback: synthesize whole,
 // then play through the regular batch pipeline.
-func (s *Service) playTTSBatchFromText(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, userID uuid.UUID, msg string, msgID uuid.UUID, voiceRef []byte, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
+func (s *Service) playTTSBatchFromText(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, msg string, msgID uuid.UUID, voiceRef []byte, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
 	audio, timings, err := s.TTSWithTimings(ctx, msg, voiceRef)
 	if err != nil {
 		return nil, fmt.Errorf("batch synthesis failed: %w", err)
@@ -387,5 +387,5 @@ func (s *Service) playTTSBatchFromText(ctx context.Context, logger *slog.Logger,
 		return done, nil
 	}
 
-	return s.playTTS(ctx, logger, eventWriter, userID, msg, msgID, audio, timings, state, userSettings)
+	return s.playTTS(ctx, logger, eventWriter, audioWriter, msg, msgID, audio, timings, state, userSettings)
 }

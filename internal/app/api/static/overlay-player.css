@@ -1,0 +1,103 @@
+/* Shared overlay-v2 caption visuals: glass card + karaoke word states.
+   Layout/positioning belongs to the page (obs-overlay.css, try page). */
+
+@font-face {
+    font-family: "Overlay Sans";
+    src: url("/static/fonts/noto-sans-latin-500.woff2") format("woff2");
+    font-weight: 500;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+
+@font-face {
+    font-family: "Overlay Sans";
+    src: url("/static/fonts/noto-sans-cyrillic-500.woff2") format("woff2");
+    font-weight: 500;
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+    font-family: "Overlay Sans";
+    src: url("/static/fonts/noto-sans-latin-700.woff2") format("woff2");
+    font-weight: 700;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122;
+}
+
+@font-face {
+    font-family: "Overlay Sans";
+    src: url("/static/fonts/noto-sans-cyrillic-700.woff2") format("woff2");
+    font-weight: 700;
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+.op-card {
+    --op-accent: #A970FF;
+    max-width: 100%;
+    padding: 0.45em 0.85em;
+    background: rgba(13, 17, 28, 0.55);
+    border: 1px solid rgba(169, 112, 255, 0.28);
+    border-radius: 16px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+    color: #fff;
+    font-family: "Overlay Sans", "Noto Sans", sans-serif;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+    transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.op-card.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+/* window: at most ~3 lines visible, older lines slide up out of view */
+.op-window {
+    max-height: calc(3 * 1.35em);
+    overflow: hidden;
+    font-weight: 700;
+    line-height: 1.35;
+    text-align: center;
+}
+
+.op-text {
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+}
+
+.op-text .w {
+    display: inline-block;
+    white-space: pre-wrap;
+    opacity: 0.4;
+    transform-origin: 50% 80%;
+    animation: opWordIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: opacity 0.15s ease-out, color 0.12s ease-out, transform 0.12s ease-out;
+}
+
+.op-text .w.active {
+    opacity: 1;
+    color: var(--op-accent);
+    transform: scale(1.12);
+    text-shadow: 0 0 18px rgba(169, 112, 255, 0.65), 0 0 40px rgba(145, 70, 255, 0.35);
+}
+
+.op-text .w.spoken {
+    opacity: 0.85;
+    color: #fff;
+    transform: scale(1);
+}
+
+@keyframes opWordIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.8) translateY(0.35em);
+    }
+    60% {
+        transform: scale(1.06) translateY(-0.03em);
+    }
+    100% {
+        opacity: 0.4;
+        transform: scale(1) translateY(0);
+    }
+}

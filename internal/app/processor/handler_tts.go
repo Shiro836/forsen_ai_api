@@ -58,7 +58,7 @@ func (h *TTSHandler) Handle(ctx context.Context, input InteractionInput, eventWr
 		return nil
 	}
 
-	requestTtsDone, err := h.service.playTTSStreaming(ctx, logger, eventWriter, input.Broadcaster.ID, filteredRequest, msgID, input.Character.Data.VoiceReference, input.State, input.UserSettings)
+	requestTtsDone, err := h.service.playTTSStreaming(ctx, logger, eventWriter, input.AudioWriter, filteredRequest, msgID, input.Character.Data.VoiceReference, input.State, input.UserSettings)
 	if err != nil {
 		return err
 	}

@@ -232,6 +232,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 			UserSettings: userSettings,
 			MsgID:        msg.ID.String(),
 			State:        state,
+			AudioWriter:  p.overlayAudioWriter(broadcaster.ID),
 		}
 		if err := p.chatTTSHandler.Handle(ctx, input, eventWriter); err != nil {
 			recordHandlerError(ctx, "chat_tts")
@@ -283,6 +284,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		UserSettings: userSettings,
 		MsgID:        msg.ID.String(),
 		State:        state,
+		AudioWriter:  p.overlayAudioWriter(broadcaster.ID),
 	}
 
 	switch rewardType {
@@ -312,6 +314,14 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 	}
 
 	return nil
+}
+
+// overlayAudioWriter routes a message's audio frames to the broadcaster's
+// overlay audio topic.
+func (p *Processor) overlayAudioWriter(userID uuid.UUID) conns.AudioWriter {
+	return func(frame []byte) bool {
+		return p.connManager.TryWriteAudio(userID, frame)
+	}
 }
 
 func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, cancel context.CancelFunc) {
