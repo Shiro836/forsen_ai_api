@@ -24,9 +24,9 @@ body {
     top: 3vh;
     left: 50%;
     transform: translateX(-50%);
-    /* scales with both axes: ~51px at 1080p, ~24px at the OBS default 800x600,
-       clamped so tiny strips stay legible and 4K doesn't turn into a billboard */
-    font-size: clamp(15px, calc(1.9vh + 1.6vw), 88px);
+    /* floor matches the old fixed 28pt so no source gets smaller text than
+       before overlay-v2; above ~720p it scales up with the window */
+    font-size: clamp(36px, calc(2vh + 1.5vw), 84px);
     width: min(86vw, 30em);
     display: flex;
     justify-content: center;
