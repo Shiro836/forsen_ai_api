@@ -24,9 +24,9 @@ body {
     top: 3vh;
     left: 50%;
     transform: translateX(-50%);
-    /* scales with both axes: ~40px at 1080p, ~19px at the OBS default 800x600,
+    /* scales with both axes: ~51px at 1080p, ~24px at the OBS default 800x600,
        clamped so tiny strips stay legible and 4K doesn't turn into a billboard */
-    font-size: clamp(13px, calc(1.5vh + 1.3vw), 72px);
+    font-size: clamp(15px, calc(1.9vh + 1.6vw), 88px);
     width: min(86vw, 30em);
     display: flex;
     justify-content: center;
