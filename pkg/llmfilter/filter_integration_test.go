@@ -160,7 +160,7 @@ func TestSpansIntegration(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
-			spans, err := newFilter().Spans(ctx, tc.input)
+			spans, err := newFilter().Spans(ctx, tc.input, "")
 			if err != nil {
 				t.Fatalf("Spans: %v", err)
 			}
@@ -254,7 +254,7 @@ func TestReplySpansIntegration(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
-			spans, err := newFilter().ReplySpans(ctx, tc.prompt, tc.reply)
+			spans, err := newFilter().ReplySpans(ctx, tc.prompt, tc.reply, "")
 			if err != nil {
 				t.Fatalf("ReplySpans: %v", err)
 			}

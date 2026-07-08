@@ -125,7 +125,7 @@ async function pageReady() {
     // voice pulse: character breathes with the output level
     let pulse = 1;
     (function pulseLoop() {
-        const target = 1 + Math.min(player.level() * 0.1, 0.025);
+        const target = 1 + Math.min(player.level() * 0.2, 0.05);
         pulse += (target - pulse) * 0.3;
         charAnchor.style.setProperty('--pulse', pulse.toFixed(4));
         requestAnimationFrame(pulseLoop);

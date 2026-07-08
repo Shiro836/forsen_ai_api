@@ -11,6 +11,7 @@ import (
 
 type filters struct {
 	Filters                   string
+	CustomFilterPrompt        string
 	TtsLimit                  int
 	MaxSfxCount               int
 	SfxTotalLimit             int
@@ -55,6 +56,7 @@ func (api *API) filters(r *http.Request) template.HTML {
 
 	return getHtml("filters.html", &filters{
 		Filters:                   settings.Filters,
+		CustomFilterPrompt:        settings.CustomFilterPrompt,
 		TtsLimit:                  ttsLimit,
 		MaxSfxCount:               maxSfxCount,
 		SfxTotalLimit:             sfxTotalLimit,
@@ -112,6 +114,7 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	settings.Filters = normalizeFilters(r.Form.Get("filters"))
+	settings.CustomFilterPrompt = strings.TrimSpace(r.Form.Get("custom_filter_prompt"))
 	settings.IngestAllMessages = r.Form.Get("ingest_all_messages") == "on"
 	settings.DisableAudioNormalization = r.Form.Get("disable_audio_normalization") == "on"
 	settings.DisableLLMFilter = r.Form.Get("disable_llm_filter") == "on"

@@ -23,7 +23,7 @@ func (s *Service) filterSpans(ctx context.Context, userSettings *db.UserSettings
 	if skipLLM {
 		return textfilter.Merge(s.regexSpans(userSettings, text)), nil
 	}
-	llmSpans, err := s.llmFilter.Spans(ctx, text)
+	llmSpans, err := s.llmFilter.Spans(ctx, text, userSettings.CustomFilterPrompt)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +36,7 @@ func (s *Service) filterReplySpans(ctx context.Context, userSettings *db.UserSet
 	if skipLLM {
 		return textfilter.Merge(s.regexSpans(userSettings, reply)), nil
 	}
-	llmSpans, err := s.llmFilter.ReplySpans(ctx, prompt, reply)
+	llmSpans, err := s.llmFilter.ReplySpans(ctx, prompt, reply, userSettings.CustomFilterPrompt)
 	if err != nil {
 		return nil, err
 	}

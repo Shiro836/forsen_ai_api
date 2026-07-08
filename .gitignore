@@ -20,3 +20,5 @@ pkg/ffmpeg/tmp/*
 pkg/whisperx/refs/*
 
 services/
+
+adr/

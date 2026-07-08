@@ -27,7 +27,7 @@
         "uid": "Prometheus"
       },
       "id": 1,
-      "title": "Flow Rate",
+      "title": "Flow Rate (per hour)",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -42,7 +42,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(processor_tts_request_seconds_count[$__rate_interval])",
+          "expr": "increase(processor_tts_request_seconds_count[1h])",
           "legendFormat": "TTS",
           "range": true,
           "refId": "A"
@@ -53,7 +53,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(processor_chat_tts_request_seconds_count[$__rate_interval])",
+          "expr": "increase(processor_chat_tts_request_seconds_count[1h])",
           "legendFormat": "Chat TTS",
           "range": true,
           "refId": "B"
@@ -64,7 +64,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(processor_ai_request_seconds_count[$__rate_interval])",
+          "expr": "increase(processor_ai_request_seconds_count[1h])",
           "legendFormat": "AI",
           "range": true,
           "refId": "C"
@@ -75,7 +75,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(processor_agentic_request_seconds_count[$__rate_interval])",
+          "expr": "increase(processor_agentic_request_seconds_count[1h])",
           "legendFormat": "Agentic",
           "range": true,
           "refId": "D"
@@ -86,7 +86,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(processor_universal_request_seconds_count[$__rate_interval])",
+          "expr": "increase(processor_universal_request_seconds_count[1h])",
           "legendFormat": "Universal",
           "range": true,
           "refId": "E"
@@ -140,7 +140,7 @@
             ]
           },
           "unitScale": true,
-          "unit": "reqps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -156,7 +156,7 @@
           "sort": "desc"
         }
       },
-      "description": "Messages processed per second, per reward flow (end-to-end handler)."
+      "description": "Messages processed per rolling hour, per reward flow (end-to-end handler)."
     },
     {
       "datasource": {
@@ -772,7 +772,7 @@
         "uid": "Prometheus"
       },
       "id": 7,
-      "title": "Go Memory (alloc)",
+      "title": "Go Memory (alloc) / Goroutines",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -788,9 +788,20 @@
           },
           "editorMode": "code",
           "expr": "go_memstats_alloc_bytes{job=\"forsen_ai_api\"}",
-          "legendFormat": "{{service}}",
+          "legendFormat": "{{service}} alloc",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "go_goroutines{job=\"forsen_ai_api\"}",
+          "legendFormat": "{{service}} goroutines",
+          "range": true,
+          "refId": "B"
         }
       ],
       "fieldConfig": {
@@ -843,7 +854,28 @@
           "unitScale": true,
           "unit": "bytes"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".* goroutines"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "goroutines"
+              },
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
@@ -864,7 +896,7 @@
         "uid": "Prometheus"
       },
       "id": 8,
-      "title": "Goroutines / WebSockets",
+      "title": "Overlay WebSockets",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -879,21 +911,10 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "go_goroutines{job=\"forsen_ai_api\"}",
-          "legendFormat": "{{service}} goroutines",
-          "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "Prometheus"
-          },
-          "editorMode": "code",
           "expr": "websockets_conns_total",
           "legendFormat": "overlay websockets",
           "range": true,
-          "refId": "B"
+          "refId": "A"
         }
       ],
       "fieldConfig": {
@@ -943,7 +964,9 @@
               }
             ]
           },
-          "unitScale": true
+          "unitScale": true,
+          "unit": "short",
+          "min": 0
         },
         "overrides": []
       },
@@ -1255,7 +1278,7 @@
             ]
           },
           "unitScale": true,
-          "unit": "reqps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -1478,7 +1501,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (streamer) (increase(processor_rewards_redeems_total[$__range]))",
+          "expr": "sort_desc(sum by (streamer) (increase(processor_rewards_redeems_total[$__range])))",
           "legendFormat": "{{streamer}}",
           "range": false,
           "refId": "A",

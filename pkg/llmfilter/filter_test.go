@@ -99,7 +99,7 @@ func TestSpans(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := &fakeClient{outputs: []string{tc.output}}
 
-			spans, err := New(c).Spans(context.Background(), tc.input)
+			spans, err := New(c).Spans(context.Background(), tc.input, "")
 			if err != nil {
 				t.Fatalf("Spans: %v", err)
 			}
@@ -118,11 +118,40 @@ func TestSpans(t *testing.T) {
 
 func TestSpansNoCallOnEmpty(t *testing.T) {
 	c := &fakeClient{outputs: []string{"x"}}
-	if _, err := New(c).Spans(context.Background(), "  \n\t "); err != nil {
+	if _, err := New(c).Spans(context.Background(), "  \n\t ", ""); err != nil {
 		t.Fatalf("Spans: %v", err)
 	}
 	if c.calls != 0 {
 		t.Fatalf("expected no LLM call, got %d", c.calls)
+	}
+}
+
+func TestCustomPromptReachesSystemMessage(t *testing.T) {
+	const custom = "filter everything related to making illegal items"
+	c := &fakeClient{outputs: []string{"hello world"}}
+
+	if _, err := New(c).Spans(context.Background(), "hello world", custom); err != nil {
+		t.Fatalf("Spans: %v", err)
+	}
+
+	system := c.lastMsg[0].Content[0].Text
+	if !strings.Contains(system, custom) {
+		t.Fatalf("system prompt does not contain the custom rules, got %q", system)
+	}
+	if !strings.HasPrefix(system, systemPrompt) {
+		t.Fatal("custom rules must be appended after the base prompt, not replace it")
+	}
+}
+
+func TestEmptyCustomPromptLeavesSystemMessageUnchanged(t *testing.T) {
+	c := &fakeClient{outputs: []string{"hello world"}}
+
+	if _, err := New(c).Spans(context.Background(), "hello world", "  \n "); err != nil {
+		t.Fatalf("Spans: %v", err)
+	}
+
+	if got := c.lastMsg[0].Content[0].Text; got != systemPrompt {
+		t.Fatalf("blank custom rules must leave the base prompt untouched, got %q", got)
 	}
 }
 
@@ -131,7 +160,7 @@ func TestReplySpansMapsToReplyAndSendsContext(t *testing.T) {
 	reply := "I hate them"
 	c := &fakeClient{outputs: []string{"I <f>hate</f> them"}}
 
-	spans, err := New(c).ReplySpans(context.Background(), prompt, reply)
+	spans, err := New(c).ReplySpans(context.Background(), prompt, reply, "")
 	if err != nil {
 		t.Fatalf("ReplySpans: %v", err)
 	}
@@ -153,7 +182,7 @@ func TestReplySpansVerbatimCheckIsReplyOnly(t *testing.T) {
 		"I <f>hate</f> them",
 	}}
 
-	spans, err := New(c).ReplySpans(context.Background(), "what about jews?", "I hate them")
+	spans, err := New(c).ReplySpans(context.Background(), "what about jews?", "I hate them", "")
 	if err != nil {
 		t.Fatalf("ReplySpans: %v", err)
 	}
@@ -172,7 +201,7 @@ func TestSpansRetriesOnDrift(t *testing.T) {
 		"I <f>hate</f> jews",
 	}}
 
-	spans, err := New(c).Spans(context.Background(), input)
+	spans, err := New(c).Spans(context.Background(), input, "")
 	if err != nil {
 		t.Fatalf("Spans: %v", err)
 	}
@@ -203,7 +232,7 @@ func TestSpansRetriesOnDrift(t *testing.T) {
 
 func TestSpansErrorsWhenNeverVerbatim(t *testing.T) {
 	c := &fakeClient{outputs: []string{"totally different text"}}
-	_, err := New(c).Spans(context.Background(), "I hate jews")
+	_, err := New(c).Spans(context.Background(), "I hate jews", "")
 	if err == nil {
 		t.Fatal("expected error when model never reproduces input")
 	}
@@ -214,7 +243,7 @@ func TestSpansErrorsWhenNeverVerbatim(t *testing.T) {
 
 func TestSpansPropagatesClientError(t *testing.T) {
 	c := &fakeClient{err: errors.New("boom")}
-	if _, err := New(c).Spans(context.Background(), "x"); err == nil {
+	if _, err := New(c).Spans(context.Background(), "x", ""); err == nil {
 		t.Fatal("expected client error to propagate")
 	}
 }

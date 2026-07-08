@@ -7,7 +7,13 @@
                     {{ template "help-tip" "These words will be filtered in TTS and text output.\nSeparate them using commas.\nCommon slurs are already filtered." }}
                 </div>
                 <textarea type="text" rows="2" id="filters" name="filters" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="kurwa,matka,pierdole" autocomplete="off">{{ .Filters }}</textarea>
-                
+
+                <div class="flex items-center pb-2 pt-12">
+                    <label for="custom_filter_prompt">Custom AI Filter Rules</label>
+                    {{ template "help-tip" "Extra instructions for the AI content filter, in plain language.\nExample: filter everything related to making illegal items.\nApplies to AI requests and replies, on top of the built-in filter.\nLeave empty to use only the built-in filter." }}
+                </div>
+                <textarea rows="3" id="custom_filter_prompt" name="custom_filter_prompt" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="filter everything related to making illegal items" autocomplete="off">{{ .CustomFilterPrompt }}</textarea>
+
                 <div class="flex items-center pb-2 pt-12">
                     <label>API Token</label>
                 </div>

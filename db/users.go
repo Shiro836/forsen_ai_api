@@ -187,6 +187,8 @@ type UserSettings struct {
 	DisableLLMFilter bool `json:"disable_llm_filter,omitempty"` // When true, skip the LLM-based content filter
 
 	DisableRegexFilter bool `json:"disable_regex_filter,omitempty"` // When true, skip the regex/word-list content filter
+
+	CustomFilterPrompt string `json:"custom_filter_prompt,omitempty"` // Streamer-written instructions appended to the LLM filter system prompt
 }
 
 func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {

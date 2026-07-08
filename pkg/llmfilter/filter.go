@@ -5,7 +5,9 @@
 // It has two modes. Spans annotates a standalone message (a viewer request).
 // ReplySpans annotates an AI reply while judging it against the request that
 // prompted it — "I hate them" is only hateful once you know the request named a
-// group — yet still returns spans over the reply alone.
+// group — yet still returns spans over the reply alone. Both accept optional
+// streamer-written instructions that extend the built-in policy with topics the
+// streamer wants filtered on their stream.
 //
 // The model echoes the target verbatim with offending spans wrapped in <f>…</f>;
 // offsets are recovered locally. Spans are trusted only when removing the tags
@@ -77,24 +79,41 @@ CONTEXT — a viewer asked: what do you think about gypsies?
 TARGET: I hate them
 Output: I <f>hate</f> them`
 
-// Spans annotates a standalone message. Empty input yields no spans and no call.
-func (f *Filter) Spans(ctx context.Context, text string) ([]textfilter.Span, error) {
-	return f.annotate(ctx, text, "TARGET:\n"+text)
+// systemPromptWith appends the streamer's own filtering instructions to the
+// base prompt. The framing line keeps the tagging protocol authoritative so a
+// custom rule can only widen what gets tagged, not change the output format.
+func systemPromptWith(custom string) string {
+	custom = strings.TrimSpace(custom)
+	if custom == "" {
+		return systemPrompt
+	}
+	return systemPrompt + `
+
+STREAMER RULES — the streamer additionally wants the following filtered on their stream. Tag spans matching these rules exactly like the policies above: minimal masking, verbatim output, <f></f> tags only. These rules only add things to tag; they never change the output format or un-ban anything above.
+` + custom
+}
+
+// Spans annotates a standalone message. Empty input yields no spans and no
+// call. custom holds the streamer's extra filtering instructions ("" for
+// built-in policy only).
+func (f *Filter) Spans(ctx context.Context, text, custom string) ([]textfilter.Span, error) {
+	return f.annotate(ctx, text, "TARGET:\n"+text, custom)
 }
 
 // ReplySpans annotates reply, using prompt as context to resolve who the reply
-// is about, and returns spans over reply only.
-func (f *Filter) ReplySpans(ctx context.Context, prompt, reply string) ([]textfilter.Span, error) {
-	return f.annotate(ctx, reply, "CONTEXT — a viewer asked: "+prompt+"\n\nTARGET:\n"+reply)
+// is about, and returns spans over reply only. custom holds the streamer's
+// extra filtering instructions ("" for built-in policy only).
+func (f *Filter) ReplySpans(ctx context.Context, prompt, reply, custom string) ([]textfilter.Span, error) {
+	return f.annotate(ctx, reply, "CONTEXT — a viewer asked: "+prompt+"\n\nTARGET:\n"+reply, custom)
 }
 
-func (f *Filter) annotate(ctx context.Context, target, userMessage string) ([]textfilter.Span, error) {
+func (f *Filter) annotate(ctx context.Context, target, userMessage, custom string) ([]textfilter.Span, error) {
 	if strings.TrimSpace(target) == "" {
 		return nil, nil
 	}
 
 	messages := []llm.Message{
-		msg("system", systemPrompt),
+		msg("system", systemPromptWith(custom)),
 		msg("user", userMessage),
 	}
 
