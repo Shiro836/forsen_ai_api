@@ -62,12 +62,63 @@ func stripForTTS(msg string) string {
 }
 
 func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
-	ttsResult, ttsSegments, err := s.ttsEngine.TTS(ctx, stripForTTS(msg), refAudio)
+	text := stripForTTS(msg)
+
+	ttsResult, ttsSegments, err := s.ttsEngine.TTS(ctx, text, refAudio)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// align against what the engine actually spoke: the emotion marker is
+	// consumed inside the engine and absent from the audio
+	alignText, _ := ai.ExtractEmotions(text)
+
+	if wordTimings, err := s.alignWordTimings(ctx, alignText, ttsResult); err != nil {
+		s.logger.Warn("word alignment unavailable, keeping engine timings", "err", err)
+	} else {
+		ttsSegments = wordTimings
+	}
+
 	return ttsResult, ttsSegments, nil
+}
+
+// alignWordTimings upgrades the engine's sentence-level timings to word-level
+// through the external alignment service. The aligner is optional
+// infrastructure: on any failure callers keep the engine timings and the
+// overlay degrades to sentence-sized reveals, so this must never fail a
+// message — only return an error for the caller to log.
+func (s *Service) alignWordTimings(ctx context.Context, text string, wavAudio []byte) ([]whisperx.Timiing, error) {
+	if s.whisper == nil {
+		return nil, fmt.Errorf("aligner not configured")
+	}
+
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return nil, fmt.Errorf("no words to align")
+	}
+
+	audioLen, err := s.getAudioLength(ctx, wavAudio)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get audio length: %w", err)
+	}
+
+	// alignment sits on the play path; a stalled aligner must not hold back
+	// audio when the sentence-timing fallback is one Warn away
+	alignCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	timings, err := s.whisper.Align(alignCtx, text, wavAudio, audioLen)
+	if err != nil {
+		return nil, fmt.Errorf("failed to align: %w", err)
+	}
+
+	// the service contract is one timing per whitespace-split word, in order;
+	// anything else would desync the prefix mapping in timingTextPrefixes
+	if len(timings) != len(words) {
+		return nil, fmt.Errorf("aligner returned %d timings for %d words", len(timings), len(words))
+	}
+
+	return timings, nil
 }
 
 func (s *Service) ChatTTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {
@@ -210,6 +261,15 @@ func timingTextPrefixes(msg string, timings []whisperx.Timiing) []string {
 				target = pos
 			}
 			for target < len(msgRunes) && msgRunes[target] != ' ' {
+				target++
+			}
+			// include the boundary space: the cached overlay typewriter renders
+			// only the first token of a prefix diff synchronously and re-paces
+			// the rest at 200ms/word (cancelled by the next event). A diff that
+			// starts with a space burns the synchronous slot on it, and with
+			// word-level timings the next event lands within 200ms — the actual
+			// word would be dropped from the screen permanently.
+			for target < len(msgRunes) && msgRunes[target] == ' ' {
 				target++
 			}
 			pos = target
