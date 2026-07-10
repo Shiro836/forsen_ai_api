@@ -10,7 +10,7 @@ BAJ AI: Twitch viewers redeem channel-point rewards; their messages are queued, 
 
 - **Build (production binaries):** `scripts/build_prod.sh` — builds `prod` (main server), `twitch-ingest`, and `clanker` at the repo root. Always use this script for deployable binaries, not raw `go build`. `go build ./...` is fine as a typecheck.
 - **Test:** `go test ./...`. Single test: `go test ./internal/app/processor/ -run TestName`. Some tests self-skip when `ffmpeg`/`ffprobe` aren't in PATH.
-- **Integration tests** are behind the `integration` build tag and hit live local services (e.g. the LLM on `:3334`): `go test -tags integration ./pkg/llm/ -run Live -v`. Don't run them casually; they need the model servers up.
+- **Integration tests** are behind the `integration` build tag and hit live local services (e.g. the LLM on `:3334`): `go test -tags integration ./pkg/llm/ -run Live -v`. Don't run them casually; they need the model servers up. Any new test that talks to a live service gets the tag — `go test ./...` must pass on a machine with nothing running.
 - **Config:** `cfg/cfg.yaml` (binaries take `-cfg-path`). Monitoring stack (prometheus/loki/grafana) runs via `docker-compose.yml`.
 - **DB migrations:** numbered SQL files in `db/migrations/`; schema changes get a new file, never edits to applied ones. `scripts/backup_db.sh` dumps postgres using the conn string from cfg.
 
@@ -42,10 +42,16 @@ Subscriber channels are **drop-on-full by design** — never assume guaranteed d
 - OBS browser sources cache static JS aggressively; changes to `internal/app/api/static/*.js` need a browser-source cache refresh to take effect.
 - Don't estimate VRAM or model sizes — measure on the actual machine.
 
+## How to work
+
+- **Validate before you code.** Everything runs on this machine — the services, their logs (`journalctl`), the DB, the model servers. When behavior is in question, probe the live service or read the logs instead of assuming; design from measured facts. (Example: "does the engine's segment text match the input?" is one curl away — don't guess and code defensively around it.)
+- **Fallbacks only when absolutely necessary.** A fallback that silently degrades output hides bugs; prefer failing loudly with a logged error. Add one only when the degraded result is genuinely better than no result (e.g. karaoke interpolation when the aligner is down), it must always log, and never plant one to paper over a case you didn't understand. When unsure whether to fail or degrade, ask.
+- **Decisions with tradeoffs get a decision tree.** When several approaches exist, lay out the options with concrete pros/cons (measured, not imagined). If one dominates, take it and say why; if it's a real tradeoff — especially anything touching audio quality or on-stream visuals — present the tree and let the user pick. Never silently change what the TTS sounds like or how the overlay looks to win latency or simplicity.
+
 ## Code style
 
-- **Comments: only non-obvious WHY** — a constraint, a gotcha, why a value was chosen. Never restate what the code says, never narrate the current task or bugfix ("fixes the re-type bug") — comments must make sense to a cold reader years later; task context belongs in the commit message. No commented-out code; git remembers.
-- Exported identifiers and packages get real doc comments in the existing style — `pkg/audiotree` and `pkg/llmfilter` are the exemplars.
+- **Comments: only non-obvious WHY** — a constraint, a gotcha, why a value was chosen. Never restate what the code says, never narrate the current task or bugfix ("fixes the re-type bug") — comments must make sense to a cold reader years later; task context belongs in the commit message. If it's easy to read from the code, don't comment it. No commented-out code; git remembers.
+- Exported identifiers and packages get real doc comments in the existing style, but short — 2-3 lines stating the contract, not an essay on mechanics the code already shows. `pkg/audiotree` and `pkg/llmfilter` are the exemplars.
 - Errors: wrap with `fmt.Errorf("context: %w", err)`. The processor loop logs and continues on per-message failures; don't let one bad message kill a streamer's processor.
 - Logging: `slog` with structured attrs; derive contextual loggers via `logger.With("user", ...)` / `WithGroup`.
 - Frontend JS is dependency-free vanilla; keep it that way. Websocket payloads are JSON with base64 `data`; new event fields must stay backward-compatible with cached overlay JS (parse defensively, default to old behavior).

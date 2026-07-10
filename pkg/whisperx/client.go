@@ -64,15 +64,25 @@ type alignResponse struct {
 }
 
 func (c *Client) Align(ctx context.Context, text string, audio []byte, audioLen time.Duration) ([]Timiing, error) {
+	return c.AlignSegments(ctx, []Timiing{{Text: text, Start: 0, End: audioLen}}, audio)
+}
+
+// AlignSegments aligns each segment's text against its own [Start, End] slice
+// of the audio. The service caps audio length per slice, not per file, so
+// pre-segmented long audio aligns where a whole-file request would be rejected.
+func (c *Client) AlignSegments(ctx context.Context, segments []Timiing, audio []byte) ([]Timiing, error) {
+	transcripts := make([]transcript, 0, len(segments))
+	for _, seg := range segments {
+		transcripts = append(transcripts, transcript{
+			Text:  seg.Text,
+			Start: seg.Start.Seconds(),
+			End:   seg.End.Seconds(),
+		})
+	}
+
 	reqBody, err := json.Marshal(alignRequest{
-		Audio: audio,
-		Transcript: []transcript{
-			{
-				Text:  text,
-				Start: 0,
-				End:   audioLen.Seconds(),
-			},
-		},
+		Audio:      audio,
+		Transcript: transcripts,
 	})
 	if err != nil {
 		return nil, err

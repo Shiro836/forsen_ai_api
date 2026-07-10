@@ -10,7 +10,6 @@ import (
 	"app/internal/app/conns"
 	"app/pkg/agentic"
 	"app/pkg/llm"
-	"app/pkg/whisperx"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -116,89 +115,78 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 	firstMsg := stripLeadingSpeakerPrefix(firstCard.Name, firstResponse)
 	appendHistoryTurn(&history, firstCard.Name, firstMsg)
 
-	currentTurn, err := h.buildAgenticTurn(ctx, firstSpeakerID, firstCard, input.UserSettings, firstMsg)
-	if err != nil {
-		logger.Error("failed to prepare initial agentic turn", "err", err)
-		return fmt.Errorf("failed to prepare initial agentic turn: %w", err)
-	}
+	curText := h.service.FilterText(ctx, input.UserSettings, firstMsg)
+	curCard := firstCard
+	var prevDone <-chan struct{}
 
-	for turn := 0; turn < MaxAgenticTurns && currentTurn != nil; turn++ {
+	for turn := 0; turn < MaxAgenticTurns; turn++ {
 		if input.State.IsSkipped(msgUUID) {
 			return nil
 		}
 
-		eventWriter(&conns.DataEvent{
-			EventType: conns.EventTypeImage,
-			EventData: []byte(fmt.Sprintf("/characters/%s/image", currentTurn.card.ID)),
-		})
+		var gate chan struct{}
+		if prevDone == nil {
+			eventWriter(characterImageEvent(curCard.ID))
+		} else {
+			// the portrait must not switch while the previous turn still plays
+			gate = make(chan struct{})
+			go func(prev <-chan struct{}, cardID uuid.UUID) {
+				defer close(gate)
+				select {
+				case <-prev:
+					eventWriter(characterImageEvent(cardID))
+				case <-ctx.Done():
+				}
+			}(prevDone, curCard.ID)
+		}
 
-		done, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, currentTurn.text, msgUUID, currentTurn.audio, currentTurn.timings, input.State, input.UserSettings)
+		done, err := h.service.playTTSStreaming(ctx, logger, eventWriter, input.AudioWriter, curText, msgUUID, curCard.Data.VoiceReference, input.State, input.UserSettings, gate)
 		if err != nil {
 			logger.Error("failed to play TTS", "err", err)
-			break
-		}
-
-		var nextTurn *agenticTurn
-
-		if turn+1 < MaxAgenticTurns {
-			nextTurn, err = h.prepareNextAgenticTurn(ctx, input.Message, &history, charNames, charCards, nameToID, input.UserSettings)
-			if err != nil {
-				logger.Error("failed to prepare next agentic turn", "err", err)
+			if prevDone != nil {
 				select {
-				case <-done:
+				case <-prevDone:
 				case <-ctx.Done():
-					return nil
 				}
-				break
 			}
-		}
-
-		select {
-		case <-done:
-		case <-ctx.Done():
 			return nil
 		}
 
-		if nextTurn == nil {
-			break
+		// next turn's LLM call and gated synthesis run while this turn plays
+		curText, curCard = "", nil
+		if turn+1 < MaxAgenticTurns {
+			nextText, nextCard, err := h.prepareNextAgenticTurnText(ctx, input.Message, &history, charNames, charCards, nameToID, input.UserSettings)
+			if err != nil {
+				logger.Error("failed to prepare next agentic turn", "err", err)
+			} else {
+				curText, curCard = nextText, nextCard
+			}
 		}
 
-		currentTurn = nextTurn
+		if curCard == nil {
+			select {
+			case <-done:
+			case <-ctx.Done():
+			}
+			return nil
+		}
+
+		prevDone = done
 	}
 
 	return nil
 }
 
-type agenticTurn struct {
-	speakerID uuid.UUID
-	card      *db.Card
-	text      string
-	audio     []byte
-	timings   []whisperx.Timiing
+func characterImageEvent(cardID uuid.UUID) *conns.DataEvent {
+	return &conns.DataEvent{
+		EventType: conns.EventTypeImage,
+		EventData: []byte(fmt.Sprintf("/characters/%s/image", cardID)),
+	}
 }
 
-func (h *AgenticHandler) buildAgenticTurn(ctx context.Context, speakerID uuid.UUID, card *db.Card, userSettings *db.UserSettings, text string) (*agenticTurn, error) {
-	if card == nil {
-		return nil, fmt.Errorf("nil character card for speaker %s", speakerID)
-	}
-
-	filteredText := h.service.FilterText(ctx, userSettings, text)
-
-	audio, timings, err := h.service.TTSWithTimings(ctx, filteredText, card.Data.VoiceReference)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate TTS for %s: %w", card.Name, err)
-	}
-
-	return &agenticTurn{
-		speakerID: speakerID,
-		card:      card,
-		text:      filteredText,
-		audio:     audio,
-		timings:   timings,
-	}, nil
-}
-
-func (h *AgenticHandler) prepareNextAgenticTurn(
+// prepareNextAgenticTurnText picks the next speaker and generates their
+// filtered line; ("", nil, nil) means the planner ended the dialogue.
+func (h *AgenticHandler) prepareNextAgenticTurnText(
 	ctx context.Context,
 	scenario string,
 	history *[]llm.Message,
@@ -206,40 +194,35 @@ func (h *AgenticHandler) prepareNextAgenticTurn(
 	charCards map[uuid.UUID]*db.Card,
 	nameToID map[string]uuid.UUID,
 	userSettings *db.UserSettings,
-) (*agenticTurn, error) {
+) (string, *db.Card, error) {
 	nextSpeakerName, err := h.planner.SelectNextSpeaker(ctx, scenario, *history, charNames)
 	if err != nil {
-		return nil, fmt.Errorf("failed to select next speaker: %w", err)
+		return "", nil, fmt.Errorf("failed to select next speaker: %w", err)
 	}
 
 	if nextSpeakerName == "END" {
-		return nil, nil
+		return "", nil, nil
 	}
 
 	nextSpeakerID, ok := nameToID[strings.ToLower(nextSpeakerName)]
 	if !ok {
-		return nil, fmt.Errorf("planner returned unknown next speaker: %s", nextSpeakerName)
+		return "", nil, fmt.Errorf("planner returned unknown next speaker: %s", nextSpeakerName)
 	}
 
 	nextCard, ok := charCards[nextSpeakerID]
 	if !ok {
-		return nil, fmt.Errorf("character card not found for speaker %s", nextSpeakerName)
+		return "", nil, fmt.Errorf("character card not found for speaker %s", nextSpeakerName)
 	}
 
 	response, err := h.llmModel.DialogueReply(ctx, nextCard, scenario, collectHistoryTurns(*history)...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate response: %w", err)
+		return "", nil, fmt.Errorf("failed to generate response: %w", err)
 	}
 
 	cleanResponse := stripLeadingSpeakerPrefix(nextCard.Name, response)
 	appendHistoryTurn(history, nextCard.Name, cleanResponse)
 
-	turn, err := h.buildAgenticTurn(ctx, nextSpeakerID, nextCard, userSettings, cleanResponse)
-	if err != nil {
-		return nil, err
-	}
-
-	return turn, nil
+	return h.service.FilterText(ctx, userSettings, cleanResponse), nextCard, nil
 }
 
 func appendHistoryTurn(history *[]llm.Message, speakerName, text string) {

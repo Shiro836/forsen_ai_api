@@ -1,3 +1,5 @@
+//go:build integration
+
 package ai_test
 
 import (
@@ -5,17 +7,16 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
-
-	_ "embed"
 
 	"github.com/stretchr/testify/require"
 )
 
-//go:embed refs/okayeg_ref.wav
-var audioRef []byte
-
+// TestStyleTTS hits the running StyleTTS2 service on :4111:
+//
+//	go test -tags integration ./pkg/ai/ -run TestStyleTTS -v
 func TestStyleTTS(t *testing.T) {
 	assert := require.New(t)
 
@@ -23,12 +24,15 @@ func TestStyleTTS(t *testing.T) {
 		URL: "http://localhost:4111/tts",
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	res, _, err := client.TTS(ctx, "hello world", audioRef)
 	assert.NoError(err)
+	assert.NotEmpty(res)
 
-	err = os.WriteFile("res/res.wav", res, 0644)
-	assert.NoError(err)
+	// listenable output for manual checking
+	out := filepath.Join(t.TempDir(), "res.wav")
+	assert.NoError(os.WriteFile(out, res, 0o644))
+	t.Logf("wrote %s", out)
 }

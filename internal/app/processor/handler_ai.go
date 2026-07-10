@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -144,16 +143,11 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 	}
 	filteredRequestText := textfilter.Censor(requestText, requestSpans, "(filtered)")
 
-	requestAudio, textTimings, err := h.service.TTSWithTimings(ctx, filteredRequestText, input.Character.Data.VoiceReference)
-	if err != nil {
-		return err
-	}
-
 	if input.State.IsSkipped(msgID) {
 		return nil
 	}
 
-	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, filteredRequestText, msgID, requestAudio, textTimings, input.State, input.UserSettings)
+	requestTtsDone, err := h.service.playTTSStreaming(ctx, logger, eventWriter, input.AudioWriter, filteredRequestText, msgID, input.Character.Data.VoiceReference, input.State, input.UserSettings, nil)
 	if err != nil {
 		return err
 	}
@@ -195,28 +189,23 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 
 	filteredResponse := textfilter.Censor(llmResult, responseSpans, "(filtered)")
 
-	responseTtsAudio, textTimings, err := h.service.TTSWithTimings(ctx, filteredResponse, input.Character.Data.VoiceReference)
-	if err != nil {
-		return err
-	}
+	// response synthesis starts now, hidden under request playback; emission
+	// waits for the request track plus a one-second breather
+	responseGate := make(chan struct{})
+	go func() {
+		defer close(responseGate)
+		select {
+		case <-requestTtsDone:
+		case <-ctx.Done():
+			return
+		}
+		select {
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+		}
+	}()
 
-	select {
-	case <-requestTtsDone:
-	case <-ctx.Done():
-		return nil
-	}
-
-	select {
-	case <-time.After(time.Second):
-	case <-ctx.Done():
-		return nil
-	}
-
-	if input.State.IsSkipped(msgID) {
-		return nil
-	}
-
-	responseTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, filteredResponse, msgID, responseTtsAudio, textTimings, input.State, input.UserSettings)
+	responseTtsDone, err := h.service.playTTSStreaming(ctx, logger, eventWriter, input.AudioWriter, filteredResponse, msgID, input.Character.Data.VoiceReference, input.State, input.UserSettings, responseGate)
 	if err != nil {
 		return err
 	}
@@ -275,7 +264,7 @@ func attachImages(msg string, images []fetchedImage) (string, []llm.Attachment) 
 	attachments := make([]llm.Attachment, 0, len(images))
 	for _, img := range images {
 		if img.data == nil {
-			msg = strings.Replace(msg, "<img:"+img.id+">", "", 1)
+			msg = imagetag.ReplaceID(msg, img.id, "")
 			continue
 		}
 		attachments = append(attachments, llm.Attachment{Data: img.data, ContentType: "image/png"})
@@ -314,10 +303,10 @@ The description should read like a clever commentary, not like someone talking a
 
 	for i, img := range images {
 		if analyses[i] == "" {
-			msg = strings.Replace(msg, "<img:"+img.id+">", "", 1)
+			msg = imagetag.ReplaceID(msg, img.id, "")
 			continue
 		}
-		msg = strings.Replace(msg, "<img:"+img.id+">", "<image_"+img.id+":{"+analyses[i]+"}>", 1)
+		msg = imagetag.ReplaceID(msg, img.id, "<image_"+img.id+":{"+analyses[i]+"}>")
 	}
 	return msg
 }

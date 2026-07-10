@@ -12,8 +12,13 @@ import (
 	"testing"
 	"time"
 
+	_ "embed"
+
 	"github.com/stretchr/testify/require"
 )
+
+//go:embed refs/okayeg_ref.wav
+var audioRef []byte
 
 func TestIndexTTSClientSynthesizeSuccess(t *testing.T) {
 	t.Parallel()

@@ -73,7 +73,7 @@ func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byt
 	// consumed inside the engine and absent from the audio
 	alignText, _ := ai.ExtractEmotions(text)
 
-	if wordTimings, err := s.alignWordTimings(ctx, alignText, ttsResult); err != nil {
+	if wordTimings, err := s.alignWordTimings(ctx, alignText, ttsResult, ttsSegments); err != nil {
 		s.logger.Warn("word alignment unavailable, keeping engine timings", "err", err)
 	} else {
 		ttsSegments = wordTimings
@@ -87,7 +87,7 @@ func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byt
 // infrastructure: on any failure callers keep the engine timings and the
 // overlay degrades to sentence-sized reveals, so this must never fail a
 // message — only return an error for the caller to log.
-func (s *Service) alignWordTimings(ctx context.Context, text string, wavAudio []byte) ([]whisperx.Timiing, error) {
+func (s *Service) alignWordTimings(ctx context.Context, text string, wavAudio []byte, segments []whisperx.Timiing) ([]whisperx.Timiing, error) {
 	if s.whisper == nil {
 		return nil, fmt.Errorf("aligner not configured")
 	}
@@ -102,12 +102,19 @@ func (s *Service) alignWordTimings(ctx context.Context, text string, wavAudio []
 		return nil, fmt.Errorf("failed to get audio length: %w", err)
 	}
 
+	// the aligner caps audio length per transcript segment, so engine sentence
+	// segments let long audio align where one whole-file segment is rejected;
+	// they are only usable when their texts add up to the message word-for-word
+	if !segmentsCoverWords(segments, words) {
+		segments = []whisperx.Timiing{{Text: text, Start: 0, End: audioLen}}
+	}
+
 	// alignment sits on the play path; a stalled aligner must not hold back
 	// audio when the sentence-timing fallback is one Warn away
 	alignCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	timings, err := s.whisper.Align(alignCtx, text, wavAudio, audioLen)
+	timings, err := s.whisper.AlignSegments(alignCtx, segments, wavAudio)
 	if err != nil {
 		return nil, fmt.Errorf("failed to align: %w", err)
 	}
@@ -119,6 +126,24 @@ func (s *Service) alignWordTimings(ctx context.Context, text string, wavAudio []
 	}
 
 	return timings, nil
+}
+
+func segmentsCoverWords(segments []whisperx.Timiing, words []string) bool {
+	if len(segments) == 0 {
+		return false
+	}
+
+	i := 0
+	for _, seg := range segments {
+		for _, w := range strings.Fields(seg.Text) {
+			if i >= len(words) || words[i] != w {
+				return false
+			}
+			i++
+		}
+	}
+
+	return i == len(words)
 }
 
 func (s *Service) ChatTTSWithTimings(ctx context.Context, msg string, refAudio []byte) ([]byte, []whisperx.Timiing, error) {

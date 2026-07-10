@@ -1,3 +1,5 @@
+//go:build integration
+
 package whisperx_test
 
 import (
@@ -17,6 +19,9 @@ import (
 //go:embed refs/okayeg_ref.wav
 var audio []byte
 
+// TestAlign hits the running alignment-api on :8777:
+//
+//	go test -tags integration ./pkg/whisperx/ -run TestAlign -v
 func TestAlign(t *testing.T) {
 	assert := require.New(t)
 
