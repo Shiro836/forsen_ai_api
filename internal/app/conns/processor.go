@@ -28,6 +28,10 @@ type UpdateType int
 type Update struct {
 	UpdateType UpdateType
 	Data       string
+	// MsgID is the overlay's audibly playing message for the *Current
+	// actions; the processor's own notion of current can run ahead of
+	// playback, so the client's report wins when present.
+	MsgID string
 }
 
 type Processor interface {

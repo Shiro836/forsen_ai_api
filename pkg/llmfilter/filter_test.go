@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"app/pkg/llm"
@@ -11,22 +12,41 @@ import (
 )
 
 // fakeClient returns canned outputs in sequence, one per Ask call, recording the
-// messages it received.
+// messages it received. Safe for the concurrent two-pass path.
 type fakeClient struct {
 	outputs []string
 	err     error
+
+	mu      sync.Mutex
 	calls   int
 	lastMsg []llm.Message
+	systems []string
 }
 
 func (c *fakeClient) Ask(_ context.Context, messages []llm.Message, _ float64) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.lastMsg = messages
+	c.systems = append(c.systems, messages[0].Content[0].Text)
 	if c.err != nil {
 		return "", c.err
 	}
 	out := c.outputs[min(c.calls, len(c.outputs)-1)]
 	c.calls++
 	return out, nil
+}
+
+// promptFake answers by which pass is asking: one output for the built-in
+// policy prompt, another for the streamer-rules prompt.
+type promptFake struct {
+	base, streamer string
+}
+
+func (c *promptFake) Ask(_ context.Context, messages []llm.Message, _ float64) (string, error) {
+	if strings.Contains(messages[0].Content[0].Text, "STREAMER RULES") {
+		return c.streamer, nil
+	}
+	return c.base, nil
 }
 
 func slice(t *testing.T, text string, s textfilter.Span) string {
@@ -126,7 +146,7 @@ func TestSpansNoCallOnEmpty(t *testing.T) {
 	}
 }
 
-func TestCustomPromptReachesSystemMessage(t *testing.T) {
+func TestCustomPromptRunsDedicatedPass(t *testing.T) {
 	const custom = "filter everything related to making illegal items"
 	c := &fakeClient{outputs: []string{"hello world"}}
 
@@ -134,12 +154,39 @@ func TestCustomPromptReachesSystemMessage(t *testing.T) {
 		t.Fatalf("Spans: %v", err)
 	}
 
-	system := c.lastMsg[0].Content[0].Text
-	if !strings.Contains(system, custom) {
-		t.Fatalf("system prompt does not contain the custom rules, got %q", system)
+	if c.calls != 2 {
+		t.Fatalf("custom rules must add a second pass, got %d calls", c.calls)
 	}
-	if !strings.HasPrefix(system, systemPrompt) {
-		t.Fatal("custom rules must be appended after the base prompt, not replace it")
+	var sawBase, sawStreamer bool
+	for _, sys := range c.systems {
+		if sys == systemPrompt {
+			sawBase = true
+		}
+		if strings.Contains(sys, custom) && sys != systemPrompt {
+			sawStreamer = true
+		}
+	}
+	if !sawBase {
+		t.Fatal("built-in policy pass missing")
+	}
+	if !sawStreamer {
+		t.Fatal("streamer-rules pass missing or lacks the custom rules")
+	}
+}
+
+func TestCustomPassSpansMergeWithBase(t *testing.T) {
+	input := "I hate jews and pizza"
+	c := &promptFake{
+		base:     "I <f>hate</f> jews and pizza",
+		streamer: "I hate jews and <f>pizza</f>",
+	}
+
+	spans, err := New(c).Spans(context.Background(), input, "no food talk")
+	if err != nil {
+		t.Fatalf("Spans: %v", err)
+	}
+	if len(spans) != 2 || slice(t, input, spans[0]) != "hate" || slice(t, input, spans[1]) != "pizza" {
+		t.Fatalf("got spans %v, want [hate pizza]", spans)
 	}
 }
 
@@ -150,6 +197,9 @@ func TestEmptyCustomPromptLeavesSystemMessageUnchanged(t *testing.T) {
 		t.Fatalf("Spans: %v", err)
 	}
 
+	if c.calls != 1 {
+		t.Fatalf("blank custom rules must not add a pass, got %d calls", c.calls)
+	}
 	if got := c.lastMsg[0].Content[0].Text; got != systemPrompt {
 		t.Fatalf("blank custom rules must leave the base prompt untouched, got %q", got)
 	}

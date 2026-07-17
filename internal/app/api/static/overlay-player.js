@@ -63,6 +63,8 @@ window.OverlayPlayer = class OverlayPlayer {
         const header = JSON.parse(new TextDecoder('utf-8').decode(new Uint8Array(buf, 5, headerLen)));
 
         if (frameType === 2) { // track_done
+            // a done frame for a skipped message must not resurrect the track
+            if (this.pendingSkips.has(header.msg_id)) return true;
             // the bus does not guarantee cross-frame order: done can overtake
             // the first chunk, so it must create the track rather than drop
             const track = this._ensureTrack(header.track_id, header.msg_id);
@@ -188,6 +190,8 @@ window.OverlayPlayer = class OverlayPlayer {
                 totalDurMs: 0,
                 maxChunkEndMs: 0,
                 anchor: 0,
+                nextStartAt: 0,
+                decodeChain: Promise.resolve(),
             };
             this.tracks.set(trackId, t);
         }
@@ -200,21 +204,31 @@ window.OverlayPlayer = class OverlayPlayer {
 
     _scheduleChunk(track, chunk) {
         const gen = this.generation;
-        this.audioContext.decodeAudioData(chunk.mp3, (buffer) => {
-            if (gen !== this.generation) return;
-            if (this.pendingSkips.has(track.msgId)) return;
-            if (this.tracks.get(track.id) !== track) return;
+        // decodes are chained so chunks schedule in arrival order —
+        // decodeAudioData callbacks are not guaranteed to complete in order
+        track.decodeChain = track.decodeChain.then(() =>
+            this.audioContext.decodeAudioData(chunk.mp3).then((buffer) => {
+                if (gen !== this.generation) return;
+                if (this.pendingSkips.has(track.msgId)) return;
+                if (this.tracks.get(track.id) !== track) return;
 
-            const source = this.audioContext.createBufferSource();
-            source.buffer = buffer;
-            source.connect(this.masterGain);
+                const source = this.audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(this.masterGain);
 
-            const startAt = Math.max(this.audioContext.currentTime, track.anchor + chunk.offsetMs / 1000);
-            source.start(startAt);
-            track.sources.push(source);
-        }, (err) => {
-            console.error('chunk decode failed', err);
-        });
+                // a chunk that arrives or decodes late slips the whole track:
+                // re-anchor so later chunks and the karaoke clock follow,
+                // otherwise the next chunk lands under this one's tail
+                const scheduled = track.anchor + chunk.offsetMs / 1000;
+                const startAt = Math.max(scheduled, track.nextStartAt, this.audioContext.currentTime);
+                track.anchor += startAt - scheduled;
+                track.nextStartAt = startAt + chunk.durMs / 1000;
+                source.start(startAt);
+                track.sources.push(source);
+            }, (err) => {
+                console.error('chunk decode failed', err);
+            })
+        );
 
         track.maxChunkEndMs = Math.max(track.maxChunkEndMs, chunk.offsetMs + chunk.durMs);
 
@@ -260,6 +274,11 @@ window.OverlayPlayer = class OverlayPlayer {
         for (const w of track.words) {
             w.el.classList.remove('active');
             w.el.classList.add('spoken');
+        }
+        // the clock says the track is over; make sure no scheduled tail can
+        // bleed under the next track
+        for (const src of track.sources) {
+            try { src.stop(); } catch (e) { }
         }
         this.tracks.delete(track.id);
         if (this.activeTrackId === track.id) {

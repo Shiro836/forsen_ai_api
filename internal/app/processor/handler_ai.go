@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"app/db"
 	"app/internal/app/conns"
@@ -136,12 +137,21 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 	skipLLMFilter := input.SkipLLMFilterFully || skipLLMFilterPerUser
 
 	ttsUserMsg := imagetag.ReplaceImageTags(input.Message)
-	requestText := input.Requester + " asked me: " + ttsUserMsg
+	// Filter the raw message (not the image-tag-replaced one) so the spans line
+	// up with what the control panel displays; image tags survive censoring
+	// (disjoint spans) and are replaced afterward for speech.
+	requestPrefix := input.Requester + " asked me: "
+	requestText := requestPrefix + input.Message
 	requestSpans, err := h.service.filterSpans(ctx, input.UserSettings, requestText, skipLLMFilter)
 	if err != nil {
 		return fmt.Errorf("failed to filter request: %w", err)
 	}
-	filteredRequestText := textfilter.Censor(requestText, requestSpans, "(filtered)")
+	filteredRequestText := imagetag.ReplaceImageTags(textfilter.Censor(requestText, requestSpans, "(filtered)"))
+
+	if requestFiltered := spansAfterPrefix(requestSpans, utf8.RuneCountInString(requestPrefix)); len(requestFiltered) > 0 {
+		h.db.UpdateMessageData(ctx, msgID, &db.MessageData{RequestFiltered: requestFiltered})
+		h.service.connManager.NotifyControlPanel(input.Broadcaster.ID)
+	}
 
 	if input.State.IsSkipped(msgID) {
 		return nil

@@ -80,6 +80,7 @@ var overlayJSVersion = sync.OnceValue(func() string {
 type obsAction struct {
 	Action string `json:"action"`
 	Token  string `json:"token"`
+	MsgID  string `json:"msg_id"`
 }
 
 func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -174,9 +175,9 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 			switch upd.Action {
 			case "skip":
-				api.connManager.SkipCurrent(user.ID, upd.Token)
+				api.connManager.SkipCurrent(user.ID, upd.Token, upd.MsgID)
 			case "show_images":
-				api.connManager.ShowImagesCurrent(user.ID, upd.Token)
+				api.connManager.ShowImagesCurrent(user.ID, upd.Token, upd.MsgID)
 			default:
 				logger.Error("unknown action", "action", upd.Action)
 			}

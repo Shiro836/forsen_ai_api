@@ -3,10 +3,14 @@ package ffmpeg
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -176,6 +180,105 @@ func (c *Client) CutAudio(ctx context.Context, data []byte, maxDuration time.Dur
 	output, err := os.ReadFile(outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cut output file: %w", err)
+	}
+
+	return output, nil
+}
+
+// LoudnessStats are loudnorm's measured input values. Feeding them back as
+// the filter's measured_* parameters (linear mode) applies one consistent
+// gain, so many clips normalized against the same stats keep their relative
+// dynamics — unlike per-clip NormalizeAudio.
+type LoudnessStats struct {
+	I      string `json:"input_i"`
+	TP     string `json:"input_tp"`
+	LRA    string `json:"input_lra"`
+	Thresh string `json:"input_thresh"`
+}
+
+// MeasureLoudness runs loudnorm's analysis pass and returns the measured stats.
+func (c *Client) MeasureLoudness(ctx context.Context, data []byte) (*LoudnessStats, error) {
+	inputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
+	defer os.Remove(inputPath)
+
+	if err := os.WriteFile(inputPath, data, 0644); err != nil {
+		return nil, fmt.Errorf("write input file: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-i", inputPath,
+		"-nostats",
+		"-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+		"-f", "null", "-",
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to measure loudness: %w, stderr: %s", err, stderr.String())
+	}
+
+	// the JSON block is the tail of stderr, after the filter banner
+	out := stderr.String()
+	start := strings.LastIndex(out, "{")
+	end := strings.LastIndex(out, "}")
+	if start == -1 || end <= start {
+		return nil, fmt.Errorf("no loudnorm stats in ffmpeg output")
+	}
+
+	var stats LoudnessStats
+	if err := json.Unmarshal([]byte(out[start:end+1]), &stats); err != nil {
+		return nil, fmt.Errorf("failed to parse loudnorm stats: %w", err)
+	}
+
+	// silence measures as -inf and would make the normalizing encode fail
+	i, err := strconv.ParseFloat(stats.I, 64)
+	if err != nil || math.IsInf(i, 0) || math.IsNaN(i) {
+		return nil, fmt.Errorf("unmeasurable loudness: input_i=%q", stats.I)
+	}
+
+	return &stats, nil
+}
+
+// Ffmpeg2Mp3Normalized is Ffmpeg2Mp3 with a linear loudnorm pass driven by
+// pre-measured stats, for normalizing streamed chunks without per-chunk gain
+// jumps.
+func (c *Client) Ffmpeg2Mp3Normalized(ctx context.Context, data []byte, stats *LoudnessStats) ([]byte, error) {
+	inputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString())
+	outputPath := path.Join(c.cfg.TmpDir, prefix+uuid.NewString()+".mp3")
+
+	defer os.Remove(inputPath)
+	defer os.Remove(outputPath)
+
+	if err := os.WriteFile(inputPath, data, 0644); err != nil {
+		return nil, fmt.Errorf("write input file: %w", err)
+	}
+
+	loudnorm := fmt.Sprintf(
+		"loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=%s:measured_TP=%s:measured_LRA=%s:measured_thresh=%s:linear=true",
+		stats.I, stats.TP, stats.LRA, stats.Thresh,
+	)
+
+	cmd := exec.CommandContext(ctx, "ffmpeg",
+		"-i", inputPath,
+		"-nostats", "-loglevel", "0",
+		"-af", loudnorm+",alimiter=limit=0.9:attack=5:release=50",
+		"-ar", "44100", "-ac", "2", "-b:a", "192k", "-vn", "-f", "mp3",
+		"-y",
+		outputPath,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to encode normalized mp3: %w, stderr: %s", err, stderr.String())
+	}
+
+	output, err := os.ReadFile(outputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read output file: %w", err)
 	}
 
 	return output, nil

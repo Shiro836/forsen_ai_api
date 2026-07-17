@@ -3,6 +3,7 @@ package api
 import (
 	"app/db"
 	"app/pkg/ctxstore"
+	"app/pkg/imagetag"
 	immediateticker "app/pkg/immediate_ticker"
 	"app/pkg/textfilter"
 	"app/pkg/ws"
@@ -371,8 +372,16 @@ loop:
 					break loop
 				}
 
-				imageURLs := make([]string, 0, len(msgData.ImageIDs))
-				for _, iid := range msgData.ImageIDs {
+				// Fall back to the message text when ingest stored no IDs (e.g.
+				// a message queued before image-link support). Mirrors the
+				// processor's own fallback so the panel and overlay agree.
+				imageIDs := msgData.ImageIDs
+				if len(imageIDs) == 0 {
+					imageIDs = imagetag.ExtractIDs(dbMessage.TwitchMessage.Message, 2)
+				}
+
+				imageURLs := make([]string, 0, len(imageIDs))
+				for _, iid := range imageIDs {
 					imageURLs = append(imageURLs, fmt.Sprintf("/images/%s", iid))
 				}
 
@@ -389,7 +398,8 @@ loop:
 					Request:  dbMessage.TwitchMessage.Message,
 					Response: msgData.AIResponse,
 
-					FilteredText: msgData.FilteredText,
+					FilteredText:    msgData.FilteredText,
+					RequestFiltered: msgData.RequestFiltered,
 
 					Status: dbMessage.Status.String(),
 
@@ -451,8 +461,10 @@ type msgUpsert struct {
 	Request  string `json:"request"`
 	Response string `json:"response"`
 
-	// FilteredText marks the ranges of Response the panel should highlight.
-	FilteredText []textfilter.Span `json:"filtered_text,omitempty"`
+	// FilteredText marks the ranges of Response the panel should highlight;
+	// RequestFiltered does the same for Request.
+	FilteredText    []textfilter.Span `json:"filtered_text,omitempty"`
+	RequestFiltered []textfilter.Span `json:"request_filtered,omitempty"`
 
 	Status string `json:"status"`
 

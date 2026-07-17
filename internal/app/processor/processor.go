@@ -411,7 +411,15 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 					continue
 				}
 
-				targetUUID := state.GetCurrent()
+				// the overlay reports what it is audibly playing; playback can
+				// lag the processor's current message, so that report wins
+				targetUUID := uuid.Nil
+				if id, err := uuid.Parse(upd.MsgID); err == nil {
+					targetUUID = id
+				}
+				if targetUUID == uuid.Nil {
+					targetUUID = state.GetCurrent()
+				}
 				if targetUUID == uuid.Nil {
 					continue
 				}

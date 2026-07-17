@@ -266,7 +266,7 @@
                             row.insertCell(-1).textContent = data['requested_by'];
                             row.insertCell(-1).textContent = data['type'];
                             row.insertCell(-1).textContent = data['char_name'];
-                            row.insertCell(-1).appendChild(textDiv(data['request']));
+                            row.insertCell(-1).appendChild(textDiv(data['request'], data['request_filtered']));
                             row.insertCell(-1).appendChild(textDiv(data['response'], data['filtered_text']));
                             row.insertCell(-1).textContent = data['status'];
                             row.insertCell(-1).innerHTML = '<div class="flex flex-col space-y-1">' +
@@ -289,7 +289,7 @@
                             row.cells[0].textContent = data['requested_by'];
                             row.cells[1].textContent = data['type'];
                             row.cells[2].textContent = data['char_name'];
-                            row.cells[3].replaceChildren(textDiv(data['request']));
+                            row.cells[3].replaceChildren(textDiv(data['request'], data['request_filtered']));
                             row.cells[4].replaceChildren(textDiv(data['response'], data['filtered_text']));
                             row.cells[5].textContent = data['status'];
                             row.cells[6].innerHTML = '<div class="flex flex-col space-y-1">' +

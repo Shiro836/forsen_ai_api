@@ -244,11 +244,14 @@ async function pageReady() {
 
         controlWs.onopen = () => {
             console.log('control socket open');
+            // msg_id pins the action to what is audibly playing: the server's
+            // notion of "current" can already be the next message while the
+            // overlay still speaks this one
             skipHandler = () => {
-                controlWs.send(JSON.stringify({ action: 'skip', token: token }));
+                controlWs.send(JSON.stringify({ action: 'skip', token: token, msg_id: player.activeMsgId() || '' }));
             };
             showImagesHandler = () => {
-                controlWs.send(JSON.stringify({ action: 'show_images', token: token }));
+                controlWs.send(JSON.stringify({ action: 'show_images', token: token, msg_id: player.activeMsgId() || '' }));
             };
         };
         controlWs.onmessage = (event) => {

@@ -4,6 +4,7 @@ import (
 	"app/pkg/ffmpeg"
 	"context"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -384,4 +385,35 @@ func TestCutAudioVeryShort(t *testing.T) {
 	// Save the result for inspection
 	err = os.WriteFile("tmp/cut_audio_short.mp3", cutAudio, 0644)
 	assert.NoError(err)
+}
+
+func TestMeasureLoudnessAndNormalize(t *testing.T) {
+	if _, err := os.Stat("okayeg_ref.wav"); os.IsNotExist(err) {
+		t.Skip("reference audio file not found")
+	}
+
+	assert := require.New(t)
+	client := ffmpeg.New(&ffmpeg.Config{
+		TmpDir: "/tmp",
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	wav, err := os.ReadFile("okayeg_ref.wav")
+	assert.NoError(err)
+
+	stats, err := client.MeasureLoudness(ctx, wav)
+	assert.NoError(err)
+
+	mp3, err := client.Ffmpeg2Mp3Normalized(ctx, wav, stats)
+	assert.NoError(err)
+	assert.NotEmpty(mp3)
+
+	after, err := client.MeasureLoudness(ctx, mp3)
+	assert.NoError(err)
+
+	i, err := strconv.ParseFloat(after.I, 64)
+	assert.NoError(err)
+	assert.InDelta(-16, i, 2)
 }

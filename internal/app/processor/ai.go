@@ -43,6 +43,21 @@ func (s *Service) filterReplySpans(ctx context.Context, userSettings *db.UserSet
 	return textfilter.Merge(s.regexSpans(userSettings, reply), llmSpans), nil
 }
 
+// spansAfterPrefix re-bases spans over (prefix+body) onto body alone: it drops
+// the first prefixLen runes, discarding spans wholly inside the prefix and
+// clipping any that straddle the boundary. Input order/disjointness is
+// preserved, so the result stays valid for Censor and the panel.
+func spansAfterPrefix(spans []textfilter.Span, prefixLen int) []textfilter.Span {
+	var out []textfilter.Span
+	for _, s := range spans {
+		if s.End <= prefixLen {
+			continue
+		}
+		out = append(out, textfilter.Span{Start: max(s.Start-prefixLen, 0), End: s.End - prefixLen})
+	}
+	return out
+}
+
 // regexSpans returns the ranges matched by the built-in and per-user filter
 // patterns, as rune offsets over text.
 func (s *Service) regexSpans(userSettings *db.UserSettings, text string) []textfilter.Span {

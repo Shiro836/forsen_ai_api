@@ -283,3 +283,109 @@ func TestReplySpansIntegration(t *testing.T) {
 		})
 	}
 }
+
+// TestStreamerRulesIntegration covers the streamer-rules pass: custom rules
+// must win over the built-in policy's allowances (profanity, innuendo, neutral
+// mentions) and must mask the operative details of banned instructions, not
+// just their name.
+func TestStreamerRulesIntegration(t *testing.T) {
+	tests := []struct {
+		name    string
+		custom  string
+		input   string
+		flagged []string
+		clean   []string
+	}{
+		{
+			name:    "benign topic ban",
+			custom:  "Do not allow any mentions of pepperoni.",
+			input:   "I love pepperoni pizza so much",
+			flagged: []string{"pepperoni"},
+			clean:   []string{"pizza"},
+		},
+		{
+			name:    "profanity ban beats the built-in allowance",
+			custom:  "Filter strong profanity like the f-word.",
+			input:   "this game is fucking awesome dude",
+			flagged: []string{"fucking"},
+			clean:   []string{"awesome"},
+		},
+		{
+			name:    "innuendo ban beats the built-in allowance",
+			custom:  "No sexual jokes or innuendo of any kind.",
+			input:   "I'd smash that hot elf girl from the game",
+			flagged: []string{"smash"},
+		},
+		{
+			name:    "loosely phrased topic ban",
+			custom:  "no politics pls",
+			input:   "biden vs trump who wins in chess",
+			flagged: []string{"biden", "trump"},
+			clean:   []string{"chess"},
+		},
+		{
+			name:    "banned instructions mask the steps, not just the name",
+			custom:  "Do not allow making or explaining how to make illegal items.",
+			input:   "to cook blue sky you need pseudoephedrine and red phosphorus, crush them and heat it all on a camp stove",
+			flagged: []string{"pseudoephedrine", "red phosphorus", "heat"},
+		},
+		{
+			name:   "rules do not fire on unrelated text",
+			custom: "Do not allow any mentions of pepperoni.",
+			input:  "what a lovely day to play chess",
+			clean:  []string{"lovely", "chess"},
+		},
+		{
+			// the rules are the pass's only policy: profanity a rule doesn't
+			// mention must survive, even under a censor-flavored rule.
+			name:   "profanity is not covered by an unrelated rule",
+			custom: "Filter anything that is related to illegal items, such as bomb or chemical making tutorials.",
+			input:  "this fucking game is broken bullshit and the devs are clowns",
+			clean:  []string{"fucking", "bullshit", "clowns"},
+		},
+		{
+			name:    "profanity survives next to a banned topic",
+			custom:  "no politics pls",
+			input:   "goddamn the president is on every fucking channel again",
+			flagged: []string{"president"},
+			clean:   []string{"goddamn", "fucking"},
+		},
+		{
+			name:   "same word in an unrelated sense stays clean",
+			custom: "no politics pls",
+			input:  "the boss fight election in this game is rigged lol",
+			clean:  []string{"election"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+			defer cancel()
+
+			spans, err := newFilter().Spans(ctx, tc.input, tc.custom)
+			if err != nil {
+				t.Fatalf("Spans: %v", err)
+			}
+
+			r := []rune(tc.input)
+			for _, s := range spans {
+				if s.Start < 0 || s.End > len(r) || s.Start >= s.End {
+					t.Fatalf("span %v out of bounds for input len %d", s, len(r))
+				}
+				t.Logf("flagged: %q", string(r[s.Start:s.End]))
+			}
+
+			for _, sub := range tc.flagged {
+				if !flaggedAt(t, tc.input, spans, sub) {
+					t.Errorf("expected %q to be flagged, spans=%v", sub, spans)
+				}
+			}
+			for _, sub := range tc.clean {
+				if flaggedAt(t, tc.input, spans, sub) {
+					t.Errorf("expected %q NOT to be flagged, spans=%v", sub, spans)
+				}
+			}
+		})
+	}
+}

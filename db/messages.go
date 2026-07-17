@@ -199,7 +199,8 @@ func (db *DB) UpdateMessageStatus(ctx context.Context, msgID uuid.UUID, status M
 type MessageData struct {
 	AIResponse string `json:"ai_response,omitzero"`
 
-	FilteredText []textfilter.Span `json:"filtered_text,omitempty"`
+	FilteredText    []textfilter.Span `json:"filtered_text,omitempty"`
+	RequestFiltered []textfilter.Span `json:"request_filtered,omitempty"`
 
 	ShowImages *bool    `json:"show_images,omitempty"`
 	ImageIDs   []string `json:"image_ids,omitempty"`

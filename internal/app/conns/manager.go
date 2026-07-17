@@ -343,12 +343,12 @@ func (m *Manager) CleanOverlay(userID uuid.UUID) {
 	m.publishControl(userID, &Update{UpdateType: CleanOverlay})
 }
 
-func (m *Manager) SkipCurrent(userID uuid.UUID, token string) {
-	m.publishControl(userID, &Update{UpdateType: SkipCurrent, Data: token})
+func (m *Manager) SkipCurrent(userID uuid.UUID, token, msgID string) {
+	m.publishControl(userID, &Update{UpdateType: SkipCurrent, Data: token, MsgID: msgID})
 }
 
-func (m *Manager) ShowImagesCurrent(userID uuid.UUID, token string) {
-	m.publishControl(userID, &Update{UpdateType: ShowImagesCurrent, Data: token})
+func (m *Manager) ShowImagesCurrent(userID uuid.UUID, token, msgID string) {
+	m.publishControl(userID, &Update{UpdateType: ShowImagesCurrent, Data: token, MsgID: msgID})
 }
 
 func (m *Manager) DisableUser(userID uuid.UUID) {

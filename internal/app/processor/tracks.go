@@ -12,6 +12,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/ai"
+	"app/pkg/ffmpeg"
 	"app/pkg/whisperx"
 
 	"github.com/google/uuid"
@@ -281,8 +282,21 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 				playStart = time.Now()
 				emitted = true
 			}
+			// mirror the overlay scheduler: a chunk emitted past its timeline
+			// position slips the whole track, so the wall-clock end (which
+			// gates "current message" and the next track) must slip with it
+			scheduled := playStart.Add(time.Duration(c.header.OffsetMs) * time.Millisecond)
+			if now := time.Now(); now.After(scheduled) {
+				playStart = playStart.Add(now.Sub(scheduled))
+			}
 			audioWriter(chunkFrame(c.header, c.mp3))
 		}
+
+		// loudness is measured once on the first chunk and reused for the whole
+		// track: every chunk gets the same linear gain, matching the batch
+		// path's -16 LUFS without flattening dynamics between sentences
+		var loudness *ffmpeg.LoudnessStats
+		loudnessMeasured := false
 
 		// returns false when the track must stop consuming (error or TTS limit)
 		process := func(chunk ai.StreamChunk) bool {
@@ -296,7 +310,23 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 				}
 			}
 
-			mp3, err := s.ffmpeg.Ffmpeg2Mp3(ctx, chunk.Audio, userSettings.DisableAudioNormalization)
+			if !userSettings.DisableAudioNormalization && !loudnessMeasured {
+				loudnessMeasured = true
+				stats, err := s.ffmpeg.MeasureLoudness(ctx, chunk.Audio)
+				if err != nil {
+					logger.Warn("loudness measurement failed, encoding without normalization", "err", err)
+				} else {
+					loudness = stats
+				}
+			}
+
+			var mp3 []byte
+			var err error
+			if loudness != nil {
+				mp3, err = s.ffmpeg.Ffmpeg2Mp3Normalized(ctx, chunk.Audio, loudness)
+			} else {
+				mp3, err = s.ffmpeg.Ffmpeg2Mp3(ctx, chunk.Audio, userSettings.DisableAudioNormalization)
+			}
 			if err != nil {
 				logger.Error("failed to encode chunk, ending track early", "err", err)
 				return false
