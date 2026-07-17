@@ -83,6 +83,10 @@ async function pageReady() {
 
     let showImages = false;
     let currentImageURLs = [];
+    // msg_id set mirroring pendingSkips: show/hide clicks can land while the
+    // message isn't audibly playing yet, so intent is remembered and applied
+    // when its track activates (reset clears, snapshot restores)
+    const shownImages = new Set();
 
     function setCharImage(url) {
         showImages = false;
@@ -122,6 +126,16 @@ async function pageReady() {
         renderPromptImages();
     }
 
+    // a track activating is the sync point where remembered intent wins over
+    // whatever the earlier prompt_image baseline said
+    player.onTrackActivated = (msgId) => {
+        const shouldShow = shownImages.has(msgId);
+        if (shouldShow !== showImages) {
+            showImages = shouldShow;
+            renderPromptImages();
+        }
+    };
+
     // voice pulse: character breathes with the output level. The peak is
     // clamped against the caption card's bottom edge (its height varies with
     // line count), so the head never breathes into the text box.
@@ -156,6 +170,7 @@ async function pageReady() {
                 try {
                     const snap = JSON.parse(dataStr);
                     player.addPendingSkips(snap.skipped);
+                    for (const id of snap.shown_images || []) shownImages.add(id);
                 } catch (e) { }
                 break;
             }
@@ -188,6 +203,10 @@ async function pageReady() {
                     const payload = JSON.parse(dataStr);
                     currentImageURLs = Array.isArray(payload.image_ids) ? payload.image_ids.map(id => `/images/${id}`) : [];
                     showImages = !!payload.show_images;
+                    if (payload.msg_id) {
+                        if (showImages) shownImages.add(payload.msg_id);
+                        else shownImages.delete(payload.msg_id);
+                    }
                     renderPromptImages();
                 } catch (e) {
                     console.error('failed to parse prompt_image payload', e);
@@ -195,12 +214,14 @@ async function pageReady() {
                 break;
             }
             case 'show_images':
+                shownImages.add(dataStr);
                 if (player.activeMsgId() === dataStr) {
                     showImages = true;
                     renderPromptImages();
                 }
                 break;
             case 'hide_images':
+                shownImages.delete(dataStr);
                 if (player.activeMsgId() === dataStr) {
                     showImages = false;
                     renderPromptImages();
@@ -219,6 +240,7 @@ async function pageReady() {
         resetting = true;
 
         player.reset();
+        shownImages.clear();
         clearStage();
 
         skipHandler = null;

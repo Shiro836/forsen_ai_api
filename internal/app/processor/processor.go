@@ -58,12 +58,16 @@ type ProcessorState struct {
 
 	currentMsgID     uuid.UUID
 	currentMsgIDLock sync.Mutex
+
+	shownImages     map[uuid.UUID]struct{}
+	shownImagesLock sync.Mutex
 }
 
 func NewProcessorState() *ProcessorState {
 	return &ProcessorState{
 		skippedMsgIDs: make(map[uuid.UUID]struct{}),
 		currentMsgID:  uuid.Nil,
+		shownImages:   make(map[uuid.UUID]struct{}),
 	}
 }
 
@@ -86,6 +90,31 @@ func (s *ProcessorState) SkippedList() []string {
 	defer s.skippedMsgIDsLock.Unlock()
 	ids := make([]string, 0, len(s.skippedMsgIDs))
 	for id := range s.skippedMsgIDs {
+		ids = append(ids, id.String())
+	}
+	return ids
+}
+
+// SetImageShown records a mod's show/hide-images decision so a reconnecting
+// overlay can be resynced; the DB flag alone only reaches the overlay once,
+// at handler start.
+func (s *ProcessorState) SetImageShown(id uuid.UUID, shown bool) {
+	s.shownImagesLock.Lock()
+	defer s.shownImagesLock.Unlock()
+	if shown {
+		s.shownImages[id] = struct{}{}
+	} else {
+		delete(s.shownImages, id)
+	}
+}
+
+// ShownImages snapshots the messages whose images are shown, for a freshly
+// connected overlay.
+func (s *ProcessorState) ShownImages() []string {
+	s.shownImagesLock.Lock()
+	defer s.shownImagesLock.Unlock()
+	ids := make([]string, 0, len(s.shownImages))
+	for id := range s.shownImages {
 		ids = append(ids, id.String())
 	}
 	return ids
@@ -339,6 +368,7 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 	}
 
 	updateImageState := func(msgID uuid.UUID, show bool) {
+		state.SetImageShown(msgID, show)
 		eventType := conns.EventTypeShowImages
 		if !show {
 			eventType = conns.EventTypeHideImages
@@ -347,7 +377,9 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 			EventType: eventType,
 			EventData: []byte(msgID.String()),
 		})
-		p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: &show})
+		if err := p.db.UpdateMessageData(ctx, msgID, &db.MessageData{ShowImages: &show}); err != nil {
+			logger.Error("error updating message image state", "err", err)
+		}
 		p.connManager.NotifyControlPanel(broadcaster.ID)
 	}
 

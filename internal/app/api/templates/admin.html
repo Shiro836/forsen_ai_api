@@ -74,6 +74,19 @@
     </div>
     <div class="flex pt-8">
         <div class="flex flex-col pl-4">
+            <div class="pb-1 font-medium">Overlays</div>
+            <div class="border py-3 px-3 {{template "ui-border-clr"}}">
+                <div class="flex flex-col w-72">
+                    <button class="{{template "button-2"}} py-2 px-4" hx-post="/admin/reload_overlays"
+                        hx-confirm="Reload overlays for ALL streamers?"
+                        hx-target="#reload_overlays_result">Reload All Overlays</button>
+                </div>
+            </div>
+            <div class="pt-4" id="reload_overlays_result"></div>
+        </div>
+    </div>
+    <div class="flex pt-8">
+        <div class="flex flex-col pl-4">
             <div class="pb-1 font-medium">Current Moderators</div>
             <div class="border py-3 px-3 {{template "ui-border-clr"}}">
                 <div class="flex flex-col">

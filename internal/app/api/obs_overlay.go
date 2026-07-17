@@ -145,11 +145,12 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 	// first frame: resync a (re)connecting overlay — restores pending_skips
 	// before any late chunk of a skipped message can play (see overlay-v2 ADR,
 	// skip-vs-reconnect race)
-	skipped, current := api.connManager.OverlaySnapshot(user.ID)
+	skipped, current, shownImages := api.connManager.OverlaySnapshot(user.ID)
 	snapshot, _ := json.Marshal(struct {
 		Skipped      []string `json:"skipped"`
 		CurrentMsgID string   `json:"current_msg_id"`
-	}{Skipped: skipped, CurrentMsgID: current})
+		ShownImages  []string `json:"shown_images,omitempty"`
+	}{Skipped: skipped, CurrentMsgID: current, ShownImages: shownImages})
 	if err := sendData(wsClient, conns.EventTypeSnapshot.String(), snapshot); err != nil {
 		logger.Error("failed to send snapshot", "err", err)
 	}

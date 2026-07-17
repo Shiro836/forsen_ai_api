@@ -217,6 +217,8 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Post("/admin/add_relation", http.HandlerFunc(api.manageRelation(permissionActionAdd, db.RelationTypeModerating)))
 			router.Post("/admin/remove_relation", http.HandlerFunc(api.manageRelation(permissionActionRemove, db.RelationTypeModerating)))
 
+			router.Post("/admin/reload_overlays", http.HandlerFunc(api.reloadAllOverlays))
+
 			router.Post("/characters/{character_id}/admin/update_short_char_name", http.HandlerFunc(api.updateShortCharName))
 		})
 

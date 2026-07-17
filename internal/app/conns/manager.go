@@ -38,10 +38,12 @@ type Manager struct {
 }
 
 // OverlayState is the processor-owned state a reconnecting overlay needs to
-// resynchronize: which messages are skipped and which one is playing.
+// resynchronize: which messages are skipped, which one is playing, and the
+// mods' show/hide-images decisions.
 type OverlayState interface {
 	SkippedList() []string
 	CurrentID() string
+	ShownImages() []string
 }
 
 func NewConnectionManager(ctx context.Context, logger *slog.Logger, processor Processor) *Manager {
@@ -65,6 +67,7 @@ func SetProcessor(m *Manager, processor Processor) {
 }
 
 type PromptImages struct {
+	MsgID      string   `json:"msg_id,omitempty"`
 	ImageIDs   []string `json:"image_ids"`
 	ShowImages *bool    `json:"show_images,omitempty"`
 }
@@ -302,16 +305,16 @@ func (m *Manager) UnregisterOverlayState(userID uuid.UUID) {
 	delete(m.overlayStates, userID)
 }
 
-// OverlaySnapshot returns the skip set and current message for a fresh overlay
-// connection; empty snapshot when no processor is running.
-func (m *Manager) OverlaySnapshot(userID uuid.UUID) (skipped []string, current string) {
+// OverlaySnapshot returns the skip set, current message and shown-images set
+// for a fresh overlay connection; empty snapshot when no processor is running.
+func (m *Manager) OverlaySnapshot(userID uuid.UUID) (skipped []string, current string, shownImages []string) {
 	m.overlayStatesLock.RLock()
 	st := m.overlayStates[userID]
 	m.overlayStatesLock.RUnlock()
 	if st == nil {
-		return nil, ""
+		return nil, "", nil
 	}
-	return st.SkippedList(), st.CurrentID()
+	return st.SkippedList(), st.CurrentID(), st.ShownImages()
 }
 
 // ReloadOverlay tells every connected overlay of the user to location.reload()

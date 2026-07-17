@@ -11,6 +11,7 @@ window.OverlayPlayer = class OverlayPlayer {
         this.windowEl = opts.windowEl;
         this.textEl = opts.textEl;
         this.onTrackFinished = opts.onTrackFinished || null;
+        this.onTrackActivated = opts.onTrackActivated || null;
 
         this.masterGain = this.audioContext.createGain();
         this.analyser = this.audioContext.createAnalyser();
@@ -259,6 +260,7 @@ window.OverlayPlayer = class OverlayPlayer {
             this._scheduleChunk(track, chunk);
         }
         track.chunks = [];
+        if (this.onTrackActivated) this.onTrackActivated(track.msgId);
     }
 
     _tryActivate() {

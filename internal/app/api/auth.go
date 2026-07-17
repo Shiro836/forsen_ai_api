@@ -215,6 +215,22 @@ func (api *API) admin(r *http.Request) template.HTML {
 	})
 }
 
+func (api *API) reloadAllOverlays(w http.ResponseWriter, r *http.Request) {
+	streamers, err := api.db.GetUsersPermissions(r.Context(), db.PermissionStreamer, db.PermissionStatusGranted)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("failed to get streamers: " + err.Error()))
+
+		return
+	}
+
+	for _, user := range streamers {
+		api.connManager.ReloadOverlay(user.ID)
+	}
+
+	_, _ = fmt.Fprintf(w, "reload sent to %d overlays", len(streamers))
+}
+
 func (api *API) mod(r *http.Request) template.HTML {
 	requestUsers, err := api.db.GetUsersPermissions(r.Context(), db.PermissionStreamer, db.PermissionStatusWaiting)
 	if err != nil {

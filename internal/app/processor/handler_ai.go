@@ -80,6 +80,10 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 		}
 	}
 
+	// the snapshot must reflect the DB flag for an overlay that (re)connects
+	// mid-message; clicks made while the message was queued only live in the DB
+	input.State.SetImageShown(msgID, showImages)
+
 	if len(imageIDs) == 0 {
 		if ids := imagetag.ExtractIDs(updatedMessage, 0); len(ids) > 0 {
 			imageIDs = ids
@@ -123,6 +127,7 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 	}
 
 	imageIDsBytes, err := json.Marshal(&conns.PromptImages{
+		MsgID:      input.MsgID,
 		ImageIDs:   imageIDs,
 		ShowImages: &showImages,
 	})
