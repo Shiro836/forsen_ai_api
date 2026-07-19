@@ -1,6 +1,7 @@
 cfg/cfg.yaml
 cfg/docker_cfg.yaml
 cfg/prod_cfg.yaml
+cfg/minio_prometheus_token
 
 /clanker
 /prod

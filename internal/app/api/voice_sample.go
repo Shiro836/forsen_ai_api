@@ -209,7 +209,6 @@ func (api *API) voiceSample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "audio/wav")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write(audio)
 }
 
@@ -230,7 +229,6 @@ func (api *API) emotionSample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "audio/wav")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write(audio)
 }
 
@@ -244,7 +242,6 @@ func (api *API) oldSample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "audio/wav")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write(audio)
 }
 
@@ -265,6 +262,5 @@ func (api *API) filterSample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "audio/wav")
-	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write(audio)
 }

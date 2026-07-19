@@ -103,19 +103,38 @@ async function pageReady() {
 
     function renderPromptImages() {
         imagesContainer.innerHTML = '';
+        imagesContainer.classList.remove('two-col');
         if (!showImages || currentImageURLs.length === 0) {
             imagesContainer.style.display = 'none';
             return;
         }
+        const twoCol = currentImageURLs.length >= 3;
+        imagesContainer.classList.toggle('two-col', twoCol);
+        const slots = [];
         for (const raw of currentImageURLs) {
             const slot = document.createElement('div');
             slot.className = 'img_slot';
             const img = document.createElement('img');
-            img.src = raw.startsWith('http') ? raw : (window.location.origin + raw);
             slot.appendChild(img);
             imagesContainer.appendChild(slot);
+            slots.push({ slot, img, raw });
         }
-        imagesContainer.style.display = 'flex';
+        if (twoCol && currentImageURLs.length % 2 === 1) {
+            slots[slots.length - 1].slot.classList.add('span-2');
+        }
+        imagesContainer.style.display = 'grid';
+        // src is set after layout so each slot's real on-screen box can pick
+        // the fetch size — stored images can be 4K, the box rarely is
+        const dpr = window.devicePixelRatio || 1;
+        for (const { slot, img, raw } of slots) {
+            let src = raw.startsWith('http') ? raw : (window.location.origin + raw);
+            if (!raw.startsWith('http')) {
+                const rect = slot.getBoundingClientRect();
+                const need = Math.ceil(Math.max(rect.width, rect.height) * dpr);
+                if (need >= 64) src += (src.includes('?') ? '&' : '?') + 'w=' + need;
+            }
+            img.src = src;
+        }
     }
 
     function clearStage() {

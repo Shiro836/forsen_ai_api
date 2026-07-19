@@ -24,9 +24,9 @@ body {
     top: 3vh;
     left: 50%;
     transform: translateX(-50%);
-    /* floor matches the old fixed 28pt so no source gets smaller text than
-       before overlay-v2; above ~720p it scales up with the window */
-    font-size: clamp(36px, calc(2vh + 1.5vw), 84px);
+    /* 36px at the 800x600 default = 6% of height; pinned to that proportion
+       so the caption looks identical on stream at every source resolution */
+    font-size: 6vh;
     width: min(86vw, 30em);
     display: flex;
     justify-content: center;
@@ -72,28 +72,44 @@ body {
     transform: scale(1) translateY(0);
 }
 
-/* --- prompt images: reserved right column --- */
+/* --- prompt images: reserved right zone ---
+   width stops 4vw short of the character's max extent (2vw + 42vw); rows
+   split the height evenly, .two-col (3+ images) adds a second column and
+   .span-2 lets an odd last image take a full row */
 
 #images_container {
     position: absolute;
     right: 2vw;
     bottom: 4vh;
-    top: 22vh;
-    width: 34vw;
+    /* clears the caption's worst case: 3vh zone top + card (2×0.45em padding
+       + 3×1.35em lines + 2px borders, see overlay-player.css) + 1.5vh gap;
+       em is the 6vh caption font from #caption_zone */
+    top: calc(4.5vh + 4.95 * 6vh + 2px);
+    width: 50vw;
     display: none;
-    flex-direction: column;
-    gap: 10px;
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    justify-items: center;
+}
+
+#images_container.two-col {
+    grid-template-columns: 1fr 1fr;
+}
+
+#images_container .img_slot {
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
     align-items: center;
     justify-content: center;
 }
 
-#images_container .img_slot {
-    flex: 1 1 0;
-    min-height: 0;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+#images_container .img_slot.span-2 {
+    grid-column: span 2;
 }
 
 #images_container .img_slot img {

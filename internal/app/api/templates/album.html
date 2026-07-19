@@ -1,0 +1,121 @@
+<div>
+  <div class="text-xl font-medium">
+    Paste images one by one (Ctrl+V) or select files — they all go into one shareable link.
+  </div>
+  <div class="flex flex-col justify-start pt-6 pl-6">
+    <div class="flex flex-col flex-grow justify-start w-[25rem]">
+      <div class="flex items-center pb-2">
+        <label for="album_files">Add images</label>
+      </div>
+      <div class="text-sm text-gray-500 dark:text-gray-400 pb-2">Tip: keep pasting with Ctrl+V — the link grows with every image. Ctrl+C copies it.</div>
+      <input id="album_files" type="file" accept="image/*" multiple class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer" />
+      <div id="album_status" class="text-sm text-gray-500 dark:text-gray-400 pt-2"></div>
+      <div id="album_link_box" class="hidden pt-4">
+        <div class="flex gap-2 flex-wrap font-bold">
+          <a id="album_open" class='{{template "button-2"}} py-2 px-4' href="#" target="_blank">Open album</a>
+          <button type="button" id="album_copy" data-copy-link class='{{template "button-2"}} py-2 px-4'>Copy link</button>
+        </div>
+      </div>
+      <div id="album_thumbs" class="grid grid-cols-4 gap-2 pt-4"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const ids = [];
+  const fileInput = document.getElementById('album_files');
+  const statusEl = document.getElementById('album_status');
+  const linkBox = document.getElementById('album_link_box');
+  const openLink = document.getElementById('album_open');
+  const copyBtn = document.getElementById('album_copy');
+  const thumbsEl = document.getElementById('album_thumbs');
+
+  function albumPath() {
+    return '/a/' + ids.join('');
+  }
+
+  function refresh() {
+    if (!ids.length) return;
+    linkBox.classList.remove('hidden');
+    openLink.href = albumPath();
+    statusEl.textContent = ids.length + (ids.length === 1 ? ' image' : ' images') + ' in album';
+  }
+
+  // Uploads run through a chain so images land in the album in paste order.
+  let queue = Promise.resolve();
+  function enqueue(file) {
+    queue = queue.then(() => uploadOne(file)).catch(() => {});
+  }
+
+  async function uploadOne(file) {
+    statusEl.textContent = 'Uploading…';
+    const formData = new FormData();
+    formData.append('file', file, file.name || 'pasted.png');
+    let data = null;
+    try {
+      const resp = await fetch('/album/images', { method: 'POST', body: formData, credentials: 'same-origin' });
+      data = await resp.json();
+      if (!resp.ok || !data.id) throw new Error(data && data.error ? data.error : 'upload failed');
+    } catch (err) {
+      statusEl.textContent = 'Upload failed: ' + (err && err.message ? err.message : 'unknown error');
+      return;
+    }
+    ids.push(data.id);
+    const img = document.createElement('img');
+    img.src = '/images/' + data.id;
+    img.className = 'w-full h-24 object-cover rounded border border-gray-300 dark:border-gray-600';
+    thumbsEl.appendChild(img);
+    refresh();
+  }
+
+  fileInput.addEventListener('change', function() {
+    for (const file of fileInput.files) {
+      if (file.type && file.type.startsWith('image/')) enqueue(file);
+    }
+    fileInput.value = '';
+  });
+
+  copyBtn.addEventListener('click', function() {
+    navigator.clipboard.writeText(window.location.host + albumPath());
+    copyBtn.textContent = 'Copied!';
+    setTimeout(() => { copyBtn.textContent = 'Copy link'; }, 1200);
+  });
+
+  document.addEventListener('copy', function(e) {
+    const active = document.activeElement;
+    const isTypingTarget = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+    if (isTypingTarget) return;
+
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) return;
+
+    if (!ids.length) return;
+
+    e.preventDefault();
+    copyBtn.click();
+  });
+
+  document.addEventListener('paste', function(e) {
+    const active = document.activeElement;
+    const isTypingTarget = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable);
+    if (isTypingTarget) return;
+
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items || !items.length) return;
+
+    let found = false;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          found = true;
+          enqueue(file);
+        }
+      }
+    }
+    if (found) e.preventDefault();
+  });
+})();
+</script>

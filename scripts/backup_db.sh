@@ -23,6 +23,9 @@ if [ -z "$CONN_STR" ]; then
     exit 1
 fi
 
+# Strip pgxpool-only query params (pool_max_conns etc.) that pg_dump rejects
+CONN_STR=$(echo "$CONN_STR" | sed -E 's/([?&])pool_[a-z_]+=[^&]+&?/\1/g; s/[?&]$//')
+
 BACKUP_FILE="backups/backup_$(date +%Y%m%d_%H%M%S).sql"
 
 echo "Backing up database to $BACKUP_FILE..."

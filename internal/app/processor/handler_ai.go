@@ -265,6 +265,13 @@ func (h *AIHandler) fetchImages(ctx context.Context, logger *slog.Logger, ids []
 				logger.Warn("failed to read image from s3", "id", id, "err", err)
 				return
 			}
+			// Hi-res original still works for the model, just costs more tokens —
+			// better than dropping the image.
+			if small, err := downscaleForLLM(data); err != nil {
+				logger.Warn("failed to downscale image for llm, using original", "id", id, "err", err)
+			} else {
+				data = small
+			}
 			images[i].data = data
 		}(i, id)
 	}

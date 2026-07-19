@@ -532,16 +532,7 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", "public, max-age=86400")
 		_, _ = w.Write(img)
-		return
-	}
-
-	w.Header().Set("Cache-Control", "public, no-cache")
-	w.Header().Set("ETag", cached.ETag)
-
-	if match := r.Header.Get("If-None-Match"); match == cached.ETag {
-		w.WriteHeader(http.StatusNotModified)
 		return
 	}
 

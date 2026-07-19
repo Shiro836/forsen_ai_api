@@ -16,3 +16,23 @@ scrape_configs:
       - targets: ['host.docker.internal:8182']
         labels:
           service: 'llm-translator'
+
+  # minio metrics need a bearer token: a JWT signed HS512 with the s3 secret
+  # key (sub = access key, iss = prometheus), aka `mc admin prometheus generate`.
+  # The token lives in cfg/minio_prometheus_token (gitignored), mounted by
+  # docker-compose — never inline it here, this file is tracked.
+  - job_name: 'minio_cluster'
+    metrics_path: /minio/v2/metrics/cluster
+    bearer_token_file: /etc/prometheus/minio_token
+    static_configs:
+      - targets: ['host.docker.internal:9000']
+        labels:
+          service: 'minio'
+
+  - job_name: 'minio_bucket'
+    metrics_path: /minio/v2/metrics/bucket
+    bearer_token_file: /etc/prometheus/minio_token
+    static_configs:
+      - targets: ['host.docker.internal:9000']
+        labels:
+          service: 'minio'

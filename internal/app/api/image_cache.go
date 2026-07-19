@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"sync"
 
 	"github.com/google/uuid"
@@ -14,10 +12,9 @@ type ImageProvider interface {
 	GetCharImage(ctx context.Context, cardID uuid.UUID) ([]byte, error)
 }
 
-// CachedImage holds pre-computed image data and its ETag.
+// CachedImage holds pre-computed image data.
 type CachedImage struct {
 	Data []byte
-	ETag string
 }
 
 // ImageCache wraps an ImageProvider with an in-memory cache.
@@ -52,10 +49,7 @@ func (c *ImageCache) Get(ctx context.Context, cardID uuid.UUID) (*CachedImage, e
 	}
 
 	// Fallback image is handled by the caller, we just cache whatever we got
-	hash := sha256.Sum256(imgData)
-	etag := `"` + hex.EncodeToString(hash[:16]) + `"`
-
-	cached := &CachedImage{Data: imgData, ETag: etag}
+	cached := &CachedImage{Data: imgData}
 
 	c.mu.Lock()
 	c.items[key] = cached

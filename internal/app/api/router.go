@@ -116,6 +116,7 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Use(middleware.StripSlashes)
 
 	router.Use(middleware.Recoverer)
+	router.Use(etagMiddleware)
 
 	// Grafana reverse proxy
 	grafanaURL, _ := url.Parse("http://localhost:2999")
@@ -295,6 +296,11 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Get("/i/{id}", http.HandlerFunc(api.imagePreview))
 	router.Post("/images", http.HandlerFunc(api.imagesUpload))
 	router.Get("/images/{id}", http.HandlerFunc(api.imageGet))
+
+	// Multi-image album: paste several images, share them as one link
+	router.Get("/album", api.navPublic(api.albumPage))
+	router.Post("/album/images", http.HandlerFunc(api.albumImageUpload))
+	router.Get("/a/{ids}", http.HandlerFunc(api.albumPreview))
 
 	router.Handle("/static/*", http.FileServerFS(staticFS))
 	router.Handle("/favicon.ico", http.RedirectHandler("/static/logo.jpg", http.StatusMovedPermanently))

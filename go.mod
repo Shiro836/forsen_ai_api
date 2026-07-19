@@ -1,6 +1,6 @@
 module app
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.5.2
@@ -18,7 +18,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/samber/slog-chi v1.19.1
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/exp v0.0.0-20260709172345-9ea1abe57597
+	golang.org/x/exp v0.0.0-20260718201538-764159d718ef
 	golang.org/x/image v0.44.0
 	golang.org/x/sync v0.22.0
 	gopkg.in/yaml.v3 v3.0.1

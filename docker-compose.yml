@@ -20,11 +20,12 @@ services:
   #     - forsen
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.13.1
     ports:
       - 9091:9090
     volumes:
       - ./cfg/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./cfg/minio_prometheus_token:/etc/prometheus/minio_token
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
     extra_hosts:
@@ -60,7 +61,7 @@ services:
 
   grafana:
     user: root
-    image: grafana/grafana:10.3.3
+    image: grafana/grafana:12.4.5
     ports:
       - 2999:3000
     environment:
