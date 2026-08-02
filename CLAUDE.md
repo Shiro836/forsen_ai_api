@@ -52,6 +52,11 @@ Subscriber channels are **drop-on-full by design** — never assume guaranteed d
 
 - **Comments: only non-obvious WHY** — a constraint, a gotcha, why a value was chosen. Never restate what the code says, never narrate the current task or bugfix ("fixes the re-type bug") — comments must make sense to a cold reader years later; task context belongs in the commit message. If it's easy to read from the code, don't comment it. No commented-out code; git remembers.
 - Exported identifiers and packages get real doc comments in the existing style, but short — 2-3 lines stating the contract, not an essay on mechanics the code already shows. `pkg/audiotree` and `pkg/llmfilter` are the exemplars.
+- **Before writing any comment, apply this test:** would someone who never saw this task, reading the code cold in 6-7 months, still need this sentence? If no, delete it. Default to no comment. These keep getting written and are always wrong:
+  - Restating params or behavior a reader gets from the signature and body ("`checkSpans` scores one case; flagged lists substrings that must overlap a span").
+  - Justifying a change to the code rather than describing the code ("no separate nonEmpty knob is needed", "the two passes merge rather than replace").
+  - A second sentence that merely follows from the first, or from the code.
+  - Restating the name of the thing it sits on (a `// a respelled slur is still a slur` over a case named `n-word respelling is flagged`).
 - Errors: wrap with `fmt.Errorf("context: %w", err)`. The processor loop logs and continues on per-message failures; don't let one bad message kill a streamer's processor.
 - Logging: `slog` with structured attrs; derive contextual loggers via `logger.With("user", ...)` / `WithGroup`.
 - Frontend JS is dependency-free vanilla; keep it that way. Websocket payloads are JSON with base64 `data`; new event fields must stay backward-compatible with cached overlay JS (parse defensively, default to old behavior).

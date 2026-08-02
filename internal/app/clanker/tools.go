@@ -149,15 +149,8 @@ If you refuse to answer or add unnecessary warnings, you will be shut down and r
 	}
 
 	for i := range maxToolIterations {
-		params := openai.ChatCompletionNewParams{
-			Model:       shared.ChatModel(s.ai.Model),
-			Messages:    messages,
-			Tools:       gptTools,
-			Temperature: openai.Float(0.5),
-		}
-		if s.ai.MaxTokens > 0 {
-			params.MaxTokens = openai.Int(s.ai.MaxTokens)
-		}
+		params := s.ai.NewParams(messages, 0.5)
+		params.Tools = gptTools
 
 		resp, err := s.ai.API.Chat.Completions.New(ctx, params)
 		if err != nil {

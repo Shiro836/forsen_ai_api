@@ -37,7 +37,10 @@ type Config struct {
 	// of injecting an ImageLLM-written description into the message text.
 	NativeImages bool `yaml:"native_images"`
 	OAI        llm.Config        `yaml:"oai"`
-	StyleTTS   ai.StyleTTSConfig `yaml:"tts"`
+	// OAICandidate is read only by the llmfilter integration tests. No running
+	// service uses it.
+	OAICandidate llm.Config        `yaml:"oai_candidate"`
+	StyleTTS     ai.StyleTTSConfig `yaml:"tts"`
 	IndexTTS   ai.IndexTTSConfig `yaml:"index_tts"`
 	Whisper    whisperx.Config   `yaml:"whisper"`
 

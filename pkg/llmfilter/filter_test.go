@@ -286,8 +286,108 @@ func TestSpansErrorsWhenNeverVerbatim(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when model never reproduces input")
 	}
-	if c.calls != maxAttempts {
-		t.Fatalf("expected %d attempts, got %d", maxAttempts, c.calls)
+	// the same drift twice means the model is stuck, so the echo loop gives up
+	// early and the listing attempt follows.
+	if c.calls != 3 {
+		t.Fatalf("expected 2 echo attempts plus the listing attempt, got %d", c.calls)
+	}
+}
+
+func TestRunawayEchoSkipsRemainingAttempts(t *testing.T) {
+	c := &fakeClient{outputs: []string{strings.Repeat("steezi", 500), "NONE"}}
+
+	if _, err := New(c).Spans(context.Background(), "steezisteezi", ""); err != nil {
+		t.Fatalf("Spans: %v", err)
+	}
+	if c.calls != 2 {
+		t.Fatalf("a runaway echo must cut straight to the listing attempt, got %d calls", c.calls)
+	}
+}
+
+func TestListedSubstringsRescueUnechoableTarget(t *testing.T) {
+	input := "spam spam neega spam spam neega spam"
+	// two identical drifts end the echo loop, then the listing answer lands.
+	c := &fakeClient{outputs: []string{"spam spam <f>neega</f> spam", "spam spam <f>neega</f> spam", "-- \"neega\""}}
+
+	spans, err := New(c).Spans(context.Background(), input, "")
+	if err != nil {
+		t.Fatalf("Spans: %v", err)
+	}
+	if len(spans) != 2 {
+		t.Fatalf("got %d spans %v, want both occurrences", len(spans), spans)
+	}
+	for i, s := range spans {
+		if got := slice(t, input, s); got != "neega" {
+			t.Errorf("span %d = %q, want %q", i, got, "neega")
+		}
+	}
+}
+
+func TestListedNoneIsClean(t *testing.T) {
+	c := &fakeClient{outputs: []string{"drifted", "drifted", "NONE"}}
+
+	spans, err := New(c).Spans(context.Background(), "steezisteezisteezi", "")
+	if err != nil {
+		t.Fatalf("Spans: %v", err)
+	}
+	if len(spans) != 0 {
+		t.Fatalf("got spans %v, want none", spans)
+	}
+}
+
+func TestListedUnlocatableAnswerStillErrors(t *testing.T) {
+	c := &fakeClient{outputs: []string{"drifted", "drifted", "drifted", "I could not find anything to tag"}}
+
+	if _, err := New(c).Spans(context.Background(), "I hate jews", ""); err == nil {
+		t.Fatal("an answer that neither says NONE nor locates anything must fail closed")
+	}
+}
+
+func TestDivergenceNamesTheDifference(t *testing.T) {
+	tests := []struct {
+		name           string
+		target, got    string
+		wantSubstrings []string
+	}{
+		{
+			name:           "dropped text",
+			target:         "aaa bbb ccc",
+			got:            "aaa ccc",
+			wantSubstrings: []string{"SKIPPED", `"bbb "`},
+		},
+		{
+			name:           "added text",
+			target:         "aaa ccc",
+			got:            "aaa bbb ccc",
+			wantSubstrings: []string{"ADDED", `"bbb "`},
+		},
+		{
+			name:           "replaced text",
+			target:         "aaa bbb ccc",
+			got:            "aaa xxx ccc",
+			wantSubstrings: []string{`You then wrote: "xxx"`, `target has: "bbb"`},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := divergence(tc.target, tc.got)
+			for _, want := range tc.wantSubstrings {
+				if !strings.Contains(got, want) {
+					t.Errorf("divergence = %q, want it to contain %q", got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestDivergenceClipsRunawayEcho(t *testing.T) {
+	target := "short target"
+	got := target + strings.Repeat("steezi", 500)
+
+	d := divergence(target, got)
+	if len([]rune(d)) > 4*diffMiddleRunes {
+		t.Fatalf("repair message is %d runes, want it clipped", len([]rune(d)))
 	}
 }
 

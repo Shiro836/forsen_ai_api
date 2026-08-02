@@ -9,6 +9,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/imagetag"
+	"app/pkg/textfilter"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -42,8 +43,27 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 		return fmt.Errorf("invalid msg id: %w", err)
 	}
 
-	ttsMsg := imagetag.ReplaceImageTags(input.Message)
-	filteredRequest := h.service.FilterText(ctx, input.UserSettings, ttsMsg)
+	skipLLMFilter := input.SkipLLMFilterFully || input.UserSettings.DisableLLMFilter
+
+	// Filter the raw message (not the image-tag-replaced one) so the spans line
+	// up with what the control panel displays; image tags survive censoring
+	// (disjoint spans) and are replaced afterward for speech.
+	requestSpans, err := h.service.filterSpans(ctx, input.UserSettings, input.Message, skipLLMFilter)
+	if err != nil {
+		return fmt.Errorf("failed to filter request: %w", err)
+	}
+	filteredRequest := imagetag.ReplaceImageTags(textfilter.Censor(input.Message, requestSpans, "(filtered)"))
+
+	if len(requestSpans) > 0 {
+		if err := h.db.UpdateMessageData(ctx, msgID, &db.MessageData{RequestFiltered: requestSpans}); err != nil {
+			logger.Warn("failed to store filtered spans", "err", err)
+		}
+		h.service.connManager.NotifyControlPanel(input.Broadcaster.ID)
+	}
+
+	if input.State.IsSkipped(msgID) {
+		return nil
+	}
 
 	actions, err := h.service.processUniversalTTSMessage(ctx, filteredRequest, input.UserSettings)
 	if err != nil {

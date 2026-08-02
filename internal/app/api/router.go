@@ -165,6 +165,11 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Use(api.checkPermissions(db.PermissionStreamer))
 
 			router.Get("/", api.nav(api.home))
+			router.Get("/new_home", api.nav(api.newHome))
+			router.Get("/new_home/browser-source", api.nav(api.newHome))
+			router.Get("/new_home/source-name", api.nav(api.newHome))
+			router.Get("/new_home/browser-properties", api.nav(api.newHome))
+			router.Get("/new_home/verify", api.nav(api.newHome))
 			router.Get("/characters", api.nav(api.characters))
 
 			router.Get("/characters/{character_id}", api.nav(api.character))

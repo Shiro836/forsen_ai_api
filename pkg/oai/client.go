@@ -13,10 +13,25 @@ import (
 	"github.com/openai/openai-go/shared"
 )
 
+// dialect is the request shape an endpoint accepts. GPT-5.x rejects any
+// temperature but the default and rejects max_tokens; DeepSeek takes the
+// classic parameters plus a thinking block.
+type dialect int
+
+const (
+	dialectCompatible dialect = iota
+	dialectOpenAI
+)
+
+// openai-go v1.12.0 predates the "none" tier that GPT-5.x accepts.
+const reasoningNone shared.ReasoningEffort = "none"
+
 type Client struct {
 	API       openai.Client
 	Model     string
 	MaxTokens int64
+
+	dialect dialect
 }
 
 func New(apiKey, baseURL, model string, maxTokens int) *Client {
@@ -28,7 +43,61 @@ func New(apiKey, baseURL, model string, maxTokens int) *Client {
 		API:       openai.NewClient(opts...),
 		Model:     model,
 		MaxTokens: int64(maxTokens),
+		dialect:   dialectFor(baseURL),
 	}
+}
+
+func dialectFor(baseURL string) dialect {
+	if baseURL == "" || strings.Contains(baseURL, "api.openai.com") {
+		return dialectOpenAI
+	}
+	return dialectCompatible
+}
+
+// applyTuning sets sampling and length in the dialect's spelling. Reasoning is
+// pinned off: measured on gpt-5.6-luna it tripled latency, spent ~10x the output
+// tokens, and made spans less precise.
+func (c *Client) applyTuning(params *openai.ChatCompletionNewParams, temperature float64) {
+	if c.dialect == dialectOpenAI {
+		if c.MaxTokens > 0 {
+			params.MaxCompletionTokens = openai.Int(c.MaxTokens)
+		}
+		params.ReasoningEffort = reasoningNone
+		return
+	}
+
+	params.Temperature = openai.Float(temperature)
+	if c.MaxTokens > 0 {
+		params.MaxTokens = openai.Int(c.MaxTokens)
+	}
+}
+
+// NewParams builds chat params with model, length and sampling already in the
+// dialect's spelling. Callers needing tools or a response format set them on
+// the result rather than assembling ChatCompletionNewParams themselves.
+func (c *Client) NewParams(messages []openai.ChatCompletionMessageParamUnion, temperature float64) openai.ChatCompletionNewParams {
+	params := openai.ChatCompletionNewParams{
+		Model:    shared.ChatModel(c.Model),
+		Messages: messages,
+	}
+	c.applyTuning(&params, temperature)
+	return params
+}
+
+func (c *Client) convertMessages(messages []llm.Message, extra int) []openai.ChatCompletionMessageParamUnion {
+	out := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+extra)
+	for _, m := range messages {
+		text := flattenText(m)
+		switch m.Role {
+		case "system":
+			out = append(out, openai.SystemMessage(text))
+		case "assistant":
+			out = append(out, openai.AssistantMessage(text))
+		default:
+			out = append(out, openai.UserMessage(text))
+		}
+	}
+	return out
 }
 
 func flattenText(m llm.Message) string {
@@ -50,18 +119,7 @@ func flattenText(m llm.Message) string {
 // AskGuided embeds the schema in the prompt and forces json_object mode —
 // OpenAI-compatible endpoints have no vLLM-style enum-constrained decoding.
 func (c *Client) AskGuided(ctx context.Context, messages []llm.Message, schema json.RawMessage, temperature float64) (string, error) {
-	oaMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+1)
-	for _, m := range messages {
-		text := flattenText(m)
-		switch m.Role {
-		case "system":
-			oaMessages = append(oaMessages, openai.SystemMessage(text))
-		case "assistant":
-			oaMessages = append(oaMessages, openai.AssistantMessage(text))
-		default:
-			oaMessages = append(oaMessages, openai.UserMessage(text))
-		}
-	}
+	oaMessages := c.convertMessages(messages, 1)
 	if len(schema) > 0 {
 		oaMessages = append(oaMessages, openai.SystemMessage(
 			"Respond ONLY with a JSON object conforming to this JSON schema (no prose, no code fences):\n"+string(schema)))
@@ -73,11 +131,8 @@ func (c *Client) AskGuided(ctx context.Context, messages []llm.Message, schema j
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
 		},
-		Temperature: openai.Float(temperature),
 	}
-	if c.MaxTokens > 0 {
-		params.MaxTokens = openai.Int(c.MaxTokens)
-	}
+	c.applyTuning(&params, temperature)
 
 	resp, err := c.API.Chat.Completions.New(ctx, params)
 	if err != nil {
@@ -94,32 +149,19 @@ func (c *Client) AskGuided(ctx context.Context, messages []llm.Message, schema j
 // content annotated in place); AskGuided forces json_object mode, whose escaping
 // would corrupt such output.
 func (c *Client) Ask(ctx context.Context, messages []llm.Message, temperature float64) (string, error) {
-	oaMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
-	for _, m := range messages {
-		text := flattenText(m)
-		switch m.Role {
-		case "system":
-			oaMessages = append(oaMessages, openai.SystemMessage(text))
-		case "assistant":
-			oaMessages = append(oaMessages, openai.AssistantMessage(text))
-		default:
-			oaMessages = append(oaMessages, openai.UserMessage(text))
-		}
-	}
-
 	params := openai.ChatCompletionNewParams{
-		Model:       shared.ChatModel(c.Model),
-		Messages:    oaMessages,
-		Temperature: openai.Float(temperature),
+		Model:    shared.ChatModel(c.Model),
+		Messages: c.convertMessages(messages, 0),
 	}
-	if c.MaxTokens > 0 {
-		params.MaxTokens = openai.Int(c.MaxTokens)
+	c.applyTuning(&params, temperature)
+
+	// deepseek models think by default and have no request field for it.
+	var reqOpts []option.RequestOption
+	if c.dialect == dialectCompatible {
+		reqOpts = append(reqOpts, option.WithJSONSet("thinking", map[string]string{"type": "disabled"}))
 	}
 
-	// Span tagging is deterministic; reasoning only adds latency. deepseek
-	// models think by default, so disable it explicitly.
-	resp, err := c.API.Chat.Completions.New(ctx, params,
-		option.WithJSONSet("thinking", map[string]string{"type": "disabled"}))
+	resp, err := c.API.Chat.Completions.New(ctx, params, reqOpts...)
 	if err != nil {
 		return "", fmt.Errorf("oai chat: %w", err)
 	}

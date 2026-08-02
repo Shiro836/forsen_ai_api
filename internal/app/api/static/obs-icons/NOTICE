@@ -1,0 +1,38 @@
+OBS Studio icon assets
+
+Source: https://github.com/obsproject/obs-studio
+Version: 32.2.1
+Copyright: OBS Studio contributors
+License: GNU General Public License version 2; see COPYING in this directory.
+
+The files below are unmodified. Files from Dark and Light are stored in matching lowercase directories.
+
+frontend/data/themes/{Dark,Light}:
+- plus.svg
+- minus.svg
+- trash.svg
+- cogs.svg
+- up.svg
+- down.svg
+- visible.svg
+- locked.svg
+
+frontend/data/themes/{Dark,Light}/sources:
+- microphone.svg
+- globe.svg
+- brush.svg
+- image.svg
+- slideshow.svg
+- media.svg
+- scene.svg
+- text.svg
+- camera.svg
+- group.svg
+- window.svg
+
+frontend/data/themes/{Dark,Light}/settings:
+- audio.svg
+- video.svg (stored as screen.svg)
+
+frontend/cmake/linux/icons:
+- obs-logo-scalable.svg (stored as obs-logo.svg)
