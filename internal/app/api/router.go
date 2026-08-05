@@ -164,12 +164,13 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Group(func(router chi.Router) {
 			router.Use(api.checkPermissions(db.PermissionStreamer))
 
-			router.Get("/", api.nav(api.home))
-			router.Get("/new_home", api.nav(api.newHome))
-			router.Get("/new_home/browser-source", api.nav(api.newHome))
-			router.Get("/new_home/source-name", api.nav(api.newHome))
-			router.Get("/new_home/browser-properties", api.nav(api.newHome))
-			router.Get("/new_home/verify", api.nav(api.newHome))
+			for path := range obsGuideSteps {
+				router.Get(path, api.nav(api.obsGuide))
+			}
+			for path := range audioGuideSteps {
+				router.Get(path, api.nav(api.audioGuide))
+			}
+			router.Get("/guide/legacy", api.nav(api.legacyHome))
 			router.Get("/characters", api.nav(api.characters))
 
 			router.Get("/characters/{character_id}", api.nav(api.character))

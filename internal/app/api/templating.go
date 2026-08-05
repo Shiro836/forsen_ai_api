@@ -125,10 +125,6 @@ type adminPage struct {
 	Mods []permissionRequest
 }
 
-type homePage struct {
-	URL string
-}
-
 func empty(r *http.Request) template.HTML {
 	return ""
 }

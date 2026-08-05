@@ -1,0 +1,82 @@
+<section id="guide" class="w-full min-w-0 pb-10">
+    <div class="mb-8 flex items-center justify-between border-b {{template "ui-border-clr"}} pb-6">
+        <h1 class="text-2xl font-bold tracking-wide text-slate-900 dark:text-white">LEGACY HOME</h1>
+        <a class="{{template "button-2"}} flex items-center whitespace-nowrap px-4 py-2 font-bold" href="/" hx-get="/" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">← OBS setup guide</a>
+    </div>
+
+    <div class="flex flex-col">
+        <div class="text-xl font-medium">
+            Quickstart
+        </div>
+        <ul class="pt-6 space-y-6 list-inside list-disc">
+            <li>In your obs, choose scene where you want to put output window of AI.</li>
+            <li>Then navigate to Sources window, press "+" button and add new Browser source.</li>
+            <li>Put <button class="copy-button underline has-tooltip w-min" data-clipboard-target="#obs-url"><span class='tooltip rounded -mt-6'>Click To Copy</span><div id="obs-url">{{ .URL }}</div></button> in URL field without quotes. Press "OK" button.</li>
+            <li>Go to <button class="underline" hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort">Characters</button> page and add your first character.</li>
+            <li>Go to your chat and try to redeem your newly created reward. You should hear sound and see text.</li>
+            <li>Don't forget that you can skip undesired user requests in <button class="underline" hx-get="/control" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort">Control Panel</button>. And you can give access to your control panel in the settings below.</li>
+        </ul>
+        <div class="pt-12 text-xl font-medium">
+            Images guide
+        </div>
+        <ul class="pt-6 space-y-6 list-inside list-disc">
+            <li>AI can react to images in prompt. Images are not shown in obs overlay automatically and need to be approven in control panel to be shown.</li>
+            <li>Users need to upload images in <button class="underline" hx-get="/images" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort">Images</button>. Copy the generated code that looks like &lt;img:sdfns&gt;</li>
+            <li>Use it in prompt preferably in the beginning of prompt like - <b> &lt;img:sdfns&gt; opinion on thing</b></li>
+            <li>Images need to be manually approved in control panel. It's not very easy while streaming, so you can put people you trust to approve images in setting below.</li>
+        </ul>
+        <div class="pt-12 pb-4 text-xl font-medium">
+            Settings
+        </div>
+        <div>
+            <div class="flex flex-col">
+                <div class="pb-1 flex">
+                    <div class="font-medium">Grant control panel permissions</div>
+                    {{ template "help-tip" "Permission allows to open your control panel with abilities to skip AI or TTS requests. Perfect for delegating moderation to 0$/hour janitors." }}
+                </div>
+                <div class="border w-min py-3 px-3 {{template "ui-border-clr"}}">
+                    <div class="flex flex-col w-72">
+                        <label for="twitch_login" class="pb-2">Twitch Username</label>
+                        <input type="text" id="twitch_login" name="twitch_login" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="forsen" autocomplete="off"></input>
+                        <div class="flex pt-4 justify-start font-bold">
+                            <div>
+                                <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/control/grant" hx-include="[name='twitch_login']" hx-target="#control_result">Grant</button>
+                            </div>
+                            <div class="flex-grow pl-8">
+                                <button class="{{template "button-2"}} py-2 px-4 w-32" hx-post="/control/revoke" hx-include="[name='twitch_login']" hx-target="#control_result">Revoke</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pt-4" id="control_result"></div>
+            </div>
+        </div>
+        <div class="pt-12 pb-4 text-xl font-medium">
+            How to set keybinds to hide obs overlay very fast
+        </div>
+        <ul class="pt-6 space-y-6 list-inside list-disc">
+            <li>Open obs settings</li>
+            <li>Go to "Hotkeys" tab</li>
+            <li>Find "Hide {source name}" and "Show {source name}" hotkeys and set them to your desired keybinds</li>
+        </ul>
+        <div class="pt-12 text-xl font-medium">
+            Setup global hotkeys to skip and show images
+        </div>
+        <ul class="pt-6 space-y-6 list-inside list-disc">
+            <li>Download the OBS Lua script <a class="underline" target="_blank" href="https://github.com/Shiro836/forsen_ai_api/blob/main/obs_script.lua">obs_script.lua</a> and add it in OBS: Tools → Scripts → “+” → select the file.</li>
+            <li>In the script properties:
+                <ul class="list-disc list-inside pl-6 space-y-2">
+                    <li>Select your BAJ AI Browser Source in the <b>Browser Source</b> dropdown.</li>
+                    <li>Paste your <b>Token</b> from the <button class="underline" hx-get="/filters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort">Settings page</button>.</li>
+                </ul>
+            </li>
+            <li>Assign two global hotkeys in OBS Settings → Hotkeys:
+                <ul class="list-disc list-inside pl-6 space-y-2">
+                    <li><b>BAJ_AI_SKIP</b> — skips the current request.</li>
+                    <li><b>BAJ_AI_SHOW_IMAGE</b> — approves and shows prompt images for the current request.</li>
+                </ul>
+            </li>
+            <li>Note that due to network latency, show image hotkey might show image of next message. You need to be careful with it.</li>
+        </ul>
+    </div>
+</section>

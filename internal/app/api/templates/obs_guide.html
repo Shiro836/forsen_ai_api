@@ -1,0 +1,210 @@
+<section id="guide" class="w-full min-w-0 pb-10">
+    <div class="mb-8 flex items-center justify-between border-b {{template "ui-border-clr"}} pb-6">
+        <h1 class="text-2xl font-bold tracking-wide text-slate-900 dark:text-white">OBS SETUP GUIDE</h1>
+        <div class="rounded-full border {{template "ui-border-clr"}} px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-300">Step {{.Step.Number}} of 5</div>
+    </div>
+
+    <ol class="mb-8 grid grid-cols-5 gap-3" aria-label="OBS setup progress">
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 1}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 1}}border-green-500/40 text-slate-700 hover:border-green-500 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/" hx-get="/" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 1}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">01</span>
+                <span class="mt-1 block font-semibold">Add source</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 2}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 2}}border-green-500/40 text-slate-700 hover:border-green-500 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/guide/browser-source" hx-get="/guide/browser-source" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 2}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">02</span>
+                <span class="mt-1 block font-semibold">Choose Browser</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 3}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 3}}border-green-500/40 text-slate-700 hover:border-green-500 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/guide/source-name" hx-get="/guide/source-name" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 3}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">03</span>
+                <span class="mt-1 block font-semibold">Create source</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 4}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 4}}border-green-500/40 text-slate-700 hover:border-green-500 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/guide/browser-properties" hx-get="/guide/browser-properties" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 4}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">04</span>
+                <span class="mt-1 block font-semibold">Enter URL</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 5}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/guide/verify" hx-get="/guide/verify" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 5}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">05</span>
+                <span class="mt-1 block font-semibold">Verify</span>
+            </a>
+        </li>
+    </ol>
+
+    <div class="grid grid-cols-[minmax(280px,0.68fr)_minmax(650px,1.7fr)] items-start gap-8">
+        <div class="rounded-xl border {{template "ui-border-clr"}} bg-slate-50 p-6 dark:bg-slate-800/50">
+            <h2 class="text-2xl font-bold text-slate-900 dark:text-white">{{.Step.Title}}</h2>
+
+            {{if eq .Step.Number 1}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>Open the scene where BAJ AI should appear.</p>
+                <p>Find the <strong>Sources</strong> dock at the bottom of OBS, then press the <strong>+</strong> button.</p>
+            </div>
+            {{else if eq .Step.Number 2}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>A source menu opens above the <strong>+</strong> button.</p>
+                <p>Choose <strong>Browser</strong> from the list.</p>
+            </div>
+            {{else if eq .Step.Number 3}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>Click <strong>OK</strong>.</p>
+            </div>
+            {{else if eq .Step.Number 4}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>Replace the URL with your BAJ AI overlay address:</p>
+                <button class="copy-button group w-full rounded-lg border-2 border-twitch-dark bg-white px-4 py-3 text-left font-mono text-sm font-bold text-slate-900 hover:bg-purple-50 dark:border-twitch-light dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800" data-clipboard-text="{{.URL}}">
+                    <span class="block text-xs font-sans font-bold uppercase tracking-wider text-twitch-dark dark:text-twitch-light">Click to copy</span>
+                    <span class="mt-1 block break-all">{{.URL}}</span>
+                </button>
+                <div class="rounded-lg border {{template "ui-border-clr"}} p-4 text-sm">
+                    <p><strong>Control audio via OBS</strong> — if you capture your desktop audio (the default OBS setup), leave it unchecked.</p>
+                    <p class="mt-2">If you use Application Audio Capture, or want separate AI volume for you and your viewers, check it and follow the <a class="font-bold underline" href="/guide/audio" hx-get="/guide/audio" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">audio setup guide</a> — with it checked you won't hear the AI until the monitor filter from the guide is set up.</p>
+                </div>
+            </div>
+            {{else}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>The new <strong>BAJ AI</strong> source should appear in the Sources dock with its eye enabled.</p>
+                <div class="rounded-lg border border-twitch-dark p-4 text-sm font-semibold text-slate-900 dark:border-twitch-light dark:text-white">OBS setup is complete. A message will appear when a reward plays.</div>
+                <div class="border-t {{template "ui-border-clr"}} pt-4">
+                    <div class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">What's next</div>
+                    <ul class="mt-3 space-y-2 text-sm">
+                        <li><a class="font-bold underline" href="/characters" hx-get="/characters" hx-select="#tab-content" hx-target="#tab-content" hx-swap="outerHTML" hx-push-url="true" hx-sync="#tabs:abort">Create your first character</a> and bind it to a channel-point reward.</li>
+                        <li>Skip unwanted requests from the <a class="font-bold underline" href="/control" hx-get="/control" hx-select="#tab-content" hx-target="#tab-content" hx-swap="outerHTML" hx-push-url="true" hx-sync="#tabs:abort">Control Panel</a>.</li>
+                        <li>Check the guides below for audio setup and more.</li>
+                    </ul>
+                </div>
+            </div>
+            {{end}}
+
+            <div class="mt-8 flex items-center gap-3 border-t {{template "ui-border-clr"}} pt-5">
+                {{if .Step.PreviousPath}}
+                <a class="{{template "button-2"}} flex items-center whitespace-nowrap px-4 py-2 font-bold" href="{{.Step.PreviousPath}}" hx-get="{{.Step.PreviousPath}}" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">← Previous</a>
+                {{end}}
+                {{if .Step.NextPath}}
+                <a class="ml-auto flex items-center whitespace-nowrap rounded border-2 border-twitch-dark px-4 py-2 font-bold text-slate-900 hover:bg-purple-50 dark:border-twitch-light dark:text-white dark:hover:bg-twitch-light/10" href="{{.Step.NextPath}}" hx-get="{{.Step.NextPath}}" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">Next →</a>
+                {{end}}
+            </div>
+        </div>
+
+        <div class="relative rounded-2xl border {{template "ui-border-clr"}} bg-slate-100 p-5 shadow-xl dark:bg-slate-950/50">
+            {{if eq .Step.Number 1}}
+            <div class="overflow-hidden rounded-lg border border-obs-border bg-obs-window text-[12px] text-obs-text shadow-2xl dark:border-obs-border-d dark:bg-obs-window-d dark:text-white">
+                <div class="flex h-9 items-center justify-between border-b border-obs-border bg-obs-chrome px-3 font-semibold dark:border-obs-border-d dark:bg-obs-chrome-d"><span>OBS 32.1.2 - Profile: Untitled - Scenes: Untitled</span><div class="flex items-center gap-4"><span>—</span><span>□</span><span>×</span></div></div>
+                <div class="flex h-8 items-center gap-5 border-b border-obs-border bg-obs-chrome px-3 dark:border-obs-border-d dark:bg-obs-chrome-d"><span>File</span><span>Edit</span><span>View</span><span>Docks</span><span>Profile</span><span>Scene Collection</span><span>Tools</span><span>Help</span></div>
+                <div class="flex h-64 items-center justify-center bg-obs-canvas p-5 dark:bg-obs-canvas-d"><div class="flex h-full w-[82%] items-center justify-center border border-obs-border bg-obs-black text-obs-muted dark:border-obs-panel-d">Preview</div></div>
+                <div class="grid h-44 grid-cols-[0.8fr_1.15fr_1.35fr] gap-1 bg-obs-window p-1 dark:bg-obs-window-d">
+                    <div class="flex flex-col overflow-hidden rounded border border-obs-border bg-obs-chrome dark:border-obs-border-d dark:bg-obs-chrome-d"><div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Scenes</div><div class="m-1 rounded bg-obs-select px-3 py-2 dark:bg-obs-select-d">Scene</div></div>
+                    <div class="flex flex-col overflow-visible rounded border-2 border-twitch-dark bg-obs-chrome shadow-obs-glow dark:border-twitch-light dark:bg-obs-chrome-d">
+                        <div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Sources</div>
+                        <div class="space-y-1 px-2 py-1"><div>desktop capture</div><div>mic</div><div>screen</div></div>
+                        <div class="flex-1"></div>
+                        <div class="relative flex h-9 items-center gap-2 border-t border-obs-border px-2 dark:border-obs-border-d">
+                            <div class="absolute -top-10 left-0 z-10 rounded-md border border-twitch-dark bg-white px-3 py-2 text-sm font-bold text-slate-900 shadow-lg dark:border-twitch-light dark:bg-obs-window-d dark:text-white">Press + here<span class="absolute -bottom-[5px] left-5 h-2.5 w-2.5 rotate-45 border-b border-r border-twitch-dark bg-white dark:border-twitch-light dark:bg-obs-window-d" aria-hidden="true"></span></div>
+                            <span class="flex h-7 w-8 items-center justify-center rounded border-2 border-twitch-dark bg-purple-100 dark:border-twitch-light dark:bg-twitch-dark/30"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/plus.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/plus.svg" alt=""></span>
+                            <span><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/trash.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/trash.svg" alt=""></span>
+                            <span><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/cogs.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/cogs.svg" alt=""></span>
+                            <span class="ml-auto"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/up.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/up.svg" alt=""></span>
+                            <span><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/down.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/down.svg" alt=""></span>
+                        </div>
+                    </div>
+                    <div class="overflow-hidden rounded border border-obs-border bg-obs-chrome dark:border-obs-border-d dark:bg-obs-chrome-d"><div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Audio Mixer</div><div class="px-3 py-3">desktop capture<div class="mt-2 h-2 rounded-full bg-gradient-to-r from-green-500 via-yellow-400 to-red-500"></div></div><div class="px-3 py-2">mic<div class="mt-2 h-2 rounded-full bg-gradient-to-r from-green-500 via-yellow-400 to-red-500"></div></div></div>
+                </div>
+            </div>
+            {{else if eq .Step.Number 2}}
+            <div class="relative overflow-hidden rounded-lg border border-obs-border bg-obs-window text-[12px] text-obs-text shadow-2xl dark:border-obs-border-d dark:bg-obs-window-d dark:text-white">
+                <div class="h-56 bg-obs-canvas dark:bg-obs-canvas-d"></div>
+                <div class="grid h-48 grid-cols-[0.8fr_1.05fr_1fr] gap-1 p-1">
+                    <div class="rounded border border-obs-border bg-obs-chrome dark:border-obs-border-d dark:bg-obs-chrome-d"><div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Scenes</div><div class="m-1 rounded bg-obs-select px-3 py-2 dark:bg-obs-select-d">Scene</div></div>
+                    <div class="relative flex flex-col rounded border border-obs-border bg-obs-chrome dark:border-obs-border-d dark:bg-obs-chrome-d">
+                        <div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Sources</div><div class="flex-1"></div>
+                        <div class="flex h-9 items-center gap-3 border-t border-obs-border px-2 dark:border-obs-border-d"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/plus.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/plus.svg" alt=""><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/trash.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/trash.svg" alt=""><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/cogs.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/cogs.svg" alt=""></div>
+                        <div class="absolute bottom-7 left-2 z-10 w-[310px] rounded border border-obs-border bg-obs-popup p-1 shadow-2xl dark:border-obs-border-d dark:bg-obs-window-d">
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/microphone.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/microphone.svg" alt="">Audio Capture Device (ALSA)</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/microphone.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/microphone.svg" alt="">Audio Input Capture (PulseAudio)</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/audio.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/audio.svg" alt="">Audio Output Capture (PulseAudio)</div>
+                            <div class="flex items-center gap-2 rounded border border-twitch-dark bg-purple-100 px-2 py-1 font-bold text-twitch-dark dark:border-twitch-light dark:bg-obs-select-d dark:text-white"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/globe.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/globe.svg" alt="">Browser</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/brush.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/brush.svg" alt="">Color</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/image.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/image.svg" alt="">Image</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/slideshow.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/slideshow.svg" alt="">Image Slide Show</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/audio.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/audio.svg" alt="">JACK Input Client</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/media.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/media.svg" alt="">Media</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/scene.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/scene.svg" alt="">Scene</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/screen.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/screen.svg" alt="">Screen Capture (PipeWire)</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/text.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/text.svg" alt="">Text (FreeType 2)</div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/camera.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/camera.svg" alt="">Video Capture Device (V4L2)</div>
+                            <div class="my-1 border-t border-obs-border dark:border-obs-border-d"></div>
+                            <div class="flex items-center gap-2 rounded px-2 py-1"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/group.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/group.svg" alt="">Group</div>
+                        </div>
+                    </div>
+                    <div class="rounded border border-obs-border bg-obs-chrome dark:border-obs-border-d dark:bg-obs-chrome-d"><div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Audio Mixer</div><div class="px-3 py-3">desktop capture<div class="mt-2 h-2 rounded-full bg-gradient-to-r from-green-500 via-yellow-400 to-red-500"></div></div></div>
+                </div>
+            </div>
+            {{else if eq .Step.Number 3}}
+            <div class="flex h-[500px] items-center justify-center rounded-lg border border-obs-border bg-obs-canvas text-[13px] text-obs-text shadow-2xl dark:border-obs-border-d dark:bg-obs-canvas-d dark:text-white">
+                <div class="w-[390px] overflow-hidden rounded-lg border border-obs-border bg-obs-chrome shadow-2xl dark:border-obs-border-d dark:bg-obs-chrome-d">
+                    <div class="flex h-11 items-center justify-between border-b border-obs-border bg-obs-window px-4 font-semibold dark:border-obs-border-d dark:bg-obs-window-d"><span>Create/Select Source</span><span>—　□　×</span></div>
+                    <div class="space-y-3 p-4">
+                        <div class="flex items-center gap-2"><span class="flex h-4 w-4 items-center justify-center rounded-full border border-obs-muted"><span class="h-2 w-2 rounded-full bg-obs-select-d"></span></span>Create new</div>
+                        <div class="rounded border-2 border-twitch-dark bg-white px-3 py-2 text-base font-semibold shadow-obs-glow dark:border-twitch-light dark:bg-obs-window-d">BAJ AI</div>
+                        <div class="flex items-center gap-2"><span class="h-4 w-4 rounded-full border border-obs-muted"></span>Add Existing</div>
+                        <div class="h-28 rounded bg-obs-panel dark:bg-obs-panel-d"></div>
+                        <div class="flex items-center gap-2"><span class="flex h-4 w-4 items-center justify-center rounded-sm border border-obs-muted bg-obs-select-d text-[11px] text-white">✓</span>Make source visible</div>
+                        <div class="flex justify-end gap-2 pt-1"><button class="rounded border border-obs-accent bg-obs-select px-8 py-2 dark:border-obs-accent-d dark:bg-obs-input-d">OK</button><button class="rounded border border-obs-border bg-obs-panel px-8 py-2 dark:border-obs-input-border-d dark:bg-obs-input-d">Cancel</button></div>
+                    </div>
+                </div>
+            </div>
+            {{else if eq .Step.Number 4}}
+            <div class="relative overflow-visible rounded-lg border border-obs-border bg-obs-chrome text-[12px] text-obs-text shadow-2xl dark:border-obs-border-d dark:bg-obs-window-d dark:text-white">
+                <div class="flex h-10 items-center justify-between rounded-t-lg border-b border-obs-border bg-obs-window px-4 font-semibold dark:border-obs-border-d dark:bg-obs-window-d"><span>Properties for 'BAJ AI'</span><span>—　□　×</span></div>
+                <div class="mx-5 mt-4 flex h-48 items-center justify-center overflow-hidden border border-obs-border bg-obs-black dark:border-obs-border-d">
+                    <div class="flex h-full w-[68%] flex-col items-center justify-center bg-obs-welcome text-center text-white">
+                        <img class="h-16 w-16" src="/static/obs-icons/obs-logo.svg" alt="OBS">
+                        <div class="mt-3 font-bold">You've just added a browser source!</div>
+                        <div class="mt-2 max-w-xs text-[11px]">Set the URL to the page you'd like to display</div>
+                    </div>
+                </div>
+                <div class="space-y-2 px-5 py-4">
+                    <div class="grid grid-cols-[105px_1fr] items-center gap-3"><span></span><span class="flex items-center gap-2"><span class="h-4 w-4 rounded-sm border border-obs-muted"></span>Local file</span></div>
+                    <div class="relative grid grid-cols-[105px_1fr] items-center gap-3"><span class="text-right">URL</span><span class="truncate rounded border-2 border-twitch-dark bg-white px-3 py-2 font-mono shadow-obs-glow dark:border-twitch-light dark:bg-obs-input-d">{{.URL}}</span><button class="copy-button absolute -right-5 -top-9 rounded-full border-2 border-twitch-dark bg-transparent px-4 py-2 text-sm font-bold text-slate-900 shadow-lg hover:bg-purple-50/80 dark:border-twitch-light dark:text-white dark:hover:bg-twitch-light/10" data-clipboard-text="{{.URL}}">Click to copy <span class="ml-1">↙</span></button></div>
+                    <div class="grid grid-cols-[105px_1fr] items-center gap-3"><span class="text-right">Width</span><span class="rounded border border-obs-border bg-white px-3 py-2 dark:border-obs-input-border-d dark:bg-obs-input-d">800</span></div>
+                    <div class="grid grid-cols-[105px_1fr] items-center gap-3"><span class="text-right">Height</span><span class="rounded border border-obs-border bg-white px-3 py-2 dark:border-obs-input-border-d dark:bg-obs-input-d">600</span></div>
+                    <div class="grid grid-cols-[105px_1fr] items-center gap-3"><span></span><span class="flex items-center gap-2"><span class="h-4 w-4 rounded-sm border border-obs-muted"></span>Control audio via OBS</span></div>
+                    <div class="grid grid-cols-[105px_1fr] items-start gap-3"><span class="pt-2 text-right">Custom CSS</span><span class="h-16 rounded border border-obs-border bg-white p-2 font-mono dark:border-obs-input-border-d dark:bg-obs-input-d">body { background-color: rgba(0, 0, 0, 0); }</span></div>
+                </div>
+                <div class="flex items-center border-t border-obs-border px-5 py-3 dark:border-obs-border-d"><button class="rounded border border-obs-border bg-obs-panel px-4 py-2 dark:border-obs-input-border-d dark:bg-obs-panel-d">Defaults</button><div class="ml-auto flex gap-2"><button class="rounded border border-obs-accent bg-obs-select px-6 py-2 dark:border-obs-accent-d dark:bg-obs-input-d">OK</button><button class="rounded border border-obs-border bg-obs-panel px-5 py-2 dark:border-obs-input-border-d dark:bg-obs-panel-d">Cancel</button></div></div>
+            </div>
+            {{else}}
+            <div class="overflow-hidden rounded-lg border border-obs-border bg-obs-window text-[12px] text-obs-text shadow-2xl dark:border-obs-border-d dark:bg-obs-window-d dark:text-white">
+                <div class="flex h-9 items-center justify-between border-b border-obs-border bg-obs-chrome px-3 font-semibold dark:border-obs-border-d dark:bg-obs-chrome-d"><span>OBS 32.1.2 - Profile: Untitled - Scenes: Untitled</span><div class="flex items-center gap-4"><span>—</span><span>□</span><span>×</span></div></div>
+                <div class="flex h-8 items-center gap-5 border-b border-obs-border bg-obs-chrome px-3 dark:border-obs-border-d dark:bg-obs-chrome-d"><span>File</span><span>Edit</span><span>View</span><span>Docks</span><span>Profile</span><span>Scene Collection</span><span>Tools</span><span>Help</span></div>
+                <div class="relative flex h-64 items-center justify-center bg-obs-canvas p-5 dark:bg-obs-canvas-d"><div class="flex h-full w-[82%] items-center justify-center border border-twitch-dark dark:border-twitch-light bg-[linear-gradient(45deg,#d7d7d7_25%,transparent_25%),linear-gradient(-45deg,#d7d7d7_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#d7d7d7_75%),linear-gradient(-45deg,transparent_75%,#d7d7d7_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0px] dark:bg-[linear-gradient(45deg,#1d1f26_25%,transparent_25%),linear-gradient(-45deg,#1d1f26_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1d1f26_75%),linear-gradient(-45deg,transparent_75%,#1d1f26_75%)]"><span class="rounded bg-white/90 px-4 py-2 font-semibold text-obs-muted dark:bg-black/60 dark:text-obs-muted-d">BAJ AI is transparent while idle</span></div><div class="absolute bottom-7 right-[9%] h-3 w-3 bg-twitch-dark dark:bg-twitch-light"></div><div class="absolute left-[9%] top-5 h-3 w-3 bg-twitch-dark dark:bg-twitch-light"></div></div>
+                <div class="grid h-44 grid-cols-[0.8fr_1.15fr_1.35fr] gap-1 bg-obs-window p-1 dark:bg-obs-window-d">
+                    <div class="overflow-hidden rounded border border-obs-border bg-obs-chrome dark:border-obs-border-d dark:bg-obs-chrome-d"><div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Scenes</div><div class="m-1 rounded bg-obs-select px-3 py-2 dark:bg-obs-select-d">Scene</div></div>
+                    <div class="flex flex-col overflow-hidden rounded border-2 border-twitch-dark bg-obs-chrome dark:border-twitch-light dark:bg-obs-chrome-d"><div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Sources</div><div class="m-1 flex items-center rounded bg-obs-select px-2 py-2 font-semibold dark:bg-obs-select-d"><img class="mr-2 h-4 w-4 dark:hidden" src="/static/obs-icons/light/globe.svg" alt=""><img class="mr-2 hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/globe.svg" alt=""><span>BAJ AI</span><img class="ml-auto h-4 w-4 dark:hidden" src="/static/obs-icons/light/visible.svg" alt=""><img class="ml-auto hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/visible.svg" alt=""><img class="ml-2 h-4 w-4 dark:hidden" src="/static/obs-icons/light/locked.svg" alt=""><img class="ml-2 hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/locked.svg" alt=""></div><div class="flex-1"></div><div class="flex h-9 items-center gap-3 border-t border-obs-border px-2 dark:border-obs-border-d"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/plus.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/plus.svg" alt=""><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/trash.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/trash.svg" alt=""><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/cogs.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/cogs.svg" alt=""></div></div>
+                    <div class="overflow-hidden rounded border border-obs-border bg-obs-chrome dark:border-obs-border-d dark:bg-obs-chrome-d"><div class="bg-obs-panel px-3 py-2 font-bold dark:bg-obs-panel-d">Audio Mixer</div><div class="px-3 py-3">desktop capture<div class="mt-2 h-2 rounded-full bg-gradient-to-r from-green-500 via-yellow-400 to-red-500"></div></div></div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="mt-10 border-t {{template "ui-border-clr"}} pt-6">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">More guides</h2>
+        <div class="mt-4 grid grid-cols-3 gap-4">
+            <a class="block rounded-lg border {{template "ui-border-clr"}} p-5 hover:border-twitch-dark dark:hover:border-twitch-light" href="/guide/audio" hx-get="/guide/audio" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">
+                <span class="block font-bold text-slate-900 dark:text-white">Audio setup</span>
+                <span class="mt-1 block text-sm text-slate-500 dark:text-slate-400">Personal AI volume for you, separate from what viewers hear on stream.</span>
+            </a>
+            <a class="block rounded-lg border {{template "ui-border-clr"}} p-5 hover:border-twitch-dark dark:hover:border-twitch-light" href="/guide/legacy" hx-get="/guide/legacy" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">
+                <span class="block font-bold text-slate-900 dark:text-white">Legacy home</span>
+                <span class="mt-1 block text-sm text-slate-500 dark:text-slate-400">The old home page — quickstart, prompt images, overlay and skip hotkeys.</span>
+            </a>
+        </div>
+    </div>
+</section>
