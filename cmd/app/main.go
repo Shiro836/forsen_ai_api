@@ -67,14 +67,14 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	llmModel := llm.New(httpClient, &cfg.LLM)
 	imageLlm := llm.New(httpClient, &cfg.ImageLLM)
 
-	// Character replies use cydonia (chat format). To fall back to lexi, swap to:
-	//   var characterLlm processor.CharacterLLM = llm.CompletionClient{Client: llmModel}
 	var characterLlm processor.CharacterLLM = llm.ChatClient{Client: llm.New(httpClient, &cfg.LLM2)}
 	oaiClient := oai.New(cfg.OAI.AccessToken, cfg.OAI.URL, cfg.OAI.Model, cfg.OAI.MaxTokens)
-	textFilter := llmfilter.New(oaiClient)
+	if cfg.FilterLLM.URL == "" {
+		log.Fatal("filter_llm is not configured")
+	}
+	textFilter := llmfilter.New(oai.New(cfg.FilterLLM.AccessToken, cfg.FilterLLM.URL, cfg.FilterLLM.Model, cfg.FilterLLM.MaxTokens))
 	ffmpegClient := ffmpeg.New(&cfg.Ffmpeg)
 	chatTTSEngine := ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
 	indexClient := ai.NewIndexTTSClient(httpClient, &cfg.IndexTTS)
@@ -98,7 +98,7 @@ func main() {
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
 
-	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, chatTTSEngine, whisper, llmModel, imageLlm, textFilter, connManager)
+	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, chatTTSEngine, whisper, imageLlm, textFilter, connManager)
 
 	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), characterLlm, imageLlm, cfg.NativeImages, db, s3, procService)
 	ttsHandler := processor.NewTTSHandler(logger.WithGroup("tts_handler"), db, procService)

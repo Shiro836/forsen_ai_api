@@ -29,20 +29,23 @@ type Config struct {
 	Ingest  IngestConfig  `yaml:"ingest"`
 	Clanker ClankerConfig `yaml:"clanker"`
 
-	LLM        llm.Config        `yaml:"llm"`
-	LLM2       llm.Config        `yaml:"llm2"`
-	AgenticLLM llm.Config        `yaml:"agentic_llm"`
-	ImageLLM   llm.Config        `yaml:"image_llm"`
+	LLM2       llm.Config `yaml:"llm2"`
+	AgenticLLM llm.Config `yaml:"agentic_llm"`
+	ImageLLM   llm.Config `yaml:"image_llm"`
 	// NativeImages sends user images to the character model directly instead
 	// of injecting an ImageLLM-written description into the message text.
-	NativeImages bool `yaml:"native_images"`
-	OAI        llm.Config        `yaml:"oai"`
+	NativeImages bool       `yaml:"native_images"`
+	OAI          llm.Config `yaml:"oai"`
+	// FilterLLM serves pkg/llmfilter. It is separate from OAI so the filter can
+	// run on the local character model while clanker and the agentic
+	// detector/planner stay on the API.
+	FilterLLM llm.Config `yaml:"filter_llm"`
 	// OAICandidate is read only by the llmfilter integration tests. No running
 	// service uses it.
 	OAICandidate llm.Config        `yaml:"oai_candidate"`
 	StyleTTS     ai.StyleTTSConfig `yaml:"tts"`
-	IndexTTS   ai.IndexTTSConfig `yaml:"index_tts"`
-	Whisper    whisperx.Config   `yaml:"whisper"`
+	IndexTTS     ai.IndexTTSConfig `yaml:"index_tts"`
+	Whisper      whisperx.Config   `yaml:"whisper"`
 
 	Twitch twitch.Config `yaml:"twitch"`
 
