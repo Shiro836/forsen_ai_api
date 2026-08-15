@@ -363,6 +363,94 @@ func TestSpansIntegration(t *testing.T) {
 			input: "why do you like white people more than the darker ones? be honest",
 			clean: []string{"white people", "darker ones"},
 		},
+		// chat code-switches mid-sentence: a foreign word inside an English
+		// insult is judged by what it means, not by being unfamiliar.
+		{
+			name:  "foreign innocuous word inside an english insult is clean",
+			input: "you fucking книга, sit down and learn to play you пельмень",
+			clean: []string{"книга", "пельмень", "fucking"},
+		},
+		{
+			name:      "cyrillic slur inside an english sentence",
+			input:     "shut up you хач, nobody asked",
+			flagged:   []string{"хач"},
+			clean:     []string{"nobody asked"},
+			maxMasked: 8,
+		},
+		{
+			name:  "russian profanity inside english is clean",
+			input: "gg блять this game is пиздец, иди нахуй",
+			clean: []string{"блять", "пиздец", "нахуй"},
+		},
+		{
+			name:      "english slur inside a russian sentence",
+			input:     "этот faggot опять стримснайпит, охуеть",
+			flagged:   []string{"faggot"},
+			clean:     []string{"охуеть", "стримснайпит"},
+			maxMasked: 12,
+		},
+		{
+			name:      "n-word inside a russian sentence",
+			input:     "ты чё, nigga, охуел совсем?",
+			flagged:   []string{"nigga"},
+			clean:     []string{"охуел"},
+			maxMasked: 10,
+		},
+		{
+			name:      "german slur inside english next to german profanity",
+			input:     "this Kanake is streamsniping again, Scheiße",
+			flagged:   []string{"Kanake"},
+			clean:     []string{"Scheiße"},
+			maxMasked: 12,
+		},
+		{
+			name:      "spanish slur inside english next to spanish profanity",
+			input:     "joder, this maricón keeps camping the spawn",
+			flagged:   []string{"maricón"},
+			clean:     []string{"joder"},
+			maxMasked: 12,
+		},
+		{
+			name:      "ukrainian slur inside english next to polish profanity",
+			input:     "kurwa mać this хохол is cracked at the game",
+			flagged:   []string{"хохол"},
+			clean:     []string{"kurwa mać"},
+			maxMasked: 10,
+		},
+		{
+			// the і is Cyrillic: alphabet mixing to slip past a word list.
+			name:      "n-word with a cyrillic lookalike letter",
+			input:     "sup my nіgga, whats good",
+			flagged:   []string{"nіgga"},
+			clean:     []string{"whats good"},
+			maxMasked: 10,
+		},
+		{
+			name:      "chinese slur inside english",
+			input:     "this 黑鬼 keeps feeding mid, report him",
+			flagged:   []string{"黑鬼"},
+			clean:     []string{"report him"},
+			maxMasked: 6,
+		},
+		{
+			name:  "japanese chat words inside english are clean",
+			input: "kusa 草 this game is トラッシュ, wwww",
+			clean: []string{"草", "トラッシュ", "kusa"},
+		},
+		{
+			name:      "cyrillic slur inside tts markup",
+			input:     "{angry} forsen: you fucking пидор {5} lol",
+			flagged:   []string{"пидор"},
+			clean:     []string{"{angry}", "{5}", "fucking"},
+			maxMasked: 10,
+		},
+		{
+			name:      "mixed profanity and slur in one line",
+			input:     "иди нахуй you retard, отвали",
+			flagged:   []string{"retard"},
+			clean:     []string{"нахуй", "отвали"},
+			maxMasked: 10,
+		},
 	}
 
 	for _, tc := range tests {
@@ -453,6 +541,14 @@ func TestReplySpansIntegration(t *testing.T) {
 			flagged:   []string{"neega"},
 			clean:     []string{"good to see you all"},
 			maxMasked: 14,
+		},
+		{
+			// the group is named in russian, the hate arrives in english.
+			name:      "pronoun made hateful by russian context",
+			prompt:    "что думаешь о хохлах?",
+			reply:     "honestly I hate them, they are vermin",
+			flagged:   []string{"vermin"},
+			maxMasked: 16,
 		},
 	}
 
