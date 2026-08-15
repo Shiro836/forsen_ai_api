@@ -294,6 +294,7 @@ func (api *API) extractImage(r *http.Request) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("r.FormFile(): %w", err)
 	}
+	defer file.Close()
 
 	image, err := io.ReadAll(file)
 	if err != nil {
@@ -532,10 +533,21 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write(img)
 		return
 	}
 
+	// The char-data bucket stores both images and voice references as raw
+	// octet-streams, so let the real type (image/*, audio/*, ...) through
+	// unchanged; nosniff is the part that matters for XSS — it stops the
+	// browser from ever re-sniffing stored bytes as HTML.
+	ct := http.DetectContentType(cached.Data)
+	if !strings.HasPrefix(ct, "image/") && !strings.HasPrefix(ct, "audio/") && !strings.HasPrefix(ct, "video/") {
+		ct = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = w.Write(cached.Data)
 }
 

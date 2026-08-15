@@ -104,8 +104,15 @@ func (s *Service) syncUsers(ctx context.Context) error {
 
 	metrics.TotalGrantedChannels.Set(float64(len(users)))
 
+	// A granted streamer whose chat we could never act on is not worth an IRC join:
+	// without a reward button nothing can be redeemed, and without ingest-all nothing
+	// plain-chat is picked up either.
 	desiredUsers := make(map[string]*ingestUserConfig, len(users))
 	for _, u := range users {
+		if !u.HasRewardButton && !u.IngestAllMessages {
+			continue
+		}
+
 		desiredUsers[strings.ToLower(u.TwitchLogin)] = &ingestUserConfig{
 			id:                u.ID,
 			twitchUserID:      u.TwitchUserID,

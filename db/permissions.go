@@ -110,6 +110,7 @@ type IngestUser struct {
 	TwitchLogin       string
 	TwitchUserID      int
 	IngestAllMessages bool
+	HasRewardButton   bool
 }
 
 func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
@@ -118,7 +119,8 @@ func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
 			u.id,
 			u.twitch_login,
 			u.twitch_user_id,
-			coalesce((u.data->>'ingest_all_messages')::boolean, false)
+			coalesce((u.data->>'ingest_all_messages')::boolean, false),
+			exists(SELECT 1 FROM reward_buttons AS rb WHERE rb.user_id = u.id)
 		FROM permissions AS p
 		JOIN users AS u ON p.twitch_user_id = u.twitch_user_id
 		WHERE
@@ -134,7 +136,7 @@ func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
 	var users []*IngestUser
 	for rows.Next() {
 		var u IngestUser
-		if err := rows.Scan(&u.ID, &u.TwitchLogin, &u.TwitchUserID, &u.IngestAllMessages); err != nil {
+		if err := rows.Scan(&u.ID, &u.TwitchLogin, &u.TwitchUserID, &u.IngestAllMessages, &u.HasRewardButton); err != nil {
 			return nil, fmt.Errorf("failed to scan ingest user: %w", err)
 		}
 		users = append(users, &u)
