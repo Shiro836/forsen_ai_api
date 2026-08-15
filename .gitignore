@@ -23,3 +23,9 @@ pkg/whisperx/refs/*
 services/
 
 adr/
+# any copy or backup of the secret configs, whatever the suffix
+cfg/cfg.yaml.*
+cfg/cfg.yaml~
+cfg/*.bak
+cfg/*.bak-*
+cfg/*.orig
