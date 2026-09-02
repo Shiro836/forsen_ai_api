@@ -1,0 +1,61 @@
+{{ define "emote-verdict-badge" }}
+<div class="text-xs font-bold {{ if eq .Verdict "allow" }}text-green-600 dark:text-green-400{{ else if eq .Verdict "block" }}text-red-600 dark:text-red-400{{ else }}text-slate-500 dark:text-slate-400{{ end }}">{{ .Verdict }}</div>
+{{ end }}
+
+{{ define "emote-image" }}
+<img src="{{ .ImageURL }}" alt="{{ .Name }}" loading="lazy" class="max-h-16 max-w-16"
+    onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">
+<div class="flex hidden h-16 w-16 items-center justify-center rounded border border-dashed text-center text-xs {{template "ui-border-clr"}}">not cached</div>
+{{ end }}
+
+{{ define "emote-card-fields" }}
+<input type="hidden" name="emote_id" value="{{ .EmoteID }}">
+<input type="hidden" name="name" value="{{ .Name }}">
+<input type="hidden" name="base_name" value="{{ .BaseName }}">
+<input type="hidden" name="score" value="{{ .Score }}">
+{{ end }}
+
+{{ define "emote-card" }}
+<div class="emote-card flex w-40 flex-col items-center rounded border p-2 {{template "ui-border-clr"}}">
+    <div class="flex h-16 items-center">
+        {{ template "emote-image" . }}
+    </div>
+    <div class="break-all pt-1 text-center text-sm font-bold">{{ .Name }}</div>
+    {{ if .Aliased }}<div class="break-all text-center text-xs opacity-60">alias of {{ .BaseName }}</div>{{ end }}
+    <div class="pt-1">{{ template "emote-verdict-badge" . }}</div>
+    <div class="text-center text-xs opacity-60">{{ .Reason }}</div>
+    {{ if .Score }}<div class="text-center text-xs opacity-60">similarity {{ .Score }}</div>{{ end }}
+
+    {{ if .ChannelPath }}
+    <form class="flex flex-wrap justify-center gap-1 pt-2" hx-post="{{ .ChannelPath }}/override"
+        hx-target="closest .emote-card" hx-swap="outerHTML">
+        <input type="hidden" name="scope" value="channel">
+        {{ template "emote-card-fields" . }}
+        <button name="action" value="approve" class='{{template "button-2"}} px-2 py-1 text-xs'>Approve</button>
+        <button name="action" value="ban" class='{{template "button-2"}} px-2 py-1 text-xs'>Ban</button>
+        <button name="action" value="clear" class='{{template "button-2"}} px-2 py-1 text-xs'>Clear</button>
+    </form>
+    {{ end }}
+
+    {{ if .CanGlobal }}
+    <form class="flex flex-wrap justify-center gap-1 pt-2"
+        hx-post="{{ if .ChannelPath }}{{ .ChannelPath }}/override{{ else }}/emotes/global/override{{ end }}"
+        hx-target="closest .emote-card" hx-swap="outerHTML">
+        <input type="hidden" name="scope" value="global">
+        {{ template "emote-card-fields" . }}
+        <div class="w-full text-center text-xs uppercase opacity-60">global</div>
+        <button name="action" value="approve" class='{{template "button-2"}} px-2 py-1 text-xs'>Approve</button>
+        <button name="action" value="ban" class='{{template "button-2"}} px-2 py-1 text-xs'>Ban</button>
+        <button name="action" value="clear" class='{{template "button-2"}} px-2 py-1 text-xs'>Clear</button>
+    </form>
+    {{ end }}
+</div>
+{{ end }}
+
+{{ define "emote-card-grid" }}
+<div class="flex flex-wrap gap-3">
+    {{ range . }}{{ template "emote-card" . }}{{ end }}
+</div>
+{{ end }}
+
+{{ template "emote-card" . }}

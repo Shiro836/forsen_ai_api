@@ -1,0 +1,8 @@
+<div>
+    {{ if not .Cards }}
+    <div class="opacity-70">The 7TV global set is empty.</div>
+    {{ else }}
+    <div class="pb-3 text-sm opacity-70">{{ len .Cards }} emotes in the 7TV global set</div>
+    {{ template "emote-card-grid" .Cards }}
+    {{ end }}
+</div>

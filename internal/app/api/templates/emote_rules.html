@@ -1,0 +1,43 @@
+<div>
+    <div class="flex flex-col gap-2">
+        {{ if not .Rules }}
+        <div class="opacity-70">No rules yet.</div>
+        {{ end }}
+        {{ range .Rules }}
+        <div class="flex items-center gap-4 rounded border px-3 py-2 {{template "ui-border-clr"}}">
+            <div class="flex-grow">
+                <div class="font-bold">{{ .RuleText }}</div>
+                <div class="text-xs opacity-60">
+                    {{ .Status }} &middot; blocks {{ .MatchCount }} emotes
+                    {{ if .Threshold }}&middot; threshold {{ .Threshold }}{{ end }}
+                </div>
+            </div>
+            <button class='{{template "button-2"}} px-3 py-1 text-sm'
+                hx-post="/emotes/{{ $.TwitchUserID }}/rules/{{ .ID }}/preview"
+                hx-target="#emote_rule_preview">Preview</button>
+            <button class='{{template "button-2"}} px-3 py-1 text-sm'
+                hx-post="/emotes/{{ $.TwitchUserID }}/rules/{{ .ID }}/delete" hx-target="#emote_rule_result"
+                hx-on::after-request="if (event.detail.successful) document.body.dispatchEvent(new Event('emote-rules-refresh'))">Delete</button>
+        </div>
+        {{ end }}
+    </div>
+
+    <form class="flex flex-col gap-2 pt-6 w-[36rem]" hx-post="/emotes/{{ .TwitchUserID }}/rules"
+        hx-target="#emote_rule_preview">
+        <div class="flex items-center">
+            <label for="rule_text">New rule</label>
+            {{ template "help-tip" "Free text matched against emote images and descriptions.\nNothing is blocked until you confirm the preview below." }}
+        </div>
+        <input type="text" id="rule_text" name="rule_text" autocomplete="off" placeholder="feet"
+            class='{{template "input-class"}} px-4 py-2'>
+        <div class="flex items-center gap-2">
+            <label for="threshold" class="text-sm">Threshold</label>
+            <input type="number" id="threshold" name="threshold" step="0.01" min="0" max="1" placeholder="default"
+                class='{{template "input-class"}} w-32 px-4 py-2'>
+            <button class='{{template "button-2"}} px-4 py-2 font-bold'>Create &amp; preview</button>
+        </div>
+    </form>
+
+    <div class="pt-2" id="emote_rule_result"></div>
+    <div class="pt-4" id="emote_rule_preview"></div>
+</div>

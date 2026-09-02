@@ -92,7 +92,7 @@ func (db *DB) GetRewardByTwitchReward(ctx context.Context, twitchRewardID string
 		WHERE twitch_reward_id = $1
 	`, twitchRewardID).Scan(&cardID, &rewardType)
 	if err != nil {
-		return nil, 0, fmt.Errorf("getRewardByTwitchReward: %w", err)
+		return nil, 0, fmt.Errorf("getRewardByTwitchReward: %w", parseErr(err))
 	}
 
 	return cardID, rewardType, nil
@@ -104,4 +104,23 @@ func (db *DB) UpsertUniversalTTSReward(ctx context.Context, userID uuid.UUID, tw
 
 func (db *DB) UpsertAgenticReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) error {
 	return db.UpsertTwitchReward(ctx, userID, nil, twitchRewardID, TwitchRewardAgentic)
+}
+
+// IsRewardBound reports whether a twitch reward id is already linked to a
+// character or a special reward.
+func (db *DB) IsRewardBound(ctx context.Context, twitchRewardID string) (bool, error) {
+	var bound bool
+
+	err := db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM reward_buttons
+			WHERE twitch_reward_id = $1
+		)
+	`, twitchRewardID).Scan(&bound)
+	if err != nil {
+		return false, fmt.Errorf("isRewardBound: %w", err)
+	}
+
+	return bound, nil
 }

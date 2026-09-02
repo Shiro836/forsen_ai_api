@@ -2,6 +2,8 @@
 {{ define "button-2" }}border-slate-300 hover:border-slate-700 dark:border-slate-700 dark:hover:border-twitch-light border-2 rounded{{ end }}
 {{ define "ui-border-clr" }}border-slate-900/10 dark:border-slate-50/[0.06]{{ end }}
 {{ define "input-class" }}focus:ring-2 focus:outline-none bg-gray-50 border border-gray-300 text-gray-900 dark:text-white rounded focus:ring-slate-700 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:focus:ring-twitch-light{{ end }}
+{{ define "tab-content" }}<div id="tab-content" class="flex flex-grow pl-10 pt-6">{{ . }}</div>{{ end }}
+{{ define "beta-pill" }}<span class="ml-2 rounded border {{template "ui-border-clr"}} px-1.5 py-0.5 text-xs font-normal uppercase tracking-wide opacity-70">beta</span>{{ end }}
 {{ define "help-tip" }}
 <div class="has-tooltip relative flex items-center pl-2">
     <span class="tooltip bottom-full left-1/2 -translate-x-1/2 mb-2 w-max max-w-xs text-xs whitespace-pre-line rounded border {{template "ui-border-clr"}} bg-white dark:bg-slate-800 px-3 py-2 shadow-lg">{{ . }}</span>
@@ -14,3 +16,6 @@
     </svg>
 </div>
 {{ end }}
+{{ define "bits-gem-facets" }}<path fill-opacity=".45" d="M12 2 3 9.5h5L12 2Z"/><path fill-opacity=".45" d="M12 2l4 7.5h5L12 2Z"/><path d="M12 2 8 9.5h8L12 2Z"/><path fill-opacity=".75" d="M8 9.5 12 22l4-12.5H8Z"/><path fill-opacity=".35" d="M3 9.5 12 22 8 9.5H3Z"/><path fill-opacity=".35" d="M16 9.5 12 22l9-12.5h-5Z"/>{{ end }}
+{{ define "bits-diamond" }}<svg class="inline-block h-3 w-3 shrink-0 fill-ttv-bits align-middle" viewBox="0 0 24 24" aria-hidden="true">{{template "bits-gem-facets"}}</svg>{{ end }}
+{{ define "bits-icon-lg" }}<svg class="h-6 w-6 shrink-0 fill-twitch-dark dark:fill-twitch-light" viewBox="0 0 24 24" aria-hidden="true">{{template "bits-gem-facets"}}</svg>{{ end }}

@@ -16,6 +16,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/internal/app/processor"
+	"app/internal/emoteservice"
 	"app/pkg/s3client"
 	"app/pkg/twitch"
 
@@ -59,9 +60,15 @@ type API struct {
 
 	imageCache   *ImageCache
 	voiceSamples *VoiceSampleCache
+
+	bitsDetector *bitsDetector
+
+	// emotes is nil when the emote service is not configured; the 7tv tab then
+	// renders an "unavailable" notice instead of failing.
+	emotes *emoteClient
 }
 
-func NewAPI(cfg *Config, ingestHost string, ingestPort int, logger *slog.Logger, connManager *conns.Manager,
+func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservice.Config, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client,
 	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
 	voiceSampler VoiceSampler) *API {
@@ -85,6 +92,10 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, logger *slog.Logger,
 
 		imageCache:   NewImageCache(db),
 		voiceSamples: NewVoiceSampleCache(voiceSampler, db),
+
+		bitsDetector: newBitsDetector(logger),
+
+		emotes: newEmoteClient(emoteCfg),
 	}
 
 	if ingestPort > 0 {
@@ -161,6 +172,32 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/control/ws/{twitch_user_id}", api.controlPanelWSConn)
 		router.Get("/control/{twitch_user_id}", api.nav(api.controlPanel))
 
+		// 7TV emote moderation. Authorization is resolved per request rather than
+		// by route group: /emotes/{id} needs that channel's own streamer or the
+		// platform moderator role, /emotes/global needs the latter alone.
+		router.Get("/emotes", api.nav(api.emotesMenu))
+		router.Get("/emotes/queue", api.elem(api.emotesQueue))
+		router.Get("/emotes/global/set", api.elem(api.emotesGlobalSet))
+		router.Get("/emotes/global/search", api.elem(api.emotesGlobalSearch))
+		router.Post("/emotes/global/override", http.HandlerFunc(api.emotesGlobalOverride))
+		router.Post("/emotes/global/enqueue-set", http.HandlerFunc(api.emotesEnqueueSet))
+		router.Post("/emotes/global/platform-settings", http.HandlerFunc(api.emotesPlatformSettings))
+		router.Post("/emotes/global/reclassify", http.HandlerFunc(api.emotesReclassify))
+
+		router.Get("/emotes/{twitch_user_id}", api.nav(api.emotesPanel))
+		router.Get("/emotes/{twitch_user_id}/channel", api.elem(api.emotesChannel))
+		router.Get("/emotes/{twitch_user_id}/search", api.elem(api.emotesSearch))
+		router.Get("/emotes/{twitch_user_id}/rules", api.elem(api.emotesRules))
+		router.Post("/emotes/{twitch_user_id}/enqueue", http.HandlerFunc(api.emotesEnqueue))
+		router.Post("/emotes/{twitch_user_id}/enqueue-set", http.HandlerFunc(api.emotesEnqueueChannelSet))
+		router.Post("/emotes/{twitch_user_id}/override", http.HandlerFunc(api.emotesOverride))
+		router.Post("/emotes/{twitch_user_id}/settings", http.HandlerFunc(api.emotesSettings))
+		router.Post("/emotes/{twitch_user_id}/settings/reset", http.HandlerFunc(api.emotesSettingsReset))
+		router.Post("/emotes/{twitch_user_id}/rules", http.HandlerFunc(api.emotesRuleCreate))
+		router.Post("/emotes/{twitch_user_id}/rules/{rule_id}/preview", http.HandlerFunc(api.emotesRulePreview))
+		router.Post("/emotes/{twitch_user_id}/rules/{rule_id}/confirm", http.HandlerFunc(api.emotesRuleConfirm))
+		router.Post("/emotes/{twitch_user_id}/rules/{rule_id}/delete", http.HandlerFunc(api.emotesRuleDelete))
+
 		router.Group(func(router chi.Router) {
 			router.Use(api.checkPermissions(db.PermissionStreamer))
 
@@ -170,6 +207,10 @@ func (api *API) NewRouter() *chi.Mux {
 			for path := range audioGuideSteps {
 				router.Get(path, api.nav(api.audioGuide))
 			}
+			for path := range bitsGuideSteps {
+				router.Get(path, api.nav(api.bitsGuide))
+			}
+			router.Get("/guide/bits/detect", http.HandlerFunc(api.bitsGuideDetect))
 			router.Get("/guide/legacy", api.nav(api.legacyHome))
 			router.Get("/characters", api.nav(api.characters))
 
@@ -302,6 +343,10 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Get("/i/{id}", http.HandlerFunc(api.imagePreview))
 	router.Post("/images", http.HandlerFunc(api.imagesUpload))
 	router.Get("/images/{id}", http.HandlerFunc(api.imageGet))
+
+	// Emote images come from our S3, never cdn.7tv.app, which is ECH-blocked in
+	// some countries. Public because the overlay browser source has no session.
+	router.Get("/emote-image/{provider}/{id}", http.HandlerFunc(api.emoteImage))
 
 	// Multi-image album: paste several images, share them as one link
 	router.Get("/album", api.navPublic(api.albumPage))

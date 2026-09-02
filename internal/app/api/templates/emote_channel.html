@@ -1,0 +1,10 @@
+<div>
+    {{ if not .Linked }}
+    <div class="opacity-70">This channel has no 7TV account, so it has no channel emote set.</div>
+    {{ else if not .Cards }}
+    <div class="opacity-70">7TV account <span class="font-bold">{{ .Username }}</span> has an empty emote set.</div>
+    {{ else }}
+    <div class="pb-3 text-sm opacity-70">{{ len .Cards }} emotes in the set of 7TV account <span class="font-bold">{{ .Username }}</span></div>
+    {{ template "emote-card-grid" .Cards }}
+    {{ end }}
+</div>

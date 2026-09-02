@@ -12,6 +12,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/ai"
+	"app/pkg/artfilter"
 	"app/pkg/ffmpeg"
 	"app/pkg/whisperx"
 
@@ -179,18 +180,19 @@ func wavDuration(data []byte) (time.Duration, bool) {
 	return 0, false
 }
 
-// alignChunkWords aligns one streamed chunk's text against its audio; on any
-// failure it interpolates within the chunk's speech bounds. Never empty for
-// non-empty text.
-func (s *Service) alignChunkWords(ctx context.Context, logger *slog.Logger, text string, wav []byte, chunkDur, speechStart, speechEnd time.Duration) []trackWord {
-	fields := strings.Fields(text)
+// alignChunkWords aligns one streamed chunk's spoken text against its audio; on
+// any failure it interpolates within the chunk's speech bounds. Never empty for
+// non-empty text. When display diverges from spoken (art masked on screen but
+// synthesized), alignment is meaningless — display words are interpolated.
+func (s *Service) alignChunkWords(ctx context.Context, logger *slog.Logger, spoken, display string, wav []byte, chunkDur, speechStart, speechEnd time.Duration) []trackWord {
+	fields := strings.Fields(display)
 	if len(fields) == 0 {
 		return nil
 	}
 
-	if s.whisper != nil {
+	if display == spoken && s.whisper != nil {
 		alignCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		timings, err := s.whisper.Align(alignCtx, text, wav, chunkDur)
+		timings, err := s.whisper.Align(alignCtx, spoken, wav, chunkDur)
 		cancel()
 
 		if err == nil && len(timings) == len(fields) {
@@ -237,6 +239,11 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 
 	ttsText := stripForTTS(msg)
 
+	// art is spoken but never shown: the engine synthesizes the raw characters
+	// while every display surface gets the masked text
+	art := artfilter.Detect(msg)
+	displayMsg := art.Mask(msg, artPlaceholder)
+
 	streamCtx, cancelStream := context.WithCancel(ctx)
 
 	chunkCh := make(chan ai.StreamChunk, 8)
@@ -278,7 +285,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 
 		emit := func(c readyChunk) {
 			if !emitted {
-				eventWriter(trackMetaEvent(msgID, trackID, msg))
+				eventWriter(trackMetaEvent(msgID, trackID, displayMsg))
 				playStart = time.Now()
 				emitted = true
 			}
@@ -332,9 +339,11 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 				return false
 			}
 
+			displayText := art.Mask(chunk.Text, artPlaceholder)
+
 			// speech bounds arrive stream-absolute from the engine; make them
 			// chunk-local for the interpolation fallback
-			words := s.alignChunkWords(ctx, logger, chunk.Text, chunk.Audio, chunkDur, chunk.SpeechStart-offset, chunk.SpeechEnd-offset)
+			words := s.alignChunkWords(ctx, logger, chunk.Text, displayText, chunk.Audio, chunkDur, chunk.SpeechStart-offset, chunk.SpeechEnd-offset)
 			for i := range words {
 				words[i].S += offset.Milliseconds()
 				words[i].E += offset.Milliseconds()
@@ -347,7 +356,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 					Seq:      seq,
 					OffsetMs: offset.Milliseconds(),
 					DurMs:    chunkDur.Milliseconds(),
-					Text:     chunk.Text,
+					Text:     displayText,
 					Words:    words,
 				},
 				mp3: mp3,

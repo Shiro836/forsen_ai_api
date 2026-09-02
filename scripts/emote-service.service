@@ -1,0 +1,16 @@
+[Unit]
+Description=Forsen AI Emote Moderation Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/forsen/repos/forsen_ai_api/emote-service
+WorkingDirectory=/home/forsen/repos/forsen_ai_api
+Restart=always
+RestartSec=3
+
+User=forsen
+Group=forsen
+
+[Install]
+WantedBy=multi-user.target

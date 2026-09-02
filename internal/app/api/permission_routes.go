@@ -122,7 +122,7 @@ func (api *API) managePermission(permissionAction permissionAction, permission d
 			return
 		}
 
-		twitchAPI, err := api.twitchClient.NewHelixClient(initiatorUser.TwitchAccessToken, initiatorUser.TwitchRefreshToken)
+		twitchAPI, err := api.helixForUser(r.Context(), initiatorUser)
 		if err != nil {
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 				ErrorCode:    http.StatusInternalServerError,
@@ -220,7 +220,7 @@ func (api *API) manageRelation(action permissionAction, relationType db.Relation
 			return
 		}
 
-		twitchAPI, err := api.twitchClient.NewHelixClient(initiatorUser.TwitchAccessToken, initiatorUser.TwitchRefreshToken)
+		twitchAPI, err := api.helixForUser(r.Context(), initiatorUser)
 		if err != nil {
 			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 				ErrorCode:    http.StatusInternalServerError,

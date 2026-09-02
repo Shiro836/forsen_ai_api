@@ -1,0 +1,15 @@
+<div class="flex flex-col text-sm">
+    <div class="flex flex-wrap items-center gap-4">
+        {{ if not .Statuses }}
+        <div class="opacity-70">Classification queue is empty.</div>
+        {{ else }}
+        {{ range .Statuses }}
+        <div><span class="opacity-70">{{ .Status }}</span> <span class="font-bold">{{ .Count }}</span></div>
+        {{ end }}
+        <div class="opacity-70">total {{ .Total }}</div>
+        {{ end }}
+    </div>
+    {{ if gt .Outdated 0 }}
+    <div class="pt-1 opacity-70">classified with outdated version: <span class="font-bold">{{ .Outdated }}</span> (current v{{ .Version }})</div>
+    {{ end }}
+</div>

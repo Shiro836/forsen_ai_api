@@ -1,0 +1,68 @@
+<div class="flex w-full flex-col">
+    <div class="flex items-baseline">
+        <div class="text-xl font-bold">7TV emotes of {{ .TwitchLogin }}</div>
+        {{ if .CanGlobal }}<div class="pl-4 text-xs uppercase opacity-60">platform moderator: global lists enabled</div>{{ end }}
+    </div>
+
+    {{ if not .Available }}
+    <div class="pt-6 text-red-600 dark:text-red-400">The emote service is not configured, so nothing can be moderated here.</div>
+    {{ else }}
+
+    <div class="pt-8">
+        {{ template "emote-channel-settings" . }}
+    </div>
+
+    <div class="pt-10">
+        <div class="pb-3 text-lg font-bold">Rules</div>
+        <div id="emote_rules" hx-get="/emotes/{{ .TwitchUserID }}/rules" hx-trigger="load, emote-rules-refresh from:body"></div>
+    </div>
+
+    <div class="pt-10">
+        <div class="flex items-center pb-3">
+            <div class="text-lg font-bold">Registry</div>
+            {{ template "help-tip" "Searches the classified registry twice: by emote name,\nand by what the picture and description mean." }}
+        </div>
+        <input type="text" name="q" autocomplete="off" placeholder="search by name or meaning, e.g. crying anime girl"
+            class='{{template "input-class"}} w-[24rem] px-4 py-2' hx-get="/emotes/{{ .TwitchUserID }}/search"
+            hx-trigger="keyup changed delay:400ms, search" hx-target="#emote_search_results">
+        <div class="pt-3" id="emote_search_results" hx-get="/emotes/{{ .TwitchUserID }}/search" hx-trigger="load"></div>
+    </div>
+
+    <div class="flex flex-wrap gap-12 pt-10">
+        <div class="flex w-[28rem] flex-col">
+            <div class="flex items-center pb-2">
+                <div class="font-bold">Add an emote by link</div>
+                {{ template "help-tip" "Paste a 7tv.app emote link or its id.\nThe emote is queued for classification; it stays plain text until that finishes." }}
+            </div>
+            <input type="text" name="emote_ref" autocomplete="off" placeholder="https://7tv.app/emotes/01J6KB8SBG00095HSJ1PN3XDPF"
+                class='{{template "input-class"}} px-4 py-2'>
+            <div class="flex items-center gap-4 pt-2">
+                <button class='{{template "button-2"}} px-4 py-2 font-bold' hx-post="/emotes/{{ .TwitchUserID }}/enqueue"
+                    hx-include="[name='emote_ref']" hx-target="#emote_enqueue_result">Add</button>
+                <div id="emote_enqueue_result"></div>
+            </div>
+        </div>
+
+        <div class="flex w-[28rem] flex-col">
+            <div class="flex items-center pb-2">
+                <div class="font-bold">Classify this channel's set</div>
+                {{ template "help-tip" "Queues every emote of this channel's active 7TV set for classification.\nA full set is hours of GPU time; the queue drains in the background." }}
+            </div>
+            <div class="flex items-center gap-4 pt-2">
+                <button class='{{template "button-2"}} px-4 py-2 font-bold'
+                    hx-post="/emotes/{{ .TwitchUserID }}/enqueue-set" hx-target="#emote_set_result">Classify set</button>
+                <div id="emote_set_result"></div>
+            </div>
+        </div>
+    </div>
+
+    <details class="pt-10 pb-10">
+        <summary class="cursor-pointer text-lg font-bold" hx-get="/emotes/{{ .TwitchUserID }}/channel"
+            hx-trigger="click once" hx-target="#emote_channel">Channel emote set</summary>
+        <div class="pt-3" id="emote_channel">
+            <div class="opacity-70">Expand to load the channel's 7TV set. It can hold up to a thousand emotes.</div>
+        </div>
+    </details>
+
+    {{ end }}
+</div>

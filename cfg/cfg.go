@@ -3,6 +3,7 @@ package cfg
 import (
 	"app/db"
 	"app/internal/app/api"
+	"app/internal/emoteservice"
 	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
@@ -28,6 +29,8 @@ type Config struct {
 	Api     api.Config    `yaml:"api"`
 	Ingest  IngestConfig  `yaml:"ingest"`
 	Clanker ClankerConfig `yaml:"clanker"`
+	// EmoteService is read only by cmd/emote-service; it has its own postgres.
+	EmoteService emoteservice.Config `yaml:"emote_service"`
 
 	LLM2       llm.Config `yaml:"llm2"`
 	AgenticLLM llm.Config `yaml:"agentic_llm"`

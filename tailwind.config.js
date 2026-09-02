@@ -4,6 +4,15 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+        keyframes: {
+            sheen: {
+                '0%, 60%': { backgroundPosition: '200% 0' },
+                '100%': { backgroundPosition: '-100% 0' },
+            },
+        },
+        animation: {
+            sheen: 'sheen 4s linear infinite',
+        },
         colors: {
             'twitch-dark': '#9146FF',
             'twitch-light': '#A970FF',
@@ -33,6 +42,32 @@ module.exports = {
                 'black': '#111111',
                 'black-d': '#0a0b0f',
                 'welcome': '#0d1738',
+            },
+            // Twitch creator-dashboard mockup palette for the bits guide; -d
+            // variants are the dark-theme counterparts used behind dark: prefixes.
+            ttv: {
+                'text': '#0e0e10',
+                'muted': '#53535f',
+                'muted-d': '#adadb8',
+                'border': '#dedee3',
+                'border-d': '#2f2f35',
+                'page': '#f7f7f8',
+                'page-d': '#0e0e10',
+                'card': '#ffffff',
+                'card-d': '#18181b',
+                'row': '#f0f0f2',
+                'row-d': '#1f1f23',
+                'input': '#ffffff',
+                'input-d': '#000000',
+                'input-border': '#adadb8',
+                'input-border-d': '#3f3f45',
+                'btn': '#e6e6ea',
+                'btn-d': '#2f2f35',
+                'off': '#adadb8',
+                'off-d': '#3f3f45',
+                'warn': '#c28a00',
+                'warn-d': '#f5c518',
+                'bits': '#1fd1a5',
             },
         },
         boxShadow: {

@@ -543,7 +543,7 @@ func (api *API) controlPanelGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	twitchAPI, err := api.twitchClient.NewHelixClient(user.TwitchAccessToken, user.TwitchRefreshToken) // TODO: generalize this
+	twitchAPI, err := api.helixForUser(r.Context(), user)
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
@@ -624,7 +624,7 @@ func (api *API) controlPanelRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	twitchAPI, err := api.twitchClient.NewHelixClient(user.TwitchAccessToken, user.TwitchRefreshToken) // TODO: generalize this
+	twitchAPI, err := api.helixForUser(r.Context(), user)
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,

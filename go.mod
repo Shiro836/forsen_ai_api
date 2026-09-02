@@ -13,7 +13,8 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/jritsema/gotoolbox v0.10.0
 	github.com/minio/minio-go/v7 v7.2.1
-	github.com/nicklaw5/helix/v2 v2.34.0
+	github.com/mozillazg/go-unidecode v0.2.0
+	github.com/nicklaw5/helix/v2 v2.34.1-0.20260413190243-cfed7a9a2137
 	github.com/openai/openai-go v1.12.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/samber/slog-chi v1.19.1

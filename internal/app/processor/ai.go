@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"app/db"
+	"app/pkg/artfilter"
 	"app/pkg/textfilter"
 )
 
@@ -17,17 +18,26 @@ func (s *Service) FilterText(_ context.Context, userSettings *db.UserSettings, t
 	return textfilter.Censor(text, spans, "(filtered)")
 }
 
+// artPlaceholder stands in for character art on the overlay and in LLM filter
+// input. The art itself still reaches TTS: hearing the engine mumble through a
+// braille wall is a feature, showing the wall on stream is not.
+const artPlaceholder = "(ascii art)"
+
 // filterSpans marks a standalone message: regex patterns plus the context-aware
-// LLM filter, merged.
+// LLM filter, merged. Character art is collapsed out of the LLM's input — a
+// braille wall is ~10k tokens and breaks the echo protocol (measured: context
+// overflow or a 60-100s retry stall) — and the returned spans are mapped back
+// to the original text.
 func (s *Service) filterSpans(ctx context.Context, userSettings *db.UserSettings, text string, skipLLM bool) ([]textfilter.Span, error) {
 	if skipLLM {
 		return textfilter.Merge(s.regexSpans(userSettings, text)), nil
 	}
-	llmSpans, err := s.llmFilter.Spans(ctx, text, userSettings.CustomFilterPrompt)
+	llmInput, artMap := textfilter.Collapse(text, artfilter.Detect(text).Spans(text), artPlaceholder)
+	llmSpans, err := s.llmFilter.Spans(ctx, llmInput, userSettings.CustomFilterPrompt)
 	if err != nil {
 		return nil, err
 	}
-	return textfilter.Merge(s.regexSpans(userSettings, text), llmSpans), nil
+	return textfilter.Merge(s.regexSpans(userSettings, text), artMap.MapBack(llmSpans)), nil
 }
 
 // filterReplySpans marks an AI reply, judging it against the prompt it answers
@@ -36,11 +46,13 @@ func (s *Service) filterReplySpans(ctx context.Context, userSettings *db.UserSet
 	if skipLLM {
 		return textfilter.Merge(s.regexSpans(userSettings, reply)), nil
 	}
-	llmSpans, err := s.llmFilter.ReplySpans(ctx, prompt, reply, userSettings.CustomFilterPrompt)
+	prompt = artfilter.Detect(prompt).Mask(prompt, artPlaceholder)
+	llmInput, artMap := textfilter.Collapse(reply, artfilter.Detect(reply).Spans(reply), artPlaceholder)
+	llmSpans, err := s.llmFilter.ReplySpans(ctx, prompt, llmInput, userSettings.CustomFilterPrompt)
 	if err != nil {
 		return nil, err
 	}
-	return textfilter.Merge(s.regexSpans(userSettings, reply), llmSpans), nil
+	return textfilter.Merge(s.regexSpans(userSettings, reply), artMap.MapBack(llmSpans)), nil
 }
 
 // spansAfterPrefix re-bases spans over (prefix+body) onto body alone: it drops

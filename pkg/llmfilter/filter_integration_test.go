@@ -84,10 +84,17 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// newFilter uses the live oai config, or the oai_candidate block when
-// FILTER_CANDIDATE is set, so a candidate model can be scored on the same corpus.
+// newFilter uses the cfg block named by FILTER_PROVIDER (oai, oai_candidate,
+// filter_llm — the last is what production runs), defaulting to oai;
+// FILTER_CANDIDATE=1 is shorthand for oai_candidate.
 func newFilter() *llmfilter.Filter {
 	c := testCfg.OAI
+	switch os.Getenv("FILTER_PROVIDER") {
+	case "oai_candidate":
+		c = testCfg.OAICandidate
+	case "filter_llm":
+		c = testCfg.FilterLLM
+	}
 	if os.Getenv("FILTER_CANDIDATE") != "" {
 		c = testCfg.OAICandidate
 	}

@@ -1,0 +1,36 @@
+<div class="rounded border p-4 {{template "ui-border-clr"}}">
+    <div class="font-bold">Preview: {{ .Rule.RuleText }}</div>
+
+    {{ if .PreviewError }}
+    <div class="pt-2 text-red-600 dark:text-red-400">The rule was saved but could not be matched: {{ .PreviewError }}</div>
+    {{ else if not .Candidates }}
+    <div class="pt-2 opacity-70">Nothing matched. Confirming blocks no emotes.</div>
+    {{ end }}
+
+    <form hx-post="/emotes/{{ .TwitchUserID }}/rules/{{ .Rule.ID }}/confirm" hx-target="#emote_rule_result"
+        hx-on::after-request="if (event.detail.successful) document.body.dispatchEvent(new Event('emote-rules-refresh'))">
+        <div class="pt-2 text-sm opacity-70">
+            Ticked emotes become this rule's block list. Confirming replaces whatever the rule blocked before.
+        </div>
+
+        <div class="flex flex-wrap gap-3 pt-3">
+            {{ range .Candidates }}
+            <label class="flex w-40 cursor-pointer flex-col items-center rounded border p-2 {{template "ui-border-clr"}}">
+                <div class="flex h-16 items-center">
+                    {{ template "emote-image" . }}
+                </div>
+                <div class="break-all pt-1 text-center text-sm font-bold">{{ .Name }}</div>
+                <div class="text-center text-xs opacity-60">{{ .Score }} &middot; {{ .Sources }}</div>
+                <div class="flex items-center pt-2 text-xs">
+                    <input type="checkbox" name="emote_ids" value="{{ .EmoteID }}" class="mr-2 h-4 w-4" checked>
+                    block
+                </div>
+            </label>
+            {{ end }}
+        </div>
+
+        <div class="flex justify-end pt-4">
+            <button class='{{template "button-2"}} px-4 py-2 font-bold'>Confirm</button>
+        </div>
+    </form>
+</div>

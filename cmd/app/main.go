@@ -115,7 +115,7 @@ func main() {
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, logger.WithGroup("api"), connManager, twitchClient, db, s3, ttsHandler, aiHandler, universalHandler, agenticHandler, procService)
+	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ttsHandler, aiHandler, universalHandler, agenticHandler, procService)
 
 	router := api.NewRouter()
 
@@ -217,7 +217,11 @@ func ProcessingLoop(ctx context.Context, logger *slog.Logger, dbObj *db.DB, cm *
 		}
 	}
 
-	logger.Info("got users from db", "users", users)
+	logins := make([]string, 0, len(users))
+	for _, user := range users {
+		logins = append(logins, user.TwitchLogin)
+	}
+	logger.Info("got users from db", "users", logins)
 
 	for _, user := range users {
 		cm.HandleUser(user)

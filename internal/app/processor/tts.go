@@ -12,6 +12,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/ai"
+	"app/pkg/artfilter"
 	"app/pkg/ffmpeg"
 	ttsprocessor "app/pkg/tts_processor"
 	"app/pkg/whisperx"
@@ -188,7 +189,12 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 		textTimings[len(textTimings)-1].End = audioLen
 	}
 
-	words := wordsFromTimings(msg, textTimings, audioLen)
+	// art is spoken but never shown; a masked display text no longer matches
+	// the timings word-for-word, which wordsFromTimings degrades to
+	// interpolation on its own
+	displayMsg := artfilter.Detect(msg).Mask(msg, artPlaceholder)
+
+	words := wordsFromTimings(displayMsg, textTimings, audioLen)
 
 	done := make(chan struct{})
 
@@ -201,14 +207,14 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 
 		trackID := uuid.New()
 
-		eventWriter(trackMetaEvent(msdID, trackID, msg))
+		eventWriter(trackMetaEvent(msdID, trackID, displayMsg))
 
 		audioWriter(chunkFrame(&chunkHeader{
 			MsgID:   msdID.String(),
 			TrackID: trackID.String(),
 			Seq:     0,
 			DurMs:   audioLen.Milliseconds(),
-			Text:    msg,
+			Text:    displayMsg,
 			Words:   words,
 		}, audio))
 

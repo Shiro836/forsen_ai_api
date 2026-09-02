@@ -1,6 +1,6 @@
 <section id="guide" class="w-full min-w-0 pb-10">
     <div class="mb-8 flex items-center justify-between border-b {{template "ui-border-clr"}} pb-6">
-        <h1 class="text-2xl font-bold tracking-wide text-slate-900 dark:text-white">AUDIO SETUP GUIDE</h1>
+        <h1 class="flex items-center gap-3 text-2xl font-bold tracking-wide text-slate-900 dark:text-white"><img class="h-6 w-6 dark:hidden" src="/static/obs-icons/light/audio.svg" alt=""><img class="hidden h-6 w-6 dark:block" src="/static/obs-icons/dark/audio.svg" alt="">AUDIO SETUP GUIDE</h1>
         <div class="rounded-full border {{template "ui-border-clr"}} px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-300">Step {{.Step.Number}} of 6</div>
     </div>
 
@@ -262,6 +262,24 @@
                 </div>
             </div>
             {{end}}
+        </div>
+    </div>
+
+    <div class="mt-10 border-t {{template "ui-border-clr"}} pt-6">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">More guides</h2>
+        <div class="mt-4 grid grid-cols-3 gap-4">
+            <a class="block rounded-lg border {{template "ui-border-clr"}} p-5 hover:border-twitch-dark dark:hover:border-twitch-light" href="/" hx-get="/" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">
+                <span class="flex items-center gap-2 font-bold text-slate-900 dark:text-white"><img class="h-5 w-5" src="/static/obs-icons/obs-logo.svg" alt="">OBS setup</span>
+                <span class="mt-1 block text-sm text-slate-500 dark:text-slate-400">Add the browser source so BAJ AI shows up on stream.</span>
+            </a>
+            <a class="block rounded-lg border {{template "ui-border-clr"}} p-5 hover:border-twitch-dark dark:hover:border-twitch-light" href="/guide/bits" hx-get="/guide/bits" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">
+                <span class="flex items-center gap-2 font-bold text-slate-900 dark:text-white">{{template "bits-icon-lg"}}Bits path<span class="ml-auto animate-sheen rounded-full bg-gradient-to-r from-twitch-dark via-twitch-light to-twitch-dark bg-[length:200%_100%] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">New</span></span>
+                <span class="mt-1 block text-sm text-slate-500 dark:text-slate-400">Let viewers pay Bits for your characters with a Twitch Custom Power-up.</span>
+            </a>
+            <a class="block rounded-lg border {{template "ui-border-clr"}} p-5 hover:border-twitch-dark dark:hover:border-twitch-light" href="/guide/legacy" hx-get="/guide/legacy" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">
+                <span class="block font-bold text-slate-900 dark:text-white">Legacy home</span>
+                <span class="mt-1 block text-sm text-slate-500 dark:text-slate-400">The old home page: quickstart, prompt images, overlay and skip hotkeys.</span>
+            </a>
         </div>
     </div>
 </section>

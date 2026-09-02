@@ -71,3 +71,53 @@ func TestCensor(t *testing.T) {
 		})
 	}
 }
+
+func TestCollapseIdentityWithoutSpans(t *testing.T) {
+	text := "nothing to collapse"
+	got, m := Collapse(text, nil, "(art)")
+	if got != text || m != nil {
+		t.Fatalf("got %q, mapping %v", got, m)
+	}
+	spans := []Span{{2, 5}}
+	if back := m.MapBack(spans); back[0] != spans[0] {
+		t.Errorf("nil mapping must be identity, got %v", back)
+	}
+}
+
+func TestCollapseMapBack(t *testing.T) {
+	// runes:      0123456789...
+	text := "abc ⣿⣿⣿⣿⣿ hate xyz"
+	collapsed, m := Collapse(text, []Span{{4, 9}}, "(art)")
+	if collapsed != "abc (art) hate xyz" {
+		t.Fatalf("collapsed = %q", collapsed)
+	}
+
+	// "hate" in collapsed [10,14) -> original [10,14)
+	back := m.MapBack([]Span{{10, 14}})
+	if len(back) != 1 || back[0].Start != 10 || back[0].End != 14 {
+		t.Errorf("back = %v", back)
+	}
+	if got := Censor(text, back, "(f)"); got != "abc ⣿⣿⣿⣿⣿ (f) xyz" {
+		t.Errorf("censor = %q", got)
+	}
+}
+
+func TestCollapseMapBackThroughPlaceholder(t *testing.T) {
+	text := "aa ⣿⣿⣿ bb"
+	collapsed, m := Collapse(text, []Span{{3, 6}}, "(art)")
+	if collapsed != "aa (art) bb" {
+		t.Fatalf("collapsed = %q", collapsed)
+	}
+
+	// span covering the placeholder expands to the full replaced range
+	back := m.MapBack([]Span{{3, 8}})
+	if len(back) != 1 || back[0].Start != 3 || back[0].End != 6 {
+		t.Errorf("back = %v", back)
+	}
+
+	// span straddling placeholder into trailing text
+	back = m.MapBack([]Span{{3, 11}})
+	if len(back) != 1 || back[0].Start != 3 || back[0].End != 9 {
+		t.Errorf("straddling back = %v", back)
+	}
+}

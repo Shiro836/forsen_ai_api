@@ -1,0 +1,88 @@
+<div class="flex w-full flex-col">
+    <div class="flex items-center pb-8">
+        <div id="emote_queue" hx-get="/emotes/queue" hx-trigger="load, every 15s"></div>
+        {{ template "help-tip" "Progress of the background emote classifier, across every channel.\nAn emote stays plain text on the overlay until it is classified." }}
+    </div>
+
+    {{ if .CanGlobal }}
+    <div class="pb-10">
+        <div class="text-lg font-bold">Global emotes</div>
+        <div class="pb-4 text-sm opacity-70">
+            The 7TV global set, which every channel gets. Approving or banning here applies everywhere.
+        </div>
+
+        <div class="flex w-[36rem] flex-col pb-6">
+            <div class="flex items-center pb-2">
+                <div class="font-bold">Classify a whole emote set</div>
+                {{ template "help-tip" "Paste a 7tv.app /emote-sets/ link, a bare set id, or a twitch.tv channel link.\nEvery emote in the set is queued for classification, which costs GPU time." }}
+            </div>
+            <input type="text" name="set_ref" autocomplete="off" placeholder="https://7tv.app/emote-sets/... or https://twitch.tv/forsen"
+                class='{{template "input-class"}} px-4 py-2'>
+            <div class="flex items-center gap-4 pt-2">
+                <button class='{{template "button-2"}} px-4 py-2 font-bold' hx-post="/emotes/global/enqueue-set"
+                    hx-include="[name='set_ref']" hx-target="#emote_set_result">Classify set</button>
+                <div id="emote_set_result"></div>
+            </div>
+        </div>
+
+        <div class="pb-8">
+            <div class="flex items-center pb-3">
+                <div class="font-bold">Registry</div>
+                {{ template "help-tip" "Searches the classified registry twice: by emote name,\nand by what the picture and description mean.\nVerdicts here are the global ones." }}
+            </div>
+            <input type="text" name="q" autocomplete="off" placeholder="search by name or meaning, e.g. crying anime girl"
+                class='{{template "input-class"}} w-[24rem] px-4 py-2' hx-get="/emotes/global/search"
+                hx-trigger="keyup changed delay:400ms, search" hx-target="#emote_global_search">
+            <div class="pt-3" id="emote_global_search"></div>
+        </div>
+
+        {{ if .IsAdmin }}
+        <div class="pb-8">
+            <div class="flex items-center pb-2">
+                <div class="font-bold">Platform default blocked classes</div>
+                {{ template "help-tip" "What every channel blocks until it changes its own settings.\nChannels that already chose are not affected." }}
+            </div>
+            <form hx-post="/emotes/global/platform-settings" hx-target="#emote_platform_result">
+                {{ template "emote-class-toggles" .PlatformClasses }}
+                <div class="flex items-center gap-4 pt-2">
+                    <button class='{{template "button-2"}} px-4 py-2 font-bold'>Save</button>
+                    <div id="emote_platform_result"></div>
+                </div>
+            </form>
+
+            <div class="flex items-center gap-4 pt-6">
+                <button class='{{template "button-2"}} px-4 py-2' hx-post="/emotes/global/reclassify"
+                    hx-target="#emote_reclassify_result">Reclassify outdated</button>
+                <button class='{{template "button-2"}} px-4 py-2' hx-post="/emotes/global/reclassify"
+                    hx-vals='{"all":"on"}' hx-target="#emote_reclassify_result"
+                    hx-confirm="Re-run the vision model over every classified emote?">Reclassify all</button>
+                <div id="emote_reclassify_result"></div>
+            </div>
+        </div>
+        {{ end }}
+
+        <div class="pb-2 font-bold">7TV global set</div>
+        <div id="emote_global_set" hx-get="/emotes/global/set" hx-trigger="load">
+            <div class="opacity-70">Loading the 7TV global set...</div>
+        </div>
+    </div>
+    {{ end }}
+
+    <div class="text-lg font-bold">Channels</div>
+    {{ if not .Panels }}
+    <div class="pt-2 opacity-70">You don't have a channel to manage here.</div>
+    {{ else }}
+    <div class="flex flex-col">
+        {{ range .Panels }}
+        <div class="flex pt-2">
+            <div class="flex flex-col items-center pr-6">
+                <div class="font-bold">{{ .TwitchLogin }}</div>
+            </div>
+            <button class='{{template "button-2"}} w-full px-8 py-1 font-bold' hx-get="/emotes/{{ .TwitchUserID }}"
+                hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
+                hx-sync="#tabs:abort">Open</button>
+        </div>
+        {{ end }}
+    </div>
+    {{ end }}
+</div>

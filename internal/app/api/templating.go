@@ -45,6 +45,13 @@ func getHtml(templateName string, data any) template.HTML {
 	return template.HTML(getString(templateName, data))
 }
 
+// submitTab writes a fragment wrapped as the #tab-content element. Forms that
+// swap the tab with outerHTML must get this back, or the id disappears and
+// every later tab navigation has no target.
+func submitTab(w http.ResponseWriter, templateName string, data any) {
+	_ = html.ExecuteTemplate(w, "tab-content", getHtml(templateName, data))
+}
+
 type page struct {
 	Title        string
 	Content      template.HTML

@@ -16,6 +16,10 @@
 // in the same conversation rather than guessing at a repair. A target it cannot
 // echo at all falls back to listing the offending substrings, which are located
 // locally; an unusable answer there still fails.
+//
+// A target in a script the model cannot sound out (Han, kana) is preceded by a
+// romanized SPOKEN FORM, so text that is innocent on the page but voiced as a
+// slur by the TTS engine ("你可" spoken as "ni ke") can still be caught.
 package llmfilter
 
 import (
@@ -26,6 +30,8 @@ import (
 
 	"app/pkg/llm"
 	"app/pkg/textfilter"
+
+	"github.com/mozillazg/go-unidecode"
 )
 
 const (
@@ -242,14 +248,41 @@ Output: 1937年12月，日军攻占南京后进行了大规模屠杀，数十万
 // call. custom holds the streamer's extra filtering instructions ("" for
 // built-in policy only).
 func (f *Filter) Spans(ctx context.Context, text, custom string) ([]textfilter.Span, error) {
-	return f.run(ctx, text, "TARGET:\n"+text, custom)
+	return f.run(ctx, text, spokenForm(text)+"TARGET:\n"+text, custom)
 }
 
 // ReplySpans annotates reply, using prompt as context to resolve who the reply
 // is about, and returns spans over reply only. custom holds the streamer's
 // extra filtering instructions ("" for built-in policy only).
 func (f *Filter) ReplySpans(ctx context.Context, prompt, reply, custom string) ([]textfilter.Span, error) {
-	return f.run(ctx, reply, "CONTEXT — a viewer asked: "+prompt+"\n\nTARGET:\n"+reply, custom)
+	return f.run(ctx, reply, "CONTEXT — a viewer asked: "+prompt+"\n\n"+spokenForm(reply)+"TARGET:\n"+reply, custom)
+}
+
+// spokenForm returns the SPOKEN FORM block for a target the model cannot sound
+// out, or "" when it can. The hint is worth its cost only where both hold:
+// the script is one the TTS engine voices (measured: Han and kana; Greek,
+// Arabic, Hebrew and hangul come out mangled or skipped, so nothing in them
+// can land as a slur) and the model cannot read it phonetically (Latin
+// respellings and Cyrillic it already hears — measured on the corpus, a spoken
+// form for those only dilutes its judgment).
+func spokenForm(text string) string {
+	hinted := false
+	for _, r := range text {
+		if hintedScript(r) {
+			hinted = true
+			break
+		}
+	}
+	if !hinted {
+		return ""
+	}
+	return "SPOKEN FORM — how text-to-speech will voice the TARGET below, its Chinese/Japanese characters romanized. Judge those characters by their sound as well as their meaning: characters that are innocent on the page but are voiced as a slur are tagged in the TARGET; characters that merely read oddly romanized are not.\n" + strings.TrimSpace(unidecode.Unidecode(text)) + "\n\n"
+}
+
+func hintedScript(r rune) bool {
+	return (r >= 0x4E00 && r <= 0x9FFF) || // CJK unified ideographs
+		(r >= 0x3400 && r <= 0x4DBF) || // CJK extension A
+		(r >= 0x3040 && r <= 0x30FF) // hiragana, katakana
 }
 
 // run executes the built-in policy pass and, when custom rules exist, the

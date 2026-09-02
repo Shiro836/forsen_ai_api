@@ -99,8 +99,25 @@ services:
     networks:
       - forsen
 
+  emote-postgres:
+    image: pgvector/pgvector:pg17
+    user: root
+    cpus: "2"
+    ports:
+      - 6445:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /data/postgres
+    volumes:
+      - emote-pg-data:/data/postgres
+    restart: unless-stopped
+    networks:
+      - forsen
+
 volumes:
   pg-data:
+  emote-pg-data:
   grafana-data-1:
   grafana-data-2:
   influxdb-data:

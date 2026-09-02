@@ -1,0 +1,25 @@
+<div>
+    {{ if not .Cards }}
+    <div class="opacity-70">No emote names match {{ if .Query }}"{{ .Query }}"{{ else }}this search{{ end }}.</div>
+    {{ else }}
+    <div class="pb-3 text-sm opacity-70">{{ len .Cards }} emotes matching by name</div>
+    {{ template "emote-card-grid" .Cards }}
+    {{ end }}
+
+    {{ if .Query }}
+    <div class="pt-8">
+        <div class="flex items-center pb-3">
+            <div class="text-sm font-bold">Contextual matches</div>
+            {{ template "help-tip" "Emotes whose picture or description means something like your search,\neven when the name does not contain it. Ranked by similarity, no cutoff." }}
+        </div>
+
+        {{ if .ContextualErr }}
+        <div class="text-sm text-red-600 dark:text-red-400">Contextual search is unavailable: {{ .ContextualErr }}</div>
+        {{ else if not .Contextual }}
+        <div class="text-sm opacity-70">Nothing else came close.</div>
+        {{ else }}
+        {{ template "emote-card-grid" .Contextual }}
+        {{ end }}
+    </div>
+    {{ end }}
+</div>

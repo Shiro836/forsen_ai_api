@@ -4,6 +4,7 @@ import (
 	"app/db"
 	"app/pkg/ctxstore"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -120,7 +121,7 @@ func (api *API) rewardChoose(r *http.Request) template.HTML {
 func (api *API) rewardNew(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusUnauthorized,
 			ErrorMessage: "not authorized",
 		})
@@ -130,7 +131,7 @@ func (api *API) rewardNew(w http.ResponseWriter, r *http.Request) {
 	characterIDStr := chi.URLParam(r, "character_id")
 	characterID, err := uuid.Parse(characterIDStr)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusBadRequest,
 			ErrorMessage: "{character_id} is not valid uuid: " + err.Error(),
 		})
@@ -138,7 +139,7 @@ func (api *API) rewardNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:     characterID,
 			CharacterName:   "Unknown character",
 			RewardType:      "tts",
@@ -154,7 +155,7 @@ func (api *API) rewardNew(w http.ResponseWriter, r *http.Request) {
 	}
 	rewardType, rtStr, rtLabel, err := parseRewardTypeStr(rtIn)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:     characterID,
 			CharacterName:   "Unknown character",
 			RewardType:      "tts",
@@ -166,7 +167,7 @@ func (api *API) rewardNew(w http.ResponseWriter, r *http.Request) {
 
 	char, err := api.db.GetCharCardByID(r.Context(), user.ID, characterID)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:     characterID,
 			CharacterName:   "Unknown character",
 			RewardType:      rtStr,
@@ -177,7 +178,7 @@ func (api *API) rewardNew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := api.createRewardAndUpsert(r.Context(), user, &characterID, char.Name, rewardType, ""); err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:     characterID,
 			CharacterName:   char.Name,
 			RewardType:      rtStr,
@@ -194,7 +195,7 @@ func (api *API) rewardNew(w http.ResponseWriter, r *http.Request) {
 func (api *API) rewardExisting(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusUnauthorized,
 			ErrorMessage: "not authorized",
 		})
@@ -204,7 +205,7 @@ func (api *API) rewardExisting(w http.ResponseWriter, r *http.Request) {
 	characterIDStr := chi.URLParam(r, "character_id")
 	characterID, err := uuid.Parse(characterIDStr)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusBadRequest,
 			ErrorMessage: "{character_id} is not valid uuid: " + err.Error(),
 		})
@@ -212,7 +213,7 @@ func (api *API) rewardExisting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:     characterID,
 			CharacterName:   "Unknown character",
 			RewardType:      "tts",
@@ -228,7 +229,7 @@ func (api *API) rewardExisting(w http.ResponseWriter, r *http.Request) {
 	}
 	rewardType, rtStr, rtLabel, err := parseRewardTypeStr(rtIn)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:     characterID,
 			CharacterName:   "Unknown character",
 			RewardType:      "tts",
@@ -245,7 +246,7 @@ func (api *API) rewardExisting(w http.ResponseWriter, r *http.Request) {
 		if char != nil {
 			charName = char.Name
 		}
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:      characterID,
 			CharacterName:    charName,
 			RewardType:       rtStr,
@@ -258,7 +259,7 @@ func (api *API) rewardExisting(w http.ResponseWriter, r *http.Request) {
 
 	char, err := api.db.GetCharCardByID(r.Context(), user.ID, characterID)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:      characterID,
 			CharacterName:    "Unknown character",
 			RewardType:       rtStr,
@@ -270,7 +271,7 @@ func (api *API) rewardExisting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := api.db.UpsertTwitchReward(r.Context(), user.ID, &characterID, existingID, rewardType); err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose.html", &rewardChooseData{
+		submitTab(w, "reward_choose.html", &rewardChooseData{
 			CharacterID:      characterID,
 			CharacterName:    char.Name,
 			RewardType:       rtStr,
@@ -300,22 +301,19 @@ func (api *API) createReward(ctx context.Context, w http.ResponseWriter, user *d
 }
 
 func (api *API) createRewardAndUpsert(ctx context.Context, user *db.User, cardID *uuid.UUID, titlePrefix string, rewardType db.TwitchRewardType, prompt string) error {
-	client, err := api.twitchClient.NewHelixClient(user.TwitchAccessToken, user.TwitchRefreshToken)
+	client, err := api.helixForUser(ctx, user)
 	if err != nil {
-		return fmt.Errorf("create helix client: %w", err)
-	}
-
-	if prompt == "" {
-		prompt = ""
+		return err
 	}
 
 	if len(titlePrefix) > 0 {
 		titlePrefix = titlePrefix + " "
 	}
+	title := titlePrefix + rewardType.String()
 
 	resp, err := client.CreateCustomReward(&helix.ChannelCustomRewardsParams{
 		BroadcasterID:                     strconv.Itoa(user.TwitchUserID),
-		Title:                             titlePrefix + rewardType.String(),
+		Title:                             title,
 		Cost:                              10,
 		Prompt:                            prompt,
 		IsEnabled:                         true,
@@ -323,22 +321,56 @@ func (api *API) createRewardAndUpsert(ctx context.Context, user *db.User, cardID
 		IsUserInputRequired:               true,
 		ShouldRedemptionsSkipRequestQueue: false,
 	})
-	if err != nil {
-		return fmt.Errorf("helix - create custom reward: %w", err)
-	}
-
-	if len(resp.Data.ChannelCustomRewards) == 0 {
-		return fmt.Errorf("helix - create custom reward: no custom reward created (%s, %s)", resp.Error, resp.ErrorMessage)
+	if err != nil || len(resp.Data.ChannelCustomRewards) == 0 {
+		return api.rewardCreateError(user, title, resp, err)
 	}
 
 	rewardID := resp.Data.ChannelCustomRewards[0].ID
+	api.logger.Info("twitch custom reward created", "user", user.TwitchLogin, "title", title, "reward_id", rewardID)
 
 	switch rewardType {
 	case db.TwitchRewardUniversalTTS:
-		return api.db.UpsertUniversalTTSReward(ctx, user.ID, rewardID)
+		err = api.db.UpsertUniversalTTSReward(ctx, user.ID, rewardID)
 	case db.TwitchRewardAgentic:
-		return api.db.UpsertAgenticReward(ctx, user.ID, rewardID)
+		err = api.db.UpsertAgenticReward(ctx, user.ID, rewardID)
 	default:
-		return api.db.UpsertTwitchReward(ctx, user.ID, cardID, rewardID, rewardType)
+		err = api.db.UpsertTwitchReward(ctx, user.ID, cardID, rewardID, rewardType)
 	}
+	if err != nil {
+		api.logger.Error("failed to store created reward", "user", user.TwitchLogin, "reward_id", rewardID, "err", err)
+		return fmt.Errorf("the reward %q was created on Twitch but saving it failed: %w", title, err)
+	}
+
+	return nil
+}
+
+// rewardCreateError logs the raw Twitch failure and returns the message the
+// streamer sees. Twitch's own wording is kept only for cases not mapped here.
+func (api *API) rewardCreateError(user *db.User, title string, resp *helix.ChannelCustomRewardResponse, err error) error {
+	logger := api.logger.With("user", user.TwitchLogin, "twitch_user_id", user.TwitchUserID, "title", title)
+
+	if err != nil {
+		logger.Error("twitch create custom reward failed", "err", err)
+		return errors.New("Twitch returned an unexpected response while creating the reward. Try again; if it keeps failing, log out and log in with Twitch again.")
+	}
+
+	logger.Error("twitch refused to create custom reward", "status", resp.StatusCode, "twitch_error", resp.Error, "twitch_message", resp.ErrorMessage)
+
+	msg := strings.ToLower(resp.ErrorMessage)
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized:
+		return errors.New("Twitch no longer accepts this login. Log out and log in with Twitch again.")
+	case strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique"):
+		return fmt.Errorf("A reward named %q already exists on your channel. Delete it in the Twitch dashboard, or link it with \"Use existing reward\".", title)
+	case strings.Contains(msg, "maximum"):
+		return errors.New("Your channel already has 50 custom rewards, which is Twitch's limit. Delete unused rewards in the Twitch dashboard and try again.")
+	case resp.StatusCode == http.StatusForbidden:
+		return errors.New("Channel Points are not available on this channel. Twitch only enables them for Affiliates and Partners.")
+	}
+
+	if resp.ErrorMessage == "" {
+		return fmt.Errorf("Twitch returned an unexpected response (HTTP %d) while creating the reward. Try again in a minute.", resp.StatusCode)
+	}
+
+	return fmt.Errorf("Twitch refused to create the reward (%d %s): %s", resp.StatusCode, resp.Error, resp.ErrorMessage)
 }

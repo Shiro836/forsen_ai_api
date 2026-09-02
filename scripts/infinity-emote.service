@@ -1,0 +1,35 @@
+[Unit]
+Description=Infinity embedding server (jina-clip-v2) for emote rule matching
+After=network.target
+
+[Service]
+Type=simple
+# The vision tower ignores --device cpu and allocates on the GPU, which the
+# 27B character model already fills; hiding the device is the only thing that
+# keeps it off the 4090.
+Environment=CUDA_VISIBLE_DEVICES=
+Environment=PYTHONUNBUFFERED=1
+# jina-clip-v2 ships its own modelling code, so --trust-remote-code is required
+# or the model will not load. Its 1024 dimensions must match the vector(N)
+# columns in migration 002.
+#
+# The first start downloads the weights into ~/.cache/huggingface and will take
+# considerably longer than a warm one; after that, expect ~170s before the port
+# opens, which is torch compiling the warmup batch.
+ExecStart=/home/forsen/.venvs/infinity/bin/infinity_emb v2 \
+  --model-id jinaai/jina-clip-v2 \
+  --trust-remote-code \
+  --device cpu \
+  --engine torch \
+  --port 7997 \
+  --batch-size 32
+WorkingDirectory=/home/forsen
+Restart=always
+RestartSec=10
+TimeoutStartSec=600
+
+User=forsen
+Group=forsen
+
+[Install]
+WantedBy=multi-user.target

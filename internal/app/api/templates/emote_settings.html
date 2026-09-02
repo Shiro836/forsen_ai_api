@@ -1,0 +1,34 @@
+{{ define "emote-class-toggles" }}
+{{ range . }}
+<label for="class_{{ .Class }}" class="flex cursor-pointer items-center pb-2">
+    <input type="checkbox" id="class_{{ .Class }}" name="classes" value="{{ .Class }}" class="mr-2 h-4 w-4" {{ if .Blocked }}checked{{ end }}>
+    {{ .Label }}
+</label>
+{{ end }}
+{{ end }}
+
+{{ define "emote-channel-settings" }}
+<div id="emote_settings" class="flex w-[28rem] flex-col">
+    <div class="flex items-center pb-2">
+        <div class="font-bold">Blocked content classes</div>
+        {{ template "help-tip" "A blocked class means an emote the classifier put in that class is not rendered on the overlay.\nChanging anything here stops inheriting the platform default." }}
+    </div>
+
+    {{ if .Inherited }}
+    <div class="pb-2 text-sm opacity-70">Inherited from the platform default. Saving makes these this channel's own.</div>
+    {{ end }}
+
+    <form hx-post="/emotes/{{ .TwitchUserID }}/settings" hx-target="#emote_settings_result">
+        {{ template "emote-class-toggles" .Classes }}
+        <div class="flex items-center gap-4 pt-2">
+            <button class='{{template "button-2"}} px-4 py-2 font-bold'>Save</button>
+            <button type="button" class='{{template "button-2"}} px-4 py-2'
+                hx-post="/emotes/{{ .TwitchUserID }}/settings/reset" hx-target="#emote_settings"
+                hx-swap="outerHTML">Reset to default</button>
+            <div id="emote_settings_result"></div>
+        </div>
+    </form>
+</div>
+{{ end }}
+
+{{ template "emote-channel-settings" . }}

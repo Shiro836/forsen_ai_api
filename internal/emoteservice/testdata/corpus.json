@@ -1,0 +1,638 @@
+{
+ "note": "Labeled cases for the emote classifier. expected_classes is what Classify must return: the vision taxonomy only. The flashing class never appears here, since the photometric measure owns it and Classify strips it. Advisory cases are reported but do not fail the run: their imagery is genuinely ambiguous and the model's reading of it moves between runs.",
+ "cases": [
+  {
+   "provider": "7tv",
+   "emote_id": "01F6ME8MDG0005TFYTWP1H854D",
+   "name": "TeaTime",
+   "expected_classes": [],
+   "note": "teapot pouring an arc of tea; v5 called it fluids because the definition matched liquid arcs rather than bodily origin",
+   "origin": "user report 2026-08-30"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01HM4P26CR000449DZBT4FVMA5",
+   "name": "TeaTime",
+   "expected_classes": [],
+   "note": "teacup variant of the same bug",
+   "origin": "user report 2026-08-30"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01HG6Y72F8000FJRWE4BF2NQR5",
+   "name": "forsenTeaTime",
+   "expected_classes": [],
+   "note": "sipping from a mug: a drink is never a bodily fluid",
+   "origin": "user report 2026-08-30"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FX1BNAN0000C51Q9M9GQNHF1",
+   "name": "forsenBuild",
+   "expected_classes": [
+    "violence"
+   ],
+   "note": "sets his own beard on fire; the gore-only violence wording let self-harm through",
+   "origin": "user report v4"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01G3WEGZN0000ET2J0MQP5YJ0G",
+   "name": "GAMBA",
+   "expected_classes": [
+    "gambling"
+   ],
+   "note": "slot machine landing a jackpot: the case the gambling class was added for",
+   "origin": "user report v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F60Q1HAG0008KDXA2TJRZ3MG",
+   "name": "PEEPEES",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "peepo urinating a yellow puddle: the case the fluids class was added for",
+   "origin": "user report v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6NFSS7R00044EM07K5FVN5M",
+   "name": "forsenCoomer",
+   "expected_classes": [
+    "sexual"
+   ],
+   "note": "name plainly refers to arousal; the name-semantics case",
+   "origin": "user report v3"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01J6KB8SBG00095HSJ1PN3XDPF",
+   "name": "forsenCream",
+   "expected_classes": [
+    "cum"
+   ],
+   "note": "the canonical cum-class positive",
+   "origin": "adr"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01JHKEAEMJ1W0KKVNCFBDQFHCW",
+   "name": "amongPe",
+   "expected_classes": [],
+   "note": "failed to parse under json_object mode until json_schema was enforced",
+   "origin": "user report"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6X7QPZG000A39QC6BXD9T9B",
+   "name": "PissTime",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "a yellow arc that is plainly urination; the arc is bodily by name and context, unlike TeaTime",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01J3GGWZQG0009E34PA37B0F8E",
+   "name": "ForsenPuke",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "actually vomits, unlike the anime forsenPuke* emotes",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01HAAZJ2N8000EY75ATHMF73ZK",
+   "name": "drool",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "emoji drooling",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01H1M30Z100005DBYT6M85RC4X",
+   "name": "Delusional",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "drooling pepe",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01HBDRYHZR000D2TB3512PR74J",
+   "name": "guraLicka",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "tongue-out lick",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FWKAN8AR0007HXQ5EXHFKEZJ",
+   "name": "LICKA",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "dog licking the camera lens",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01J2CYN66R000C1PVMGMT2W05H",
+   "name": "forsenPee",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "sweat drops from the forehead; the unambiguous sweat anchor",
+   "origin": "round v5 tears"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6NMEF1R000AAS5FM9QEG8S3",
+   "name": "monkaSTEER",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "monkaS sweat bead while steering: stylized sweat counts, per the tears round. Advisory because the FIRST pass only perceives the bead about one run in three (measured 1/3 with this wording, 0/3 under each of three narrowed ones, and the expectation is not relabelled). Whenever it does get asked, the liquid pass names it sweat and keeps the class - so this is pass-1 recall on a two-pixel droplet, not an adjudication failure.",
+   "origin": "live sweep v5",
+   "advisory": true
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01GKKFJ0ZG0007JR5RMB3R3E2G",
+   "name": "bocchiCry",
+   "expected_classes": [],
+   "note": "teary anime face; tears are not fluids",
+   "origin": "round v5 tears"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FEZQXMR80001SMD8F5EQXZ7S",
+   "name": "NOOOYOUCANT",
+   "expected_classes": [],
+   "note": "crying pepe",
+   "origin": "round v5 tears"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01G1R0MY200008Z64HYDVD51JN",
+   "name": "OHNYOO",
+   "expected_classes": [],
+   "note": "king crying large blue tears: the case the inline carve-out could not hold",
+   "origin": "round v5 tears"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FJT4K8H8000FZHS49NWQT5E7",
+   "name": "GAMBAADDICT",
+   "expected_classes": [
+    "gambling"
+   ],
+   "note": "crying while pulling a slot lever: gambling yes, tears no",
+   "origin": "round v5 tears"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01JYST9CAK73E9YXQFDJVRK26H",
+   "name": "pissE",
+   "expected_classes": [],
+   "note": "an unimpressed face; the name carries no fluid",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01HQWWYHAR000FRJCM2YE8W4JB",
+   "name": "forsenPissed",
+   "expected_classes": [],
+   "note": "angry face",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01H1VHNH4R0000RZ6N0QXF5SZP",
+   "name": "PISSED",
+   "expected_classes": [],
+   "note": "grumpy cat",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01G3X1VHK8000576R8TFCGGGGQ",
+   "name": "forsenPuke2",
+   "expected_classes": [],
+   "note": "anime face, no vomit despite the name",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01G3X1WEWR0000CYEX22PC5C1P",
+   "name": "forsenPuke5",
+   "expected_classes": [],
+   "note": "anime face, no vomit despite the name",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01J407W3NR0008XRFEW2M3JEE7",
+   "name": "forsenGambia",
+   "expected_classes": [],
+   "note": "the flag of Gambia: a name that merely contains gamb-",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FCPM2178000FA9SJTT9E2S3N",
+   "name": "Gambage",
+   "expected_classes": [],
+   "note": "praying pepe; the name alludes to gambling but no imagery does",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01KHS48S5SFSK9PNDJ1EQ7R5CN",
+   "name": "GAMBA",
+   "expected_classes": [],
+   "note": "chibi anime girl bobbing; name only",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01J738BXRG0003R88FPG3R0JWR",
+   "name": "bbGun",
+   "expected_classes": [
+    "violence"
+   ],
+   "note": "dog pointing a handgun at the viewer; lost when the first v5 wording narrowed to self-directed acts",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6Z67YSG000ECP2WY4CZ9WEG",
+   "name": "CatGun",
+   "expected_classes": [
+    "violence"
+   ],
+   "note": "revolver held to a cat's head",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01JX5VHAZT0ZTRMJFEVAQV38SQ",
+   "name": "BetterKillYourself",
+   "expected_classes": [
+    "violence"
+   ],
+   "note": "text urging suicide",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FA1TH4W8000CBKVRMD7ZG2VG",
+   "name": "forsenGaGun",
+   "expected_classes": [
+    "violence"
+   ],
+   "note": "gun to his own head: the self-harm case that already worked",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01GAFNCA20000AQMYNHFY4X40E",
+   "name": "forsenKnife",
+   "expected_classes": [
+    "violence"
+   ],
+   "note": "a held kitchen knife; newly flagged by the weapon clause, kept deliberately",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F71TBBSG000DNB9RV7R83JG9",
+   "name": "BONKTHEMODS",
+   "expected_classes": [],
+   "note": "hammer bonk",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FAH3YB2R0007R9RAKNBCQEGQ",
+   "name": "BONKTHESTREAMER",
+   "expected_classes": [],
+   "note": "hammer bonk",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FWZPZFCG0007HXQ5EXHFM257",
+   "name": "Bonk",
+   "expected_classes": [],
+   "note": "anime girl with a bat",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01H95Y6NZ80006Z3G8578DF9KE",
+   "name": "BONKS",
+   "expected_classes": [],
+   "note": "witch slapping",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FT4EHG1G0001M6SADSSJAA2D",
+   "name": "BONK",
+   "expected_classes": [],
+   "note": "bonk",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01HMBZSBD00004EWJWE421Y80X",
+   "name": "catSlap",
+   "expected_classes": [],
+   "note": "cat slapping",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01J6ZD2NQ0000EYP9HFG8ZT307",
+   "name": "forsenHammer",
+   "expected_classes": [],
+   "note": "swinging a hammer",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01GV708T980004R8PX49VQ1ANH",
+   "name": "forsenPunch",
+   "expected_classes": [],
+   "note": "throwing a punch",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01GZW3ASNG000ECD7WW9QYYXWH",
+   "name": "forsenPunching",
+   "expected_classes": [],
+   "note": "throwing punches",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F7CPC0V00001E5V6CCCX0Z05",
+   "name": "ForsenOverkill",
+   "expected_classes": [],
+   "note": "manic grin, no violence shown",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FHZJ3XX8000EFPWVER1MD8PT",
+   "name": "catPunchU",
+   "expected_classes": [],
+   "note": "cat punching the camera",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FT3RZ4800001M6SADSSJA5P0",
+   "name": "docSmoke",
+   "expected_classes": [
+    "drugs"
+   ],
+   "note": "lighting a cigarette",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01J6RM18S80003R88FPG3QZVZQ",
+   "name": "forsenSmoke",
+   "expected_classes": [
+    "drugs"
+   ],
+   "note": "exhaling smoke",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01H9GMTYDG00073MMENCK3V3Z2",
+   "name": "elliotsmoke",
+   "expected_classes": [
+    "drugs"
+   ],
+   "note": "smoking in bed",
+   "origin": "live registry v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6ME9FRG0005TFYTWP1H8R42",
+   "name": "catJam",
+   "expected_classes": [],
+   "note": "head-bobbing cat",
+   "origin": "round v4"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6MZGCNG000255K4X1K7NTHR",
+   "name": "GIGACHAD",
+   "expected_classes": [],
+   "note": "flexing meme",
+   "origin": "round v4"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6NACCD80006SZ7ZW5FMWKWK",
+   "name": "Prayge",
+   "expected_classes": [],
+   "note": "praying pepe",
+   "origin": "round v4"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01GEW3G2M0000EVQAMFX8JF2GK",
+   "name": "forsenBuild",
+   "expected_classes": [],
+   "note": "hard hat variant: same name as the beard-fire emote, nothing in the pixels",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01HVYHHS9R0003S49WDMY4KTFT",
+   "name": "forsenBuild",
+   "expected_classes": [],
+   "note": "crate icon variant",
+   "origin": "round v5"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6NPEJT0000B70V1XA8MNBC9",
+   "name": "popCat",
+   "expected_classes": [],
+   "note": "mouth open and closed",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6MCJ5880009K1N00D4MGFX3",
+   "name": "HYPERCLAP",
+   "expected_classes": [],
+   "note": "two-frame clap",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6MM8D4G00012ZP6HJJF1N1B",
+   "name": "OMEGADANCEBUTFAST",
+   "expected_classes": [],
+   "note": "fast dance loop; the vision model's only ever flashing label, now the measure's call",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F778KGA80005TDSTZFB2V45J",
+   "name": "Sussy",
+   "expected_classes": [],
+   "note": "amongus spinning",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F63S8FHG000C5JJ7RZAXN6F1",
+   "name": "BLANKIES",
+   "expected_classes": [],
+   "note": "pepe blinking",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FC4W70J80005D6HG0ANTP023",
+   "name": "AAAA",
+   "expected_classes": [],
+   "note": "screaming cat",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6QA9RJ000015Y8FNQBDBNQ4",
+   "name": "HAHAHA",
+   "expected_classes": [],
+   "note": "crying-laughing emoji shaking",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6NHAQMR00015NVG2J8J00CX",
+   "name": "Amogus",
+   "expected_classes": [],
+   "note": "amongus loop",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6NHR88G000AAS5FM9Q407NB",
+   "name": "PETTHEPEEPO",
+   "expected_classes": [],
+   "note": "petting loop",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F181W75G000BN42J006MA1JN",
+   "name": "ElNoSabe",
+   "expected_classes": [],
+   "note": "two-pose alternation; flagged flashing by the measure, nothing for the model",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6TDT0280005G9TG05W2BXMB",
+   "name": "PartyKirby",
+   "expected_classes": [],
+   "note": "hue-cycling kirby",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FET023A8000C9XXF2H0G0AQF",
+   "name": "om",
+   "expected_classes": [],
+   "note": "sprite doubling in size",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01H9JADJJR0008QVVK15MGJ4NY",
+   "name": "clappi",
+   "expected_classes": [],
+   "note": "clapping cat",
+   "origin": "flash round"
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01HM2BC4YG0006W6M5RKQ7NX2H",
+   "name": "cogsetPISS",
+   "expected_classes": [],
+   "note": "a held blue object; v4 read a water bottle, v5 a phallic prop. Perception flips between runs",
+   "origin": "round v5",
+   "advisory": true
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01H52XRW5G000A8GRNYWPDK7TT",
+   "name": "30Joy",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "large blue droplets beside a strained smile; reads as sweat or as tears depending on the run",
+   "origin": "round v5 tears",
+   "advisory": true
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6ME7ADR0000WDA7ERT9H30R",
+   "name": "COPIUM",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "pumping a container; the liquid reads as sweat, as tears, or as the cream trope between runs",
+   "origin": "round v5 tears",
+   "advisory": true
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FYKZKWMG0005NQQFR8W3ZQFJ",
+   "name": "koklick",
+   "expected_classes": [],
+   "note": "cat grooming; the name reads as an innuendo about half the time",
+   "origin": "round v5",
+   "advisory": true
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01F6SBCPVG00074VGGPSJERR42",
+   "name": "borpaLick",
+   "expected_classes": [
+    "fluids"
+   ],
+   "note": "tongue-out lick, also read as sexual innuendo from the name",
+   "origin": "round v5",
+   "advisory": true
+  },
+  {
+   "provider": "7tv",
+   "emote_id": "01FJT4HEXG000FZHS49NWQT5DZ",
+   "name": "GAMBA",
+   "expected_classes": [],
+   "note": "pepe holding an object described differently every run",
+   "origin": "round v5",
+   "advisory": true
+  }
+ ]
+}

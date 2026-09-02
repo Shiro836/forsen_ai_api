@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"app/pkg/textfilter"
+	"app/pkg/tools"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -328,4 +330,69 @@ func (db *DB) GetMessageUpdates(ctx context.Context, userID uuid.UUID, updated i
 	}
 
 	return messages, nil
+}
+
+// UnboundRewardID is a custom reward id seen in a user's ingested messages that
+// no reward_buttons row binds to a character or special reward. SeenAt is the
+// arrival time of the newest message carrying that id.
+type UnboundRewardID struct {
+	RewardID string
+	Message  string
+	SeenAt   time.Time
+}
+
+// GetUnboundRewardIDs returns the user's most recently seen unbound reward ids,
+// newest first, one row per distinct id.
+func (db *DB) GetUnboundRewardIDs(ctx context.Context, userID uuid.UUID, limit int) ([]*UnboundRewardID, error) {
+	rows, err := db.Query(ctx, `
+		select
+			reward_id,
+			message,
+			id
+		from (
+			select distinct on (mq.msg->>'reward_id')
+				mq.msg->>'reward_id' as reward_id,
+				coalesce(mq.msg->>'message', '') as message,
+				mq.id as id
+			from
+				msg_queue mq
+			where
+				mq.user_id = $1
+			and
+				coalesce(mq.msg->>'reward_id', '') != ''
+			and not exists (
+				select 1
+				from reward_buttons rb
+				where rb.twitch_reward_id = mq.msg->>'reward_id'
+			)
+			order by mq.msg->>'reward_id', mq.id desc
+		) latest
+		order by id desc
+		limit $2
+	`, userID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unbound reward ids: %w", err)
+	}
+	defer rows.Close()
+
+	unbound := make([]*UnboundRewardID, 0, limit)
+	for rows.Next() {
+		var (
+			msgID  uuid.UUID
+			reward UnboundRewardID
+		)
+
+		if err := rows.Scan(&reward.RewardID, &reward.Message, &msgID); err != nil {
+			return nil, fmt.Errorf("failed to scan unbound reward id: %w", err)
+		}
+
+		reward.SeenAt = tools.UUIDToTime(msgID)
+
+		unbound = append(unbound, &reward)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to get unbound reward ids: %w", err)
+	}
+
+	return unbound, nil
 }

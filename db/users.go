@@ -60,6 +60,19 @@ func (db *DB) UpsertUser(ctx context.Context, user *User) (uuid.UUID, error) {
 	return id, nil
 }
 
+func (db *DB) UpdateUserTokens(ctx context.Context, userID uuid.UUID, accessToken, refreshToken string) error {
+	_, err := db.Exec(ctx, `
+		UPDATE users
+		SET twitch_access_token = $2, twitch_refresh_token = $3
+		WHERE id = $1
+	`, userID, accessToken, refreshToken)
+	if err != nil {
+		return fmt.Errorf("update user tokens: %w", err)
+	}
+
+	return nil
+}
+
 func (db *DB) GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error) {
 	var user User
 

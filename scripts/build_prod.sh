@@ -38,4 +38,11 @@ echo "Building $PKG_PATH_CLANKER -> $OUT_BIN_CLANKER"
 GO111MODULE=on CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" \
   go build -trimpath -ldflags "-s -w" -o "$OUT_BIN_CLANKER" "$PKG_PATH_CLANKER"
 
-echo "Done: $OUT_BIN, $OUT_BIN_INGEST, $OUT_BIN_CLANKER"
+OUT_BIN_EMOTE="$REPO_ROOT/emote-service"
+PKG_PATH_EMOTE="./cmd/emote-service"
+
+echo "Building $PKG_PATH_EMOTE -> $OUT_BIN_EMOTE"
+GO111MODULE=on CGO_ENABLED="$CGO_ENABLED" GOOS="$GOOS" GOARCH="$GOARCH" \
+  go build -trimpath -ldflags "-s -w" -o "$OUT_BIN_EMOTE" "$PKG_PATH_EMOTE"
+
+echo "Done: $OUT_BIN, $OUT_BIN_INGEST, $OUT_BIN_CLANKER, $OUT_BIN_EMOTE"

@@ -584,7 +584,7 @@ func (api *API) voicesPublic(r *http.Request) template.HTML {
 func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusUnauthorized,
 			ErrorMessage: "not authorized",
 		})
@@ -594,7 +594,7 @@ func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {
 	prompt := "Voices: " + r.Host + "/voices"
 
 	if err := api.createRewardAndUpsert(r.Context(), user, nil, "", db.TwitchRewardUniversalTTS, prompt); err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
 			ErrorMessage: err.Error(),
 		})
@@ -608,7 +608,7 @@ func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {
 func (api *API) agenticReward(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusUnauthorized,
 			ErrorMessage: "not authorized",
 		})
@@ -616,7 +616,7 @@ func (api *API) agenticReward(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := api.createRewardAndUpsert(r.Context(), user, nil, "", db.TwitchRewardAgentic, ""); err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusInternalServerError,
 			ErrorMessage: err.Error(),
 		})
@@ -654,7 +654,7 @@ func (api *API) universalTTSRewardChoose(r *http.Request) template.HTML {
 func (api *API) universalTTSRewardExisting(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusUnauthorized,
 			ErrorMessage: "not authorized",
 		})
@@ -662,7 +662,7 @@ func (api *API) universalTTSRewardExisting(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := r.ParseForm(); err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose_special.html", &rewardChooseSpecialData{
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
 			Subtitle:        "Universal TTS",
 			CreatePostURL:   "/universal-tts/reward",
 			ExistingPostURL: "/universal-tts/reward_existing",
@@ -673,7 +673,7 @@ func (api *API) universalTTSRewardExisting(w http.ResponseWriter, r *http.Reques
 
 	existingID := strings.TrimSpace(r.Form.Get("twitch_reward_id"))
 	if existingID == "" {
-		_ = html.ExecuteTemplate(w, "reward_choose_special.html", &rewardChooseSpecialData{
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
 			Subtitle:         "Universal TTS",
 			CreatePostURL:    "/universal-tts/reward",
 			ExistingPostURL:  "/universal-tts/reward_existing",
@@ -684,7 +684,7 @@ func (api *API) universalTTSRewardExisting(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := api.db.UpsertUniversalTTSReward(r.Context(), user.ID, existingID); err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose_special.html", &rewardChooseSpecialData{
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
 			Subtitle:         "Universal TTS",
 			CreatePostURL:    "/universal-tts/reward",
 			ExistingPostURL:  "/universal-tts/reward_existing",
@@ -717,7 +717,7 @@ func (api *API) agenticRewardChoose(r *http.Request) template.HTML {
 func (api *API) agenticRewardExisting(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+		submitTab(w, "error.html", &htmlErr{
 			ErrorCode:    http.StatusUnauthorized,
 			ErrorMessage: "not authorized",
 		})
@@ -725,7 +725,7 @@ func (api *API) agenticRewardExisting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseForm(); err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose_special.html", &rewardChooseSpecialData{
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
 			Subtitle:        "Agent Baj",
 			CreatePostURL:   "/agentic/reward",
 			ExistingPostURL: "/agentic/reward_existing",
@@ -736,7 +736,7 @@ func (api *API) agenticRewardExisting(w http.ResponseWriter, r *http.Request) {
 
 	existingID := strings.TrimSpace(r.Form.Get("twitch_reward_id"))
 	if existingID == "" {
-		_ = html.ExecuteTemplate(w, "reward_choose_special.html", &rewardChooseSpecialData{
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
 			Subtitle:         "Agent Baj",
 			CreatePostURL:    "/agentic/reward",
 			ExistingPostURL:  "/agentic/reward_existing",
@@ -747,7 +747,7 @@ func (api *API) agenticRewardExisting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := api.db.UpsertAgenticReward(r.Context(), user.ID, existingID); err != nil {
-		_ = html.ExecuteTemplate(w, "reward_choose_special.html", &rewardChooseSpecialData{
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
 			Subtitle:         "Agent Baj",
 			CreatePostURL:    "/agentic/reward",
 			ExistingPostURL:  "/agentic/reward_existing",

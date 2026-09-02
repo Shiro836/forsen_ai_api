@@ -1,0 +1,444 @@
+<section id="guide" class="w-full min-w-0 pb-10">
+    <div class="mb-8 flex items-center justify-between border-b {{template "ui-border-clr"}} pb-6">
+        <h1 class="flex items-center gap-3 text-2xl font-bold tracking-wide text-slate-900 dark:text-white">{{template "bits-icon-lg"}}BITS PATH</h1>
+        <div class="rounded-full border {{template "ui-border-clr"}} px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-300">Step {{.Step.Number}} of 4</div>
+    </div>
+
+    <ol class="mb-8 grid grid-cols-4 gap-3" aria-label="Bits path progress">
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 1}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 1}}border-green-500/40 text-slate-700 hover:border-green-500 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/guide/bits" hx-get="/guide/bits" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 1}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">01</span>
+                <span class="mt-1 block font-semibold">Open dashboard</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 2}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 2}}border-green-500/40 text-slate-700 hover:border-green-500 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/guide/bits/create" hx-get="/guide/bits/create" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 2}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">02</span>
+                <span class="mt-1 block font-semibold">Create Power-up</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 3}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 3}}border-green-500/40 text-slate-700 hover:border-green-500 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/guide/bits/reward-id" hx-get="/guide/bits/reward-id" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 3}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">03</span>
+                <span class="mt-1 block font-semibold">Catch reward ID</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded-lg border px-4 py-3 {{if eq .Step.Number 4}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else}}{{template "ui-border-clr"}} text-slate-500 hover:border-twitch-dark dark:text-slate-400 dark:hover:border-twitch-light{{end}}" href="/guide/bits/connect" hx-get="/guide/bits/connect" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort" {{if eq .Step.Number 4}}aria-current="step"{{end}}>
+                <span class="block text-xs font-bold uppercase tracking-wider">04</span>
+                <span class="mt-1 block font-semibold">Connect</span>
+            </a>
+        </li>
+    </ol>
+
+    <div class="grid grid-cols-[minmax(280px,0.68fr)_minmax(650px,1.7fr)] items-start gap-8">
+        <div class="rounded-xl border {{template "ui-border-clr"}} bg-slate-50 p-6 dark:bg-slate-800/50">
+            <h2 class="text-2xl font-bold text-slate-900 dark:text-white">{{.Step.Title}}</h2>
+
+            {{if eq .Step.Number 1}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>Let your viewers pay Bits to talk to your AI characters. Setup takes about five minutes.</p>
+                <p>A <strong>Custom Power-up</strong> is a button viewers buy with Bits. You make one here, then point it at a character.</p>
+                <p>Open your Power-ups dashboard:</p>
+                <a class="group block w-full rounded-lg border-2 border-twitch-dark bg-white px-4 py-3 text-left font-mono text-sm font-bold text-slate-900 hover:bg-purple-50 dark:border-twitch-light dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800" href="{{.DashboardURL}}" target="_blank" rel="noopener">
+                    <span class="block font-sans text-xs font-bold uppercase tracking-wider text-twitch-dark dark:text-twitch-light">Click to open</span>
+                    <span class="mt-1 block break-all">{{.DashboardURL}}</span>
+                </a>
+                <button class="copy-button {{template "button-2"}} w-full px-4 py-2 text-sm font-bold" data-clipboard-text="{{.DashboardURL}}">Copy the link instead</button>
+                <p>Under <strong>Custom Power-ups</strong>, press <strong>+ Add New Custom Power-up</strong>.</p>
+            </div>
+            {{else if eq .Step.Number 2}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>Name the Power-up after the character you want it to talk to. Viewers see this name.</p>
+                <a class="inline-block text-sm font-bold text-slate-600 underline dark:text-slate-300" href="/characters" target="_blank" rel="noopener">Open your characters page ↗</a>
+                <div class="rounded-lg border-2 border-twitch-dark p-4 text-sm dark:border-twitch-light">
+                    <p class="font-bold text-slate-900 dark:text-white">Turn ON "Require Viewer to Enter Text". This is required.</p>
+                    <p class="mt-2">If this stays OFF, the Power-up will not work: viewers can't type a message and your character stays silent.</p>
+                </div>
+                <p>Set a <strong>Cost</strong> in Bits. The lowest Twitch allows is 10.</p>
+                <p class="text-sm text-slate-500 dark:text-slate-400">Description, icon, background colour, cooldowns and limits are all optional.</p>
+                <p>Press <strong>Create</strong>.</p>
+            </div>
+            {{else if eq .Step.Number 3}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>Twitch never shows you the Power-up's ID anywhere, so we catch it straight from your chat.</p>
+                <p><strong>Keep this page open.</strong> Go to your channel and redeem the new Power-up once yourself, typing any text you'll recognise.</p>
+                <div class="rounded-lg border {{template "ui-border-clr"}} p-4 text-sm">
+                    <p>Redeeming Power-ups on your own channel is free, so the test costs you nothing.</p>
+                </div>
+                <p>Your redemption appears on the right within a couple of seconds. Copy the ID. You'll paste it in the next step.</p>
+            </div>
+            {{else}}
+            <div class="mt-5 space-y-4 leading-relaxed">
+                <p>With the ID copied, open <a class="font-bold underline" href="/characters" target="_blank" rel="noopener">Characters</a> and pick the character the Power-up is named after.</p>
+                <p>Press <strong>Add Reward</strong> on it, then under <strong>Use existing reward</strong> paste the ID and press <strong>Link reward</strong>.</p>
+                <div class="rounded-lg border {{template "ui-border-clr"}} p-4 text-sm">
+                    <p>Flip the toggle to <strong>AI</strong> if the character should answer in its own voice, or leave it on <strong>TTS</strong> to just read the viewer's message out loud.</p>
+                </div>
+                <div class="rounded-lg border border-twitch-dark p-4 text-sm font-semibold text-slate-900 dark:border-twitch-light dark:text-white">Redeem the Power-up once more. Your character should answer on stream. You're done.</div>
+                <div class="border-t {{template "ui-border-clr"}} pt-4 text-sm">
+                    <p>Nothing happening? Check the <a class="font-bold underline" href="/control" target="_blank" rel="noopener">Control Panel</a>. A connected redemption shows up there even when the overlay is quiet.</p>
+                </div>
+            </div>
+            {{end}}
+
+            <div class="mt-8 flex items-center gap-3 border-t {{template "ui-border-clr"}} pt-5">
+                {{if .Step.PreviousPath}}
+                <a class="{{template "button-2"}} flex items-center whitespace-nowrap px-4 py-2 font-bold" href="{{.Step.PreviousPath}}" hx-get="{{.Step.PreviousPath}}" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">← Previous</a>
+                {{end}}
+                {{if .Step.NextPath}}
+                <a class="ml-auto flex items-center whitespace-nowrap rounded border-2 border-twitch-dark px-4 py-2 font-bold text-slate-900 hover:bg-purple-50 dark:border-twitch-light dark:text-white dark:hover:bg-twitch-light/10" href="{{.Step.NextPath}}" hx-get="{{.Step.NextPath}}" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">Next →</a>
+                {{end}}
+            </div>
+        </div>
+
+        <div class="relative rounded-2xl border {{template "ui-border-clr"}} bg-slate-100 p-5 shadow-xl dark:bg-slate-950/50">
+            {{if eq .Step.Number 1}}
+            <div class="overflow-hidden rounded-lg border border-ttv-border bg-ttv-page text-[12px] text-ttv-text shadow-2xl dark:border-ttv-border-d dark:bg-ttv-page-d dark:text-white">
+                <div class="flex items-start gap-3 border-b border-ttv-border px-5 py-4 dark:border-ttv-border-d">
+                    <span class="mt-0.5 text-ttv-muted dark:text-ttv-muted-d">‹</span>
+                    <div>
+                        <div class="text-[13px] font-bold">Manage Power-ups &amp; Channel Points</div>
+                        <div class="mt-1 text-ttv-muted dark:text-ttv-muted-d">Update individual Power-ups or rewards; create or modify challenges</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-[165px_1fr] gap-4 border-b border-ttv-border px-5 py-4 dark:border-ttv-border-d">
+                    <div class="font-bold">Community Challenges</div>
+                    <div>
+                        <p>Viewers can crowdfund big rewards with Channel Points. Price them high to last longer and encourage more participation.</p>
+                        <p class="mt-1 underline">Learn more</p>
+                        <div class="mt-3 w-[350px] rounded border border-ttv-border bg-ttv-card p-4 text-center dark:border-ttv-border-d dark:bg-ttv-card-d">
+                            <div>Reward your community for their teamwork!</div>
+                            <div class="mx-auto my-3 h-20 w-36 rounded bg-ttv-row dark:bg-ttv-row-d"></div>
+                            <span class="inline-block rounded-full bg-twitch-dark px-4 py-2 font-bold text-white">Create a Community Challenge</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-[165px_1fr] gap-4 border-b border-ttv-border px-5 py-4 dark:border-ttv-border-d">
+                    <div class="font-bold">Power-ups</div>
+                    <div>
+                        <p>Power-ups introduce new ways for viewers to support you through Bits. They are always enabled on your channel.</p>
+                        <div class="mt-3 flex items-center px-3 pb-1 font-bold text-twitch-dark dark:text-twitch-light"><span class="flex-1">Power-up ⇅</span><span class="w-28">Cost ⌃</span><span class="w-20"></span></div>
+                        <div class="mt-1 flex items-center rounded bg-ttv-card px-3 py-2.5 dark:bg-ttv-row-d"><span class="mr-3 h-7 w-7 rounded bg-pink-500"></span><span class="flex-1 font-semibold">Message Effects</span><span class="flex w-28 items-center gap-1.5">{{template "bits-diamond"}} 20</span><span class="w-20 text-right"><span class="rounded-full bg-ttv-btn px-3 py-1.5 font-semibold dark:bg-ttv-btn-d">Edit</span></span></div>
+                        <div class="mt-1 flex items-center rounded bg-ttv-card px-3 py-2.5 dark:bg-ttv-row-d"><span class="mr-3 h-7 w-7 rounded bg-blue-500"></span><span class="flex-1 font-semibold">Gigantify an Emote</span><span class="flex w-28 items-center gap-1.5">{{template "bits-diamond"}} 30</span><span class="w-20 text-right"><span class="rounded-full bg-ttv-btn px-3 py-1.5 font-semibold dark:bg-ttv-btn-d">Edit</span></span></div>
+                        <div class="mt-1 flex items-center rounded bg-ttv-card px-3 py-2.5 dark:bg-ttv-row-d"><span class="mr-3 h-7 w-7 rounded bg-green-500"></span><span class="flex-1 font-semibold">On-Screen Celebration</span><span class="flex w-28 items-center gap-1.5">{{template "bits-diamond"}} 40</span><span class="w-20 text-right"><span class="rounded-full bg-ttv-btn px-3 py-1.5 font-semibold dark:bg-ttv-btn-d">Edit</span></span></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-[165px_1fr] gap-4 px-5 py-4">
+                    <div class="font-bold">Custom Power-ups</div>
+                    <div>
+                        <div class="flex items-start justify-between gap-4">
+                            <p>Create Custom Power-ups that fit your channel and community! <span class="underline">Learn more here!</span></p>
+                            <span class="shrink-0 rounded-full bg-ttv-btn px-3 py-1.5 font-semibold dark:bg-ttv-btn-d">Link to Alerts</span>
+                        </div>
+                        <div class="mt-3 flex items-center px-3 pb-1 font-bold text-twitch-dark dark:text-twitch-light"><span class="flex-1">Reward ⇅</span><span class="w-28">Cost ⌃</span><span class="w-24">Enabled ⇅</span><span class="w-24"></span></div>
+                        <div class="mt-1 flex items-center rounded bg-ttv-card px-3 py-2.5 dark:bg-ttv-row-d">
+                            <span class="mr-3 flex h-7 w-7 items-center justify-center rounded bg-twitch-dark">{{template "bits-diamond"}}</span>
+                            <span class="flex-1 font-semibold">Okayeg AI</span>
+                            <span class="flex w-28 items-center gap-1.5">{{template "bits-diamond"}} 10</span>
+                            <span class="w-24"><span class="relative block h-5 w-10 rounded-full bg-ttv-off dark:bg-ttv-off-d"><span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white"></span></span></span>
+                            <span class="flex w-24 items-center justify-end gap-2"><span class="rounded-full bg-ttv-btn px-3 py-1.5 font-semibold dark:bg-ttv-btn-d">Edit</span><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/trash.svg" alt="Delete"><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/trash.svg" alt="Delete"></span>
+                        </div>
+                        <div class="relative mt-14 flex items-center gap-2">
+                            <div class="absolute -top-10 left-0 z-10 rounded-md border border-twitch-dark bg-white px-3 py-2 text-sm font-bold text-slate-900 shadow-lg dark:border-twitch-light dark:bg-ttv-card-d dark:text-white">Press this<span class="absolute -bottom-[5px] left-5 h-2.5 w-2.5 rotate-45 border-b border-r border-twitch-dark bg-white dark:border-twitch-light dark:bg-ttv-card-d" aria-hidden="true"></span></div>
+                            <span class="rounded-full border-2 border-twitch-dark bg-white px-4 py-2 font-bold text-slate-900 shadow-obs-glow dark:border-twitch-light dark:bg-ttv-btn-d dark:text-white">+ Add New Custom Power-up</span>
+                            <span class="rounded-full bg-ttv-btn px-4 py-2 font-semibold dark:bg-ttv-btn-d">Visit the Collection</span>
+                        </div>
+                        <div class="mt-4 flex items-center gap-2 rounded border-b-2 border-ttv-warn bg-ttv-row px-3 py-2.5 dark:border-ttv-warn-d dark:bg-ttv-row-d">
+                            <span class="text-ttv-warn dark:text-ttv-warn-d">⚠</span>
+                            <span>Custom Power-ups must comply with <span class="underline">Twitch's Bits Acceptable Use Policy (AUP)</span>.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{else if eq .Step.Number 2}}
+            <div class="overflow-hidden rounded-lg border border-ttv-border bg-ttv-card text-[12px] text-ttv-text shadow-2xl dark:border-ttv-border-d dark:bg-ttv-card-d dark:text-white">
+                <div class="flex items-center justify-between px-6 pb-2 pt-5"><span class="text-lg font-bold">Create a Custom Power-up</span><span class="text-ttv-muted dark:text-ttv-muted-d">✕</span></div>
+                <div class="grid grid-cols-[1fr_285px] gap-6 px-6 pb-5">
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex items-baseline justify-between"><span class="font-bold"><span class="text-twitch-dark dark:text-twitch-light">✱</span> Power-up Name</span><span class="text-ttv-muted dark:text-ttv-muted-d">9/45</span></div>
+                            <div class="mt-1 rounded border border-ttv-input-border bg-ttv-input px-3 py-2 dark:border-ttv-input-border-d dark:bg-ttv-input-d">Forsen AI</div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-baseline justify-between"><span class="font-bold">Description <span class="font-normal text-ttv-muted dark:text-ttv-muted-d">(optional)</span></span><span class="text-ttv-muted dark:text-ttv-muted-d">0/200</span></div>
+                            <div class="mt-1 h-20 rounded border border-ttv-input-border bg-ttv-input px-3 py-2 text-ttv-muted dark:border-ttv-input-border-d dark:bg-ttv-input-d dark:text-ttv-muted-d">Add a blurb of what you want your viewer to request</div>
+                        </div>
+
+                        <div class="pt-8">
+                        <div class="relative rounded border-2 border-twitch-dark p-3 shadow-obs-glow dark:border-twitch-light">
+                            <div class="absolute -top-10 left-0 z-10 rounded-md border border-twitch-dark bg-white px-3 py-2 text-sm font-bold text-slate-900 shadow-lg dark:border-twitch-light dark:bg-ttv-card-d dark:text-white">Must be ON<span class="absolute -bottom-[5px] left-5 h-2.5 w-2.5 rotate-45 border-b border-r border-twitch-dark bg-white dark:border-twitch-light dark:bg-ttv-card-d" aria-hidden="true"></span></div>
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold">Require Viewer to Enter Text</span>
+                                <span class="relative block h-5 w-10 rounded-full bg-twitch-dark"><span class="absolute right-0.5 top-0.5 h-4 w-4 rounded-full bg-white"></span></span>
+                            </div>
+                            <div class="mt-1 text-ttv-muted dark:text-ttv-muted-d">If enabled, a required text field will appear to viewers in the Power-up.</div>
+                        </div>
+                        </div>
+
+                        <div>
+                            <div class="font-bold"><span class="text-twitch-dark dark:text-twitch-light">✱</span> Cost</div>
+                            <div class="mt-1 flex items-center gap-2 rounded border border-ttv-input-border bg-ttv-input px-3 py-2 dark:border-ttv-input-border-d dark:bg-ttv-input-d">{{template "bits-diamond"}} 10</div>
+                            <div class="mt-1 text-ttv-muted dark:text-ttv-muted-d">Set a Bits value for this Power-up (Min: 10, Max: 10,000)</div>
+                        </div>
+
+                        <div>
+                            <div class="font-bold">Power-up Icon</div>
+                            <div class="mt-1 flex items-center gap-3">
+                                <span class="flex h-24 w-24 items-center justify-center rounded border border-ttv-input-border text-twitch-dark dark:border-ttv-input-border-d dark:text-twitch-light">↑</span>
+                                <span class="text-ttv-muted dark:text-ttv-muted-d">→</span>
+                                <span class="h-12 w-12 rounded bg-ttv-row dark:bg-ttv-row-d"></span>
+                                <span class="text-ttv-muted dark:text-ttv-muted-d">→</span>
+                                <span class="h-7 w-7 rounded bg-ttv-row dark:bg-ttv-row-d"></span>
+                            </div>
+                            <div class="mt-1 text-ttv-muted dark:text-ttv-muted-d">&lt;1MB. Upload a single PNG and Twitch will automatically resize it.</div>
+                        </div>
+
+                        <div>
+                            <div class="font-bold">Background Color</div>
+                            <div class="mt-1 flex items-center gap-1"><span class="h-7 w-9 rounded-l bg-twitch-dark"></span><span class="flex h-7 w-9 items-center justify-center rounded-r border border-ttv-input-border dark:border-ttv-input-border-d"><img class="h-4 w-4 dark:hidden" src="/static/obs-icons/light/brush.svg" alt=""><img class="hidden h-4 w-4 dark:block" src="/static/obs-icons/dark/brush.svg" alt=""></span></div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold">Skip Request Queue</span>
+                                <span class="relative flex h-5 w-10 items-center rounded-full bg-ttv-off px-1.5 text-[9px] text-white dark:bg-ttv-off-d">✓<span class="absolute right-0.5 top-0.5 h-4 w-4 rounded-full bg-white"></span></span>
+                            </div>
+                            <div class="mt-1 text-ttv-muted dark:text-ttv-muted-d">Request queue is not supported for Custom Power-ups.</div>
+                        </div>
+
+                        <div class="flex items-start gap-2 rounded bg-ttv-row px-3 py-2.5 dark:bg-ttv-row-d">
+                            <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-current text-[9px] font-bold text-ttv-muted dark:text-ttv-muted-d">i</span>
+                            <span>Tip: Viewers are more likely to use Bits for your Power-ups when they see you respond to them on stream. Use cooldowns and limits to keep redemptions manageable.</span>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold">Cooldown &amp; Limits</span>
+                                <span class="relative block h-5 w-10 rounded-full bg-ttv-off dark:bg-ttv-off-d"><span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white"></span></span>
+                            </div>
+                            <div class="mt-1 text-ttv-muted dark:text-ttv-muted-d">Use redemption cooldowns and limits for viewers.</div>
+                            <div class="mt-2 space-y-3 rounded bg-ttv-row p-3 dark:bg-ttv-row-d">
+                                <div class="grid grid-cols-[130px_1fr] items-center gap-3">
+                                    <span class="font-bold">Redemption Cooldown Time</span>
+                                    <span><span class="flex gap-2"><span class="flex-1 rounded border border-ttv-input-border bg-ttv-input px-3 py-2 text-ttv-muted dark:border-ttv-input-border-d dark:bg-ttv-input-d dark:text-ttv-muted-d">Enter number</span><span class="flex w-24 items-center justify-between rounded border border-ttv-input-border bg-ttv-input px-2 py-2 text-ttv-muted dark:border-ttv-input-border-d dark:bg-ttv-input-d dark:text-ttv-muted-d">Minutes ⇅</span></span><span class="mt-1 block text-ttv-muted dark:text-ttv-muted-d">Time between redemptions, up to 7 days</span></span>
+                                </div>
+                                <div class="grid grid-cols-[130px_1fr] items-center gap-3">
+                                    <span class="font-bold">Limit Redemptions Per Stream</span>
+                                    <span><span class="block rounded border border-ttv-input-border bg-ttv-input px-3 py-2 text-ttv-muted dark:border-ttv-input-border-d dark:bg-ttv-input-d dark:text-ttv-muted-d">Enter amount</span><span class="mt-1 block text-ttv-muted dark:text-ttv-muted-d">Max total redemptions for viewers</span></span>
+                                </div>
+                                <div class="grid grid-cols-[130px_1fr] items-center gap-3">
+                                    <span class="font-bold">Limit Redemptions Per User Per Stream</span>
+                                    <span><span class="block rounded border border-ttv-input-border bg-ttv-input px-3 py-2 text-ttv-muted dark:border-ttv-input-border-d dark:bg-ttv-input-d dark:text-ttv-muted-d">Enter amount</span><span class="mt-1 block text-ttv-muted dark:text-ttv-muted-d">Max individual redemptions per viewer per stream</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-center text-ttv-muted dark:text-ttv-muted-d">What your viewers will see:</div>
+                        <div class="mt-2 rounded bg-ttv-row p-4 text-center dark:bg-ttv-row-d">
+                            <div class="font-semibold">Summary View</div>
+                            <div class="mt-1 text-ttv-muted dark:text-ttv-muted-d">Shown as an available Power-up</div>
+                            <div class="mx-auto mt-4 w-[110px] overflow-hidden rounded bg-ttv-card dark:bg-ttv-card-d">
+                                <div class="flex h-[68px] items-center justify-center bg-twitch-dark"><span class="h-6 w-6 rotate-45 rounded-[3px] bg-gradient-to-br from-white/90 to-white/40"></span></div>
+                                <div class="px-2 py-2 text-left font-bold">Forsen AI</div>
+                                <div class="flex items-center gap-1.5 bg-ttv-row px-2 py-1.5 dark:bg-ttv-page-d">{{template "bits-diamond"}} 10</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mx-6 flex items-center gap-2 rounded border-b-2 border-ttv-warn bg-ttv-row px-3 py-2.5 dark:border-ttv-warn-d dark:bg-ttv-row-d">
+                    <span class="text-ttv-warn dark:text-ttv-warn-d">⚠</span>
+                    <span>Custom Power-ups must comply with <span class="underline">Twitch's Bits Acceptable Use Policy (AUP)</span>.</span>
+                </div>
+                <div class="flex justify-end gap-3 px-6 py-4"><span class="rounded-full bg-ttv-btn px-6 py-2 font-semibold dark:bg-ttv-btn-d">Cancel</span><span class="rounded-full bg-twitch-dark px-6 py-2 font-bold text-white">Create</span></div>
+            </div>
+            {{else if eq .Step.Number 3}}
+            <div id="bits-detector" class="rounded-lg border {{template "ui-border-clr"}} bg-white p-6 dark:bg-slate-900">
+                <div class="flex items-center justify-between border-b {{template "ui-border-clr"}} pb-4">
+                    <h3 class="text-lg font-bold text-slate-900 dark:text-white">Reward ID detector</h3>
+                    <span class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                        <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-twitch-dark dark:bg-twitch-light" aria-hidden="true"></span>
+                        <span id="bits-detector-status">Watching your chat…</span>
+                    </span>
+                </div>
+                <div id="bits-detector-list" class="mt-4 space-y-3"></div>
+                <div id="bits-detector-empty" class="mt-4 rounded-lg border border-dashed {{template "ui-border-clr"}} px-4 py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+                    Nothing yet. Redeem your new Power-up in your own chat and it shows up here.
+                </div>
+            </div>
+
+            <script>
+                (function () {
+                    var panel = document.getElementById('bits-detector');
+                    var list = document.getElementById('bits-detector-list');
+                    var empty = document.getElementById('bits-detector-empty');
+                    var status = document.getElementById('bits-detector-status');
+                    if (!panel || !list || !empty || !status) {
+                        return;
+                    }
+
+                    function agoLabel(seconds) {
+                        var s = Math.max(0, Math.floor(Number(seconds)) || 0);
+                        if (s < 60) { return s + 's ago'; }
+                        if (s < 3600) { return Math.floor(s / 60) + 'm ago'; }
+                        return Math.floor(s / 3600) + 'h ago';
+                    }
+
+                    function rewardRow(reward) {
+                        var row = document.createElement('div');
+                        row.className = 'rounded-lg border-2 border-twitch-dark bg-purple-50/40 p-4 dark:border-twitch-light dark:bg-twitch-light/5';
+
+                        var head = document.createElement('div');
+                        head.className = 'flex items-baseline justify-between gap-3';
+                        var label = document.createElement('span');
+                        label.className = 'text-xs font-bold uppercase tracking-wider text-twitch-dark dark:text-twitch-light';
+                        label.textContent = 'Reward ID';
+                        var age = document.createElement('span');
+                        age.className = 'text-xs text-slate-500 dark:text-slate-400';
+                        age.textContent = agoLabel(reward.ago_seconds);
+                        head.appendChild(label);
+                        head.appendChild(age);
+
+                        var id = document.createElement('div');
+                        id.className = 'mt-1 break-all font-mono text-sm font-bold text-slate-900 dark:text-white';
+                        id.textContent = reward.reward_id;
+
+                        var foot = document.createElement('div');
+                        foot.className = 'mt-3 flex items-center justify-between gap-3';
+                        var text = document.createElement('span');
+                        text.className = 'min-w-0 flex-1 truncate text-sm text-slate-600 dark:text-slate-300';
+                        text.textContent = reward.message ? '"' + reward.message + '"' : 'no message text';
+                        var copy = document.createElement('button');
+                        copy.type = 'button';
+                        copy.className = 'shrink-0 rounded border-2 border-twitch-dark px-4 py-2 text-sm font-bold text-slate-900 hover:bg-purple-50 dark:border-twitch-light dark:text-white dark:hover:bg-twitch-light/10';
+                        copy.textContent = 'Copy ID';
+                        copy.addEventListener('click', function () {
+                            if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                                copy.textContent = 'Copy failed';
+                                setTimeout(function () { copy.textContent = 'Copy ID'; }, 1200);
+
+                                return;
+                            }
+
+                            navigator.clipboard.writeText(reward.reward_id).then(function () {
+                                copy.textContent = 'Copied!';
+                                setTimeout(function () { copy.textContent = 'Copy ID'; }, 1200);
+                            }, function () {
+                                copy.textContent = 'Copy failed';
+                                setTimeout(function () { copy.textContent = 'Copy ID'; }, 1200);
+                            });
+                        });
+                        foot.appendChild(text);
+                        foot.appendChild(copy);
+
+                        row.appendChild(head);
+                        row.appendChild(id);
+                        row.appendChild(foot);
+
+                        return row;
+                    }
+
+                    function render(rewards) {
+                        list.replaceChildren();
+                        rewards.forEach(function (reward) {
+                            if (!reward || typeof reward.reward_id !== 'string' || reward.reward_id === '') {
+                                return;
+                            }
+                            list.appendChild(rewardRow(reward));
+                        });
+                        empty.hidden = list.childElementCount > 0;
+                    }
+
+                    var timer = null;
+
+                    function poll() {
+                        if (!document.body.contains(panel)) {
+                            clearInterval(timer);
+                            return;
+                        }
+
+                        fetch('/guide/bits/detect', { headers: { 'Accept': 'application/json' } })
+                            .then(function (res) {
+                                if (!res.ok) { throw new Error('bad status'); }
+                                return res.json();
+                            })
+                            .then(function (data) {
+                                var rewards = data && Array.isArray(data.rewards) ? data.rewards : [];
+                                status.textContent = rewards.length > 0 ? 'Found ' + rewards.length + ' reward' + (rewards.length === 1 ? '' : 's') : 'Watching your chat…';
+                                render(rewards);
+                            })
+                            .catch(function () {
+                                status.textContent = 'Lost contact, retrying…';
+                            });
+                    }
+
+                    poll();
+                    timer = setInterval(poll, 2000);
+                })();
+            </script>
+            {{else}}
+            <div class="rounded-lg border {{template "ui-border-clr"}} bg-white p-6 shadow-2xl dark:bg-slate-900">
+                <div class="flex items-center justify-between gap-4 border-b {{template "ui-border-clr"}} pb-4">
+                    <div class="min-w-0">
+                        <div class="text-2xl font-bold text-slate-900 dark:text-white">Add Reward</div>
+                        <div class="truncate text-sm text-slate-600 dark:text-slate-400">Forsen AI</div>
+                    </div>
+                    <div class="flex items-center gap-6">
+                        <span class="inline-flex items-center">
+                            <span class="me-3 text-sm font-medium text-gray-900 dark:text-gray-300">TTS</span>
+                            <span class="relative block h-6 w-11 rounded-full bg-gray-200 dark:bg-gray-700"><span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full border border-gray-300 bg-white"></span></span>
+                            <span class="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">AI</span>
+                        </span>
+                        <span class="{{template "button-2"}} px-4 py-2 font-semibold">Back</span>
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-2 gap-6">
+                    <div class="{{template "ui-border-clr"}} rounded border-2 bg-gray-50 p-4 dark:bg-gray-900">
+                        <div class="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Create new reward</div>
+                        <div class="mb-4 text-sm text-slate-600 dark:text-slate-400">Creates a new Twitch reward for this character.</div>
+                        <div class="{{template "button-2"}} w-full px-4 py-2 text-center font-semibold">Create</div>
+                    </div>
+
+                    <div class="relative rounded border-2 border-twitch-dark bg-gray-50 p-4 shadow-obs-glow dark:border-twitch-light dark:bg-gray-900">
+                        <div class="absolute -top-10 left-4 z-10 rounded-md border border-twitch-dark bg-white px-3 py-2 text-sm font-bold text-slate-900 shadow-lg dark:border-twitch-light dark:bg-slate-800 dark:text-white">Paste it here<span class="absolute -bottom-[5px] left-5 h-2.5 w-2.5 rotate-45 border-b border-r border-twitch-dark bg-white dark:border-twitch-light dark:bg-slate-800" aria-hidden="true"></span></div>
+                        <div class="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Use existing reward</div>
+                        <div class="mb-4 text-sm text-slate-600 dark:text-slate-400">Enter the existing Twitch reward ID and we'll link it.</div>
+                        <div class="{{template "input-class"}} w-full break-all px-2 py-1 font-mono text-sm">37318ab1-55f1-4bf8-8dec-8d742bd08350</div>
+                        <div class="mt-2 flex items-start gap-2 rounded bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-current text-[9px] font-bold">i</span>
+                            <span>Tip: that ID is only an example. Paste the real one you copied in step 3.</span>
+                        </div>
+                        <div class="{{template "button-2"}} mt-3 w-full px-4 py-2 text-center font-semibold">Link reward</div>
+                    </div>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <div class="mt-10 border-t {{template "ui-border-clr"}} pt-6">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">More guides</h2>
+        <div class="mt-4 grid grid-cols-3 gap-4">
+            <a class="block rounded-lg border {{template "ui-border-clr"}} p-5 hover:border-twitch-dark dark:hover:border-twitch-light" href="/" hx-get="/" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">
+                <span class="flex items-center gap-2 font-bold text-slate-900 dark:text-white"><img class="h-5 w-5" src="/static/obs-icons/obs-logo.svg" alt="">OBS setup</span>
+                <span class="mt-1 block text-sm text-slate-500 dark:text-slate-400">Add the browser source so BAJ AI shows up on stream.</span>
+            </a>
+            <a class="block rounded-lg border {{template "ui-border-clr"}} p-5 hover:border-twitch-dark dark:hover:border-twitch-light" href="/guide/audio" hx-get="/guide/audio" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">
+                <span class="flex items-center gap-2 font-bold text-slate-900 dark:text-white"><img class="h-5 w-5 dark:hidden" src="/static/obs-icons/light/audio.svg" alt=""><img class="hidden h-5 w-5 dark:block" src="/static/obs-icons/dark/audio.svg" alt="">Audio setup</span>
+                <span class="mt-1 block text-sm text-slate-500 dark:text-slate-400">Personal AI volume for you, separate from what viewers hear on stream.</span>
+            </a>
+            <a class="block rounded-lg border {{template "ui-border-clr"}} p-5 hover:border-twitch-dark dark:hover:border-twitch-light" href="/guide/legacy" hx-get="/guide/legacy" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-push-url="true" hx-sync="closest #guide:abort">
+                <span class="block font-bold text-slate-900 dark:text-white">Legacy home</span>
+                <span class="mt-1 block text-sm text-slate-500 dark:text-slate-400">The old home page: quickstart, prompt images, overlay and skip hotkeys.</span>
+            </a>
+        </div>
+    </div>
+</section>
