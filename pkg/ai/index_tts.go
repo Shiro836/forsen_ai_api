@@ -63,11 +63,53 @@ type IndexTTS2Request struct {
 	ReturnSegments           bool             `json:"return_segments,omitempty"`
 }
 
-// IndexTTSSegment is one sentence-level time mark returned by the server.
-type IndexTTSSegment struct {
-	Text  string  `json:"text"`
+// IndexTTSWord is one word-level time mark inside a segment, produced by the
+// engine's code-domain aligner (index-tts-vllm --code_aligner). Same shape as
+// StyleTTS2's words, so both engines yield word-level timings without the
+// external audio aligner. Times are absolute seconds within the whole output.
+type IndexTTSWord struct {
+	Word  string  `json:"word"`
 	Start float64 `json:"start"`
 	End   float64 `json:"end"`
+	// Aligned is false when the engine interpolated the word (emote, emoji,
+	// nothing alignable); absent from older engines.
+	Aligned *bool `json:"aligned,omitempty"`
+}
+
+// IndexTTSSegment is one sentence-level time mark returned by the server. Words
+// is present only when the engine runs with a code aligner; when the engine had
+// to re-align the whole text (sentence split cut inside a word) every word hangs
+// on the first segment.
+type IndexTTSSegment struct {
+	Text  string         `json:"text"`
+	Start float64        `json:"start"`
+	End   float64        `json:"end"`
+	Words []IndexTTSWord `json:"words,omitempty"`
+}
+
+// wordTimings flattens the segments' words into one timing per word, in order.
+// nil when no segment carries words (engine without a code aligner).
+func wordTimings(segments []IndexTTSSegment) []whisperx.Timiing {
+	n := 0
+	for _, seg := range segments {
+		n += len(seg.Words)
+	}
+	if n == 0 {
+		return nil
+	}
+
+	timings := make([]whisperx.Timiing, 0, n)
+	for _, seg := range segments {
+		for _, w := range seg.Words {
+			timings = append(timings, whisperx.Timiing{
+				Text:  w.Word,
+				Start: time.Duration(w.Start * float64(time.Second)),
+				End:   time.Duration(w.End * float64(time.Second)),
+			})
+		}
+	}
+
+	return timings
 }
 
 type indexTTSSegmentsResponse struct {
@@ -276,6 +318,12 @@ func (e *IndexTTSEngine) TTS(ctx context.Context, text string, voiceReference []
 	audio, segments, err := e.client.SynthesizeWithSegments(ctx, req)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// word-level straight from the engine (code aligner): the API then has no
+	// reason to call the audio aligner; sentence-level otherwise, as before
+	if words := wordTimings(segments); words != nil {
+		return audio, words, nil
 	}
 
 	timings := make([]whisperx.Timiing, 0, len(segments))

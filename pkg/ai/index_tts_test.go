@@ -136,3 +136,46 @@ func TestIndexTTSEngineTTS(t *testing.T) {
 	require.Equal(t, 0*time.Second, timings[0].Start)
 	require.Equal(t, 1250*time.Millisecond, timings[0].End)
 }
+
+// An engine running with the code aligner returns words inside its segments; the
+// engine timings are then word-level and the API skips the audio aligner.
+func TestIndexTTSEngineTTSWordTimings(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	ffmpegClient := ffmpeg.New(&ffmpeg.Config{TmpDir: tmpDir})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		_, _ = io.ReadAll(r.Body)
+
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"audio":         []byte("FAKEAUDIO"),
+			"sampling_rate": 22050,
+			"segments": []map[string]any{
+				{"text": "hello world.", "start": 0.0, "end": 1.25, "words": []map[string]any{
+					{"word": "hello", "start": 0.10, "end": 0.42, "aligned": true},
+					{"word": "world.", "start": 0.50, "end": 1.10, "aligned": true},
+				}},
+				{"text": "Kappa", "start": 1.45, "end": 2.0, "words": []map[string]any{
+					{"word": "Kappa", "start": 1.45, "end": 2.0, "aligned": false},
+				}},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	client := ai.NewIndexTTSClient(srv.Client(), &ai.IndexTTSConfig{URL: srv.URL})
+	engine := ai.NewIndexTTSEngine(client, ffmpegClient)
+
+	audio, timings, err := engine.TTS(context.Background(), "hello world. Kappa", audioRef)
+	require.NoError(t, err)
+	require.Equal(t, []byte("FAKEAUDIO"), audio)
+	require.Len(t, timings, 3)
+	require.Equal(t, "hello", timings[0].Text)
+	require.Equal(t, 100*time.Millisecond, timings[0].Start)
+	require.Equal(t, 420*time.Millisecond, timings[0].End)
+	require.Equal(t, "Kappa", timings[2].Text)
+	require.Equal(t, 1450*time.Millisecond, timings[2].Start)
+}

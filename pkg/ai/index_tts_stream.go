@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"app/pkg/whisperx"
 )
 
 // StreamChunk is one finished sentence of a streaming synthesis. Audio is a
@@ -26,6 +28,10 @@ type StreamChunk struct {
 	SpeechStart time.Duration
 	SpeechEnd   time.Duration
 	Audio       []byte
+	// Words are the engine's own word timings for Text (code aligner), one per
+	// whitespace-split word, stream-absolute like SpeechStart. nil when the
+	// engine runs without a code aligner.
+	Words []whisperx.Timiing
 }
 
 // StreamingTTSEngine is implemented by engines that can deliver synthesis
@@ -36,13 +42,14 @@ type StreamingTTSEngine interface {
 }
 
 type streamLine struct {
-	Text         string  `json:"text"`
-	Start        float64 `json:"start"`
-	End          float64 `json:"end"`
-	SamplingRate int     `json:"sampling_rate"`
-	Audio        []byte  `json:"audio"`
-	Done         bool    `json:"done"`
-	Error        string  `json:"error"`
+	Text         string         `json:"text"`
+	Start        float64        `json:"start"`
+	End          float64        `json:"end"`
+	SamplingRate int            `json:"sampling_rate"`
+	Audio        []byte         `json:"audio"`
+	Words        []IndexTTSWord `json:"words,omitempty"`
+	Done         bool           `json:"done"`
+	Error        string         `json:"error"`
 }
 
 func (c *IndexTTSClient) streamURL() (string, error) {
@@ -131,6 +138,7 @@ func (c *IndexTTSClient) SynthesizeStream(ctx context.Context, req *IndexTTS2Req
 			SpeechStart: time.Duration(parsed.Start * float64(time.Second)),
 			SpeechEnd:   time.Duration(parsed.End * float64(time.Second)),
 			Audio:       parsed.Audio,
+			Words:       wordTimings([]IndexTTSSegment{{Words: parsed.Words}}),
 		}
 
 		if err := fn(chunk); err != nil {

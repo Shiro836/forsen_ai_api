@@ -180,14 +180,39 @@ func wavDuration(data []byte) (time.Duration, bool) {
 	return 0, false
 }
 
+// chunkLocalWords shifts the engine's stream-absolute word timings to be
+// relative to the chunk that starts at offset. nil in, nil out.
+func chunkLocalWords(words []whisperx.Timiing, offset time.Duration) []whisperx.Timiing {
+	if len(words) == 0 {
+		return nil
+	}
+
+	out := make([]whisperx.Timiing, len(words))
+	for i, w := range words {
+		out[i] = whisperx.Timiing{Text: w.Text, Start: w.Start - offset, End: w.End - offset}
+	}
+
+	return out
+}
+
 // alignChunkWords aligns one streamed chunk's spoken text against its audio; on
 // any failure it interpolates within the chunk's speech bounds. Never empty for
 // non-empty text. When display diverges from spoken (art masked on screen but
 // synthesized), alignment is meaningless — display words are interpolated.
-func (s *Service) alignChunkWords(ctx context.Context, logger *slog.Logger, spoken, display string, wav []byte, chunkDur, speechStart, speechEnd time.Duration) []trackWord {
+func (s *Service) alignChunkWords(ctx context.Context, logger *slog.Logger, spoken, display string, wav []byte, chunkDur, speechStart, speechEnd time.Duration, engineWords []whisperx.Timiing) []trackWord {
 	fields := strings.Fields(display)
 	if len(fields) == 0 {
 		return nil
+	}
+
+	// the engine's own word timings (code aligner), chunk-local: same trust rule
+	// as the audio aligner — only when the display words are the spoken words
+	if display == spoken && len(engineWords) == len(fields) {
+		words := make([]trackWord, len(fields))
+		for i, f := range fields {
+			words[i] = trackWord{W: f, S: engineWords[i].Start.Milliseconds(), E: engineWords[i].End.Milliseconds()}
+		}
+		return words
 	}
 
 	if display == spoken && s.whisper != nil {
@@ -343,7 +368,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 
 			// speech bounds arrive stream-absolute from the engine; make them
 			// chunk-local for the interpolation fallback
-			words := s.alignChunkWords(ctx, logger, chunk.Text, displayText, chunk.Audio, chunkDur, chunk.SpeechStart-offset, chunk.SpeechEnd-offset)
+			words := s.alignChunkWords(ctx, logger, chunk.Text, displayText, chunk.Audio, chunkDur, chunk.SpeechStart-offset, chunk.SpeechEnd-offset, chunkLocalWords(chunk.Words, offset))
 			for i := range words {
 				words[i].S += offset.Milliseconds()
 				words[i].E += offset.Milliseconds()

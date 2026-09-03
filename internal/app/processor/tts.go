@@ -74,6 +74,12 @@ func (s *Service) TTSWithTimings(ctx context.Context, msg string, refAudio []byt
 	// consumed inside the engine and absent from the audio
 	alignText, _ := ai.ExtractEmotions(text)
 
+	// an engine with a code aligner already returned one timing per word
+	// (index-tts --code_aligner, StyleTTS2): nothing left for the audio aligner
+	if timingsAreWordLevel(ttsSegments, alignText) {
+		return ttsResult, ttsSegments, nil
+	}
+
 	if wordTimings, err := s.alignWordTimings(ctx, alignText, ttsResult, ttsSegments); err != nil {
 		s.logger.Warn("word alignment unavailable, keeping engine timings", "err", err)
 	} else {
@@ -127,6 +133,24 @@ func (s *Service) alignWordTimings(ctx context.Context, text string, wavAudio []
 	}
 
 	return timings, nil
+}
+
+// timingsAreWordLevel reports whether timings already are the per-word contract
+// for text: one timing per whitespace-split word, same words, in order. Engine
+// sentence segments (several words per timing) fail this and go to the aligner.
+func timingsAreWordLevel(timings []whisperx.Timiing, text string) bool {
+	words := strings.Fields(text)
+	if len(words) == 0 || len(timings) != len(words) {
+		return false
+	}
+
+	for i, w := range words {
+		if timings[i].Text != w {
+			return false
+		}
+	}
+
+	return true
 }
 
 func segmentsCoverWords(segments []whisperx.Timiing, words []string) bool {
