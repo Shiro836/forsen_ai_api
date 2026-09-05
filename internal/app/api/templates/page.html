@@ -169,17 +169,14 @@
             transform: translateY(-3px);
         }
 
-        /* enabled briefly by the theme switch so colors crossfade instead of snapping */
-        html.theme-anim,
-        html.theme-anim * {
-            transition: background-color .25s ease, color .25s ease, border-color .25s ease, fill .25s ease !important;
-        }
-
         @media (prefers-reduced-motion: reduce) {
 
             *,
             ::before,
-            ::after {
+            ::after,
+            ::view-transition-group(*),
+            ::view-transition-old(*),
+            ::view-transition-new(*) {
                 animation-duration: .01ms !important;
                 transition-duration: .01ms !important;
             }
@@ -235,10 +232,18 @@
     <script>
         document.getElementById("light_switch").addEventListener("click", function () {
             const root = document.documentElement;
-            root.classList.add("theme-anim");
-            setTimeout(function () { root.classList.remove("theme-anim"); }, 300);
-            root.classList.toggle("dark");
-            document.cookie = "theme=" + (root.classList.contains("dark") ? "dark" : "light") + " ; expires=Fri, 31 Dec 9999 23:59:59 GMT ; path=/ ;";
+            function toggle() {
+                root.classList.toggle("dark");
+                document.cookie = "theme=" + (root.classList.contains("dark") ? "dark" : "light") + " ; expires=Fri, 31 Dec 9999 23:59:59 GMT ; path=/ ;";
+            }
+            // A CSS transition on every element re-resolves the whole tree each frame
+            // (~200ms/frame on the characters page); a view transition crossfades two
+            // snapshots on the compositor after a single recalc.
+            if (document.startViewTransition) {
+                document.startViewTransition(toggle);
+            } else {
+                toggle();
+            }
         });
     </script>
 

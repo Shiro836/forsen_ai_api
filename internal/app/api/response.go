@@ -8,26 +8,27 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 )
 
-// etagMiddleware buffers successful GET responses, stamps them with a strong
-// content-hash ETag, and answers If-None-Match with 304 — one caching policy
-// for every endpoint instead of per-handler Cache-Control headers.
+// responseMiddleware buffers successful GET responses and applies one policy to
+// all of them: a strong content-hash ETag answered with 304 on If-None-Match,
+// and gzip for text bodies when the client accepts it.
 // Hijacked (websocket) and flushed (proxy/stream) responses pass through raw.
-func etagMiddleware(next http.Handler) http.Handler {
+func responseMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		ew := &etagWriter{rw: w, status: http.StatusOK}
+		ew := &bufferedWriter{rw: w, status: http.StatusOK}
 		next.ServeHTTP(ew, r)
 		ew.finish(r)
 	})
 }
 
-type etagWriter struct {
+type bufferedWriter struct {
 	rw          http.ResponseWriter
 	buf         bytes.Buffer
 	status      int
@@ -35,11 +36,11 @@ type etagWriter struct {
 	headerSent  bool
 }
 
-func (ew *etagWriter) Header() http.Header {
+func (ew *bufferedWriter) Header() http.Header {
 	return ew.rw.Header()
 }
 
-func (ew *etagWriter) WriteHeader(status int) {
+func (ew *bufferedWriter) WriteHeader(status int) {
 	if ew.passthrough {
 		if !ew.headerSent {
 			ew.headerSent = true
@@ -50,7 +51,7 @@ func (ew *etagWriter) WriteHeader(status int) {
 	ew.status = status
 }
 
-func (ew *etagWriter) Write(b []byte) (int, error) {
+func (ew *bufferedWriter) Write(b []byte) (int, error) {
 	if ew.passthrough {
 		if !ew.headerSent {
 			ew.headerSent = true
@@ -63,7 +64,7 @@ func (ew *etagWriter) Write(b []byte) (int, error) {
 
 // Flush switches to passthrough: the handler is streaming, so buffering for a
 // hash would break it (and reverse proxies flush periodically).
-func (ew *etagWriter) Flush() {
+func (ew *bufferedWriter) Flush() {
 	if !ew.passthrough {
 		ew.passthrough = true
 		if !ew.headerSent {
@@ -80,7 +81,7 @@ func (ew *etagWriter) Flush() {
 	}
 }
 
-func (ew *etagWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+func (ew *bufferedWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	h, ok := ew.rw.(http.Hijacker)
 	if !ok {
 		return nil, nil, fmt.Errorf("underlying ResponseWriter does not support hijacking")
@@ -90,7 +91,7 @@ func (ew *etagWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return h.Hijack()
 }
 
-func (ew *etagWriter) finish(r *http.Request) {
+func (ew *bufferedWriter) finish(r *http.Request) {
 	if ew.passthrough {
 		return
 	}
@@ -101,16 +102,36 @@ func (ew *etagWriter) finish(r *http.Request) {
 		return
 	}
 
+	h := ew.rw.Header()
+	compress := compressible(r, h, ew.buf.Bytes())
 	sum := sha256.Sum256(ew.buf.Bytes())
-	etag := `"` + hex.EncodeToString(sum[:16]) + `"`
+	etag := `"` + hex.EncodeToString(sum[:16])
+	if compress {
+		etag += "-gz"
+	}
+	etag += `"`
+	h.Set("ETag", etag)
+	if compress {
+		h.Add("Vary", "Accept-Encoding")
+	}
 
 	if r.Header.Get("If-None-Match") == etag {
-		ew.rw.Header().Set("ETag", etag)
 		ew.rw.WriteHeader(http.StatusNotModified)
 		return
 	}
 
-	ew.rw.Header().Set("ETag", etag)
+	if !compress {
+		ew.rw.WriteHeader(http.StatusOK)
+		_, _ = ew.rw.Write(ew.buf.Bytes())
+		return
+	}
+
+	body := gzipBytes(ew.buf.Bytes())
+	h.Set("Content-Encoding", "gzip")
+	h.Set("Content-Length", strconv.Itoa(len(body)))
+	// FileServer advertises ranges over the identity body; a range into the
+	// gzipped one would be garbage.
+	h.Del("Accept-Ranges")
 	ew.rw.WriteHeader(http.StatusOK)
-	_, _ = ew.rw.Write(ew.buf.Bytes())
+	_, _ = ew.rw.Write(body)
 }

@@ -6,6 +6,7 @@ import (
 	"app/internal/app/processor"
 	"app/pkg/ai"
 	"app/pkg/ctxstore"
+	"app/pkg/s3client"
 	"app/pkg/tools"
 	"app/pkg/ws"
 	"context"
@@ -515,6 +516,11 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if box, ok := requestedBox(r); ok {
+		api.charImageVariant(w, r, characterID, box)
+		return
+	}
+
 	cached, err := api.imageCache.Get(r.Context(), characterID)
 	if err != nil {
 		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
@@ -525,17 +531,7 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(cached.Data) == 0 {
-		img, err := staticFS.ReadFile("static/doctorWTF.png")
-		if err != nil {
-			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-				ErrorCode:    http.StatusInternalServerError,
-				ErrorMessage: "staticFS.ReadFile: " + err.Error(),
-			})
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		_, _ = w.Write(img)
+		servePlaceholderImage(w)
 		return
 	}
 
@@ -550,6 +546,88 @@ func (api *API) charImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = w.Write(cached.Data)
+}
+
+// charImageVariant serves the card image fitted to box as WebP; the variant
+// is keyed by the S3 image id, so a re-upload never serves stale pixels.
+func (api *API) charImageVariant(w http.ResponseWriter, r *http.Request, characterID uuid.UUID, box fitBox) {
+	imageID, err := api.db.GetCharImageID(r.Context(), characterID)
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "GetCharImageID: " + err.Error(),
+		})
+		return
+	}
+	if imageID == "" {
+		servePlaceholderImage(w)
+		return
+	}
+
+	data, err := api.variants.Get(r.Context(), s3client.CharDataBucket, imageID, box, func(ctx context.Context) ([]byte, error) {
+		cached, err := api.imageCache.Get(ctx, characterID)
+		if err != nil {
+			return nil, err
+		}
+		return cached.Data, nil
+	})
+	if err != nil {
+		api.logger.Error("character image variant", "card", characterID, "box", box, "error", err)
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "image variant: " + err.Error(),
+		})
+		return
+	}
+	if len(data) == 0 {
+		servePlaceholderImage(w)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/webp")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(data)
+}
+
+// requestedBox reads ?w= and ?h= and snaps each to the variant ladder. One
+// missing side takes the other's value, so a plain ?w= is a square fit.
+func requestedBox(r *http.Request) (fitBox, bool) {
+	q := r.URL.Query()
+	ws, hs := q.Get("w"), q.Get("h")
+	if ws == "" && hs == "" {
+		return fitBox{}, false
+	}
+	if ws == "" {
+		ws = hs
+	}
+	if hs == "" {
+		hs = ws
+	}
+	wv, errW := strconv.Atoi(ws)
+	hv, errH := strconv.Atoi(hs)
+	if errW != nil || errH != nil {
+		return fitBox{}, false
+	}
+	w, okW := snapDim(wv)
+	h, okH := snapDim(hv)
+	if !okW || !okH {
+		return fitBox{}, false
+	}
+	return fitBox{W: w, H: h}, true
+}
+
+func servePlaceholderImage(w http.ResponseWriter) {
+	img, err := staticFS.ReadFile("static/doctorWTF.png")
+	if err != nil {
+		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "staticFS.ReadFile: " + err.Error(),
+		})
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(img)
 }
 
 type voicesListPage struct {

@@ -2,16 +2,16 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"fmt"
 	"html/template"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"image"
-	_ "image/gif"
+	"image/gif"
 	_ "image/jpeg"
 
 	// _ "image/png"
@@ -33,7 +33,7 @@ const (
 	alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 	// maxStoredDim keeps share links at up to 4K; the LLM path downscales to
-	// 1024 on read (processor.downscaleForLLM), so this doesn't affect prompts.
+	// 1024 on read (processor.imageForLLM), so this doesn't affect prompts.
 	maxStoredDim = 3840
 
 	// maxImagePixels bounds decode memory on this public endpoint (~256MB
@@ -77,7 +77,7 @@ func (api *API) storeImage(r *http.Request) (string, int, error) {
 	}
 	defer file.Close()
 
-	cfg, _, err := image.DecodeConfig(file)
+	cfg, format, err := image.DecodeConfig(file)
 	if err != nil {
 		return "", http.StatusBadRequest, fmt.Errorf("invalid image: %w", err)
 	}
@@ -88,28 +88,61 @@ func (api *API) storeImage(r *http.Request) (string, int, error) {
 		return "", http.StatusInternalServerError, fmt.Errorf("seek error: %w", err)
 	}
 
-	src, _, err := image.Decode(file)
-	if err != nil {
-		return "", http.StatusBadRequest, fmt.Errorf("invalid image: %w", err)
-	}
-
 	id, err := randomID(imageIDLength)
 	if err != nil {
 		return "", http.StatusInternalServerError, fmt.Errorf("id error: %w", err)
 	}
 
-	dst := imaging.Fit(src, maxStoredDim, maxStoredDim, imaging.Lanczos)
-
-	var out bytes.Buffer
-	if err := imgpng.Encode(&out, dst); err != nil {
-		return "", http.StatusInternalServerError, fmt.Errorf("encode error: %w", err)
+	raw, err := io.ReadAll(file)
+	if err != nil {
+		return "", http.StatusBadRequest, fmt.Errorf("read upload: %w", err)
 	}
 
-	if err := api.s3.PutObject(r.Context(), s3client.UserImagesBucket, id, bytes.NewReader(out.Bytes()), int64(out.Len()), "image/png"); err != nil {
+	var stored []byte
+	contentType := "image/png"
+	if animated(raw, format) {
+		// Go's decoders see one frame, so animations are stored as uploaded and
+		// only scaled through ffmpeg when they exceed the share-link ceiling.
+		stored = raw
+		contentType = "image/" + format
+		if cfg.Width > maxStoredDim || cfg.Height > maxStoredDim {
+			stored, err = api.ffmpeg.FitWebP(r.Context(), raw, maxStoredDim, maxStoredDim, variantQuality)
+			if err != nil {
+				return "", http.StatusBadRequest, fmt.Errorf("invalid image: %w", err)
+			}
+			contentType = "image/webp"
+		}
+	} else {
+		src, _, err := image.Decode(bytes.NewReader(raw))
+		if err != nil {
+			return "", http.StatusBadRequest, fmt.Errorf("invalid image: %w", err)
+		}
+		dst := imaging.Fit(src, maxStoredDim, maxStoredDim, imaging.Lanczos)
+		var out bytes.Buffer
+		if err := imgpng.Encode(&out, dst); err != nil {
+			return "", http.StatusInternalServerError, fmt.Errorf("encode error: %w", err)
+		}
+		stored = out.Bytes()
+	}
+
+	if err := api.s3.PutObject(r.Context(), s3client.UserImagesBucket, id, bytes.NewReader(stored), int64(len(stored)), contentType); err != nil {
 		return "", http.StatusInternalServerError, fmt.Errorf("upload error: %w", err)
 	}
 
 	return id, http.StatusOK, nil
+}
+
+// animated reports whether a gif has more than one frame or a webp carries
+// the animation flag; other formats have no animation to keep.
+func animated(data []byte, format string) bool {
+	switch format {
+	case "gif":
+		g, err := gif.DecodeAll(bytes.NewReader(data))
+		return err == nil && len(g.Image) > 1
+	case "webp":
+		return len(data) > 20 && string(data[12:16]) == "VP8X" && data[20]&0x02 != 0
+	}
+	return false
 }
 
 // uploadImage handles the core upload logic: parse, decode, resize, store.
@@ -171,30 +204,17 @@ func (api *API) imagePreview(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// resizeToFit returns data re-encoded to fit within maxDim, or the original
-// bytes untouched if the image already fits.
-func resizeToFit(data []byte, maxDim int) ([]byte, error) {
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+func (api *API) readUserImage(ctx context.Context, id string) ([]byte, error) {
+	obj, err := api.s3.GetObject(ctx, s3client.UserImagesBucket, id)
 	if err != nil {
-		return nil, fmt.Errorf("decode config: %w", err)
+		return nil, fmt.Errorf("get %s: %w", id, err)
 	}
-	if cfg.Width <= maxDim && cfg.Height <= maxDim {
-		return data, nil
-	}
-
-	src, _, err := image.Decode(bytes.NewReader(data))
+	defer obj.Close()
+	data, err := io.ReadAll(obj)
 	if err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
+		return nil, fmt.Errorf("read %s: %w", id, err)
 	}
-
-	dst := imaging.Fit(src, maxDim, maxDim, imaging.Lanczos)
-
-	var out bytes.Buffer
-	if err := imgpng.Encode(&out, dst); err != nil {
-		return nil, fmt.Errorf("encode: %w", err)
-	}
-
-	return out.Bytes(), nil
+	return data, nil
 }
 
 func (api *API) imageGet(w http.ResponseWriter, r *http.Request) {
@@ -205,35 +225,32 @@ func (api *API) imageGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	obj, err := api.s3.GetObject(r.Context(), s3client.UserImagesBucket, id)
+	// ?w=&h= serve the image fitted to that box, so the overlay and control
+	// panel fetch at their rendered size instead of full stored resolution.
+	if box, ok := requestedBox(r); ok {
+		data, err := api.variants.Get(r.Context(), s3client.UserImagesBucket, id, box, func(ctx context.Context) ([]byte, error) {
+			return api.readUserImage(ctx, id)
+		})
+		if err != nil {
+			api.logger.Error("image variant", "id", id, "box", box, "error", err)
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte("not found"))
+			return
+		}
+		w.Header().Set("Content-Type", "image/webp")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		_, _ = w.Write(data)
+		return
+	}
+
+	data, err := api.readUserImage(r.Context(), id)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("not found"))
-		return
-	}
-	defer obj.Close()
-
-	data, err := io.ReadAll(obj)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("read error"))
+		_, _ = w.Write([]byte("not found"))
 		return
 	}
 
-	// ?w=N serves the image downscaled to fit N px, so the overlay can fetch
-	// at its actual rendered size instead of full stored resolution.
-	if ws := r.URL.Query().Get("w"); ws != "" {
-		if want, err := strconv.Atoi(ws); err == nil && want > 0 {
-			resized, err := resizeToFit(data, want)
-			if err != nil {
-				// Full-res still renders, just wastes bandwidth.
-				api.logger.Error("failed to resize image, serving original", "id", id, "w", want, "error", err)
-			} else {
-				data = resized
-			}
-		}
-	}
-
-	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Type", http.DetectContentType(data))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = w.Write(data)
 }

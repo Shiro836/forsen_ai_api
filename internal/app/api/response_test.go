@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestETagMiddleware(t *testing.T) {
-	handler := etagMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestResponseMiddlewareETag(t *testing.T) {
+	handler := responseMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("hello world"))
 	}))
 
@@ -27,8 +27,8 @@ func TestETagMiddleware(t *testing.T) {
 	}
 }
 
-func TestETagMiddlewareNonOK(t *testing.T) {
-	handler := etagMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestResponseMiddlewareNonOK(t *testing.T) {
+	handler := responseMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte("not found"))
 	}))
@@ -40,8 +40,8 @@ func TestETagMiddlewareNonOK(t *testing.T) {
 	}
 }
 
-func TestETagMiddlewareSkipsNonGET(t *testing.T) {
-	handler := etagMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestResponseMiddlewareSkipsNonGET(t *testing.T) {
+	handler := responseMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("created"))
 	}))
 
@@ -52,8 +52,8 @@ func TestETagMiddlewareSkipsNonGET(t *testing.T) {
 	}
 }
 
-func TestETagMiddlewareFlushPassthrough(t *testing.T) {
-	handler := etagMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestResponseMiddlewareFlushPassthrough(t *testing.T) {
+	handler := responseMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("chunk1"))
 		w.(http.Flusher).Flush()
 		_, _ = w.Write([]byte("chunk2"))

@@ -383,7 +383,7 @@ loop:
 
 				imageURLs := make([]string, 0, len(imageIDs))
 				for _, iid := range imageIDs {
-					imageURLs = append(imageURLs, fmt.Sprintf("/images/%s", iid))
+					imageURLs = append(imageURLs, fmt.Sprintf("/images/%s?w=512", iid))
 				}
 
 				logger.Info("image urls", "image_urls", imageURLs)

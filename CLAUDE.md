@@ -43,6 +43,15 @@ Subscriber channels are **drop-on-full by design** — never assume guaranteed d
 - OBS browser sources cache static JS aggressively; changes to `internal/app/api/static/*.js` need a browser-source cache refresh to take effect.
 - Don't estimate VRAM or model sizes — measure on the actual machine.
 
+## Before starting any task
+
+Read these memory files from the auto-memory directory (`~/.claude/projects/-home-forsen-repos-forsen-ai-api/memory/`) and follow them; MEMORY.md alone is not enough:
+
+- `feedback_use_build_script.md` — every change ends with `scripts/build_prod.sh` before reporting done. The user restarts the service after you finish; `go build ./...` only typechecks and leaves the old binary running.
+- `feedback_sudo_commands.md`, `feedback_db_readonly.md`, `feedback_secrets_public_repo.md` — what you may not execute or write.
+- `feedback_verify_live_state_first.md` — verify the live stack before asserting anything about it.
+- Any `project_*.md` that the index lists for the area you're touching.
+
 ## How to work
 
 - **Validate before you code.** Everything runs on this machine — the services, their logs (`journalctl`), the DB, the model servers. When behavior is in question, probe the live service or read the logs instead of assuming; design from measured facts. (Example: "does the engine's segment text match the input?" is one curl away — don't guess and code defensively around it.)

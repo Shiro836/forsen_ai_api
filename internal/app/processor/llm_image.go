@@ -2,6 +2,7 @@ package processor
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/png"
@@ -15,14 +16,27 @@ import (
 // 1054 on qwen36-hauhau) against 16k context per slot.
 const llmImageMaxDim = 1024
 
-// downscaleForLLM re-encodes an image if it exceeds llmImageMaxDim in either
-// dimension; smaller images pass through byte-identical.
-func downscaleForLLM(data []byte) ([]byte, error) {
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+type stillRenderer interface {
+	StillPNG(ctx context.Context, data []byte, maxDim int) ([]byte, error)
+}
+
+// imageForLLM returns a PNG no larger than llmImageMaxDim. PNGs already
+// within the limit pass through byte-identical; anything Go cannot decode
+// (animated webp) goes through ffmpeg for its first frame.
+func imageForLLM(ctx context.Context, ff stillRenderer, data []byte) ([]byte, error) {
+	out, err := fitPNG(data)
+	if err != nil && ff != nil {
+		return ff.StillPNG(ctx, data, llmImageMaxDim)
+	}
+	return out, err
+}
+
+func fitPNG(data []byte) ([]byte, error) {
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
-	if cfg.Width <= llmImageMaxDim && cfg.Height <= llmImageMaxDim {
+	if format == "png" && cfg.Width <= llmImageMaxDim && cfg.Height <= llmImageMaxDim {
 		return data, nil
 	}
 

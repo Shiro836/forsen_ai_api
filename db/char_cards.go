@@ -5,7 +5,9 @@ import (
 	"app/pkg/tools"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"strings"
@@ -17,8 +19,8 @@ import (
 type Card struct {
 	ID uuid.UUID
 
-	OwnerUserID       uuid.UUID
-	OwnerTwitchLogin  string
+	OwnerUserID      uuid.UUID
+	OwnerTwitchLogin string
 
 	Name        string
 	Description string
@@ -66,6 +68,34 @@ type CardData struct {
 type PublicShortName struct {
 	ID            uuid.UUID
 	ShortCharName string
+}
+
+// GetCharImageID returns a stable identifier for the bytes behind a card's
+// image: the S3 object id, or a content hash for images still inlined in the
+// row. Empty when the card has no image.
+func (db *DB) GetCharImageID(ctx context.Context, cardID uuid.UUID) (string, error) {
+	var data *CardData
+	err := db.QueryRow(ctx, `
+		select
+			cc.data
+		from char_cards cc
+		where
+			cc.id = $1
+	`, cardID).Scan(&data)
+	if err != nil {
+		return "", fmt.Errorf("get char image id: %w", parseErr(err))
+	}
+
+	switch {
+	case data == nil:
+		return "", nil
+	case data.ImageID != "":
+		return data.ImageID, nil
+	case len(data.Image) > 0:
+		sum := sha256.Sum256(data.Image)
+		return "inline-" + hex.EncodeToString(sum[:16]), nil
+	}
+	return "", nil
 }
 
 func (db *DB) GetCharImage(ctx context.Context, cardID uuid.UUID) ([]byte, error) {

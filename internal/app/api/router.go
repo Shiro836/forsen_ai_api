@@ -17,6 +17,7 @@ import (
 	"app/internal/app/conns"
 	"app/internal/app/processor"
 	"app/internal/emoteservice"
+	"app/pkg/ffmpeg"
 	"app/pkg/s3client"
 	"app/pkg/twitch"
 
@@ -59,6 +60,8 @@ type API struct {
 	ingestRestartURL string
 
 	imageCache   *ImageCache
+	ffmpeg       *ffmpeg.Client
+	variants     *VariantCache
 	voiceSamples *VoiceSampleCache
 
 	bitsDetector *bitsDetector
@@ -69,7 +72,7 @@ type API struct {
 }
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservice.Config, logger *slog.Logger, connManager *conns.Manager,
-	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client,
+	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client, ffmpegClient *ffmpeg.Client,
 	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
 	voiceSampler VoiceSampler) *API {
 	api := &API{
@@ -90,13 +93,16 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservi
 		universalHandler: universalHandler,
 		agenticHandler:   agenticHandler,
 
-		imageCache:   NewImageCache(db),
 		voiceSamples: NewVoiceSampleCache(voiceSampler, db),
 
 		bitsDetector: newBitsDetector(logger),
 
 		emotes: newEmoteClient(emoteCfg),
 	}
+
+	api.imageCache = NewImageCache(db)
+	api.ffmpeg = ffmpegClient
+	api.variants = NewVariantCache(s3, ffmpegClient, logger)
 
 	if ingestPort > 0 {
 		host := ingestHost
@@ -127,7 +133,7 @@ func (api *API) NewRouter() *chi.Mux {
 	router.Use(middleware.StripSlashes)
 
 	router.Use(middleware.Recoverer)
-	router.Use(etagMiddleware)
+	router.Use(responseMiddleware)
 
 	// Grafana reverse proxy
 	grafanaURL, _ := url.Parse("http://localhost:2999")

@@ -97,8 +97,24 @@ async function pageReady() {
             return;
         }
         renderPromptImages();
-        charImg.src = url;
+        charImg.src = sizedURL(url, charImg);
         charImg.classList.add('visible');
+    }
+
+    // Local images are served fitted to the element's real box, so a 4K
+    // upload doesn't travel in full to a 1080p source; the server snaps each
+    // side to a ladder, so nearby sources share one rendition
+    function sizedURL(raw, el) {
+        if (!raw.startsWith('/')) return raw;
+        const cs = getComputedStyle(el);
+        const h = parseFloat(cs.height) || window.innerHeight * 0.7;
+        const w = parseFloat(cs.maxWidth) || window.innerWidth * 0.42;
+        return fitURL(raw, w, h);
+    }
+
+    function fitURL(raw, w, h) {
+        const dpr = window.devicePixelRatio || 1;
+        return raw + (raw.includes('?') ? '&' : '?') + 'w=' + Math.ceil(w * dpr) + '&h=' + Math.ceil(h * dpr);
     }
 
     function renderPromptImages() {
@@ -125,13 +141,11 @@ async function pageReady() {
         imagesContainer.style.display = 'grid';
         // src is set after layout so each slot's real on-screen box can pick
         // the fetch size — stored images can be 4K, the box rarely is
-        const dpr = window.devicePixelRatio || 1;
         for (const { slot, img, raw } of slots) {
             let src = raw.startsWith('http') ? raw : (window.location.origin + raw);
             if (!raw.startsWith('http')) {
                 const rect = slot.getBoundingClientRect();
-                const need = Math.ceil(Math.max(rect.width, rect.height) * dpr);
-                if (need >= 64) src += (src.includes('?') ? '&' : '?') + 'w=' + need;
+                if (rect.width >= 64 && rect.height >= 64) src = fitURL(src, rect.width, rect.height);
             }
             img.src = src;
         }
