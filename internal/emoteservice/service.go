@@ -65,7 +65,7 @@ func New(ctx context.Context, logger *slog.Logger, cfg *Config) (*Service, error
 		return nil, err
 	}
 
-	vision := oai.New(cfg.Vision.AccessToken, cfg.Vision.URL, cfg.Vision.Model, cfg.Vision.MaxTokens)
+	vision := oai.New(&cfg.Vision)
 	classifier := NewClassifier(logger.With("component", "classifier"), vision, cfg)
 	sevenTV := seventv.New(&cfg.SevenTV)
 

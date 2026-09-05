@@ -1,6 +1,7 @@
 package api
 
 import (
+	"app/pkg/tools"
 	"log/slog"
 	"strings"
 	"sync"
@@ -137,6 +138,7 @@ func (d *bitsDetector) Seen(userID uuid.UUID) []seenReward {
 }
 
 func (d *bitsDetector) run(userID uuid.UUID, watcher *bitsWatcher) {
+	defer tools.LogPanic(d.logger, "bits watcher")
 	if err := watcher.client.Connect(); err != nil {
 		d.logger.Error("bits reward detector watcher stopped", "error", err, "channel", watcher.login)
 	}
@@ -177,6 +179,7 @@ func (d *bitsDetector) record(userID uuid.UUID, reward seenReward) {
 }
 
 func (d *bitsDetector) reapLoop() {
+	defer tools.LogPanic(d.logger, "bits reaper")
 	ticker := time.NewTicker(bitsWatchReapTick)
 	defer ticker.Stop()
 

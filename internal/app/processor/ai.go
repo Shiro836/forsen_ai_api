@@ -33,11 +33,12 @@ func (s *Service) filterSpans(ctx context.Context, userSettings *db.UserSettings
 		return textfilter.Merge(s.regexSpans(userSettings, text)), nil
 	}
 	llmInput, artMap := textfilter.Collapse(text, artfilter.Detect(text).Spans(text), artPlaceholder)
+	llmInput, expandRepeats := textfilter.CollapseRepeats(llmInput)
 	llmSpans, err := s.llmFilter.Spans(ctx, llmInput, userSettings.CustomFilterPrompt)
 	if err != nil {
 		return nil, err
 	}
-	return textfilter.Merge(s.regexSpans(userSettings, text), artMap.MapBack(llmSpans)), nil
+	return textfilter.Merge(s.regexSpans(userSettings, text), artMap.MapBack(expandRepeats(llmSpans))), nil
 }
 
 // filterReplySpans marks an AI reply, judging it against the prompt it answers
@@ -48,11 +49,12 @@ func (s *Service) filterReplySpans(ctx context.Context, userSettings *db.UserSet
 	}
 	prompt = artfilter.Detect(prompt).Mask(prompt, artPlaceholder)
 	llmInput, artMap := textfilter.Collapse(reply, artfilter.Detect(reply).Spans(reply), artPlaceholder)
+	llmInput, expandRepeats := textfilter.CollapseRepeats(llmInput)
 	llmSpans, err := s.llmFilter.ReplySpans(ctx, prompt, llmInput, userSettings.CustomFilterPrompt)
 	if err != nil {
 		return nil, err
 	}
-	return textfilter.Merge(s.regexSpans(userSettings, reply), artMap.MapBack(llmSpans)), nil
+	return textfilter.Merge(s.regexSpans(userSettings, reply), artMap.MapBack(expandRepeats(llmSpans))), nil
 }
 
 // spansAfterPrefix re-bases spans over (prefix+body) onto body alone: it drops

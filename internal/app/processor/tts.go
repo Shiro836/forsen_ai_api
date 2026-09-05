@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"app/pkg/tools"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -223,6 +224,7 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 	done := make(chan struct{})
 
 	go func() {
+		defer tools.LogPanic(logger, "play")
 		defer close(done)
 
 		if state.IsSkipped(msdID) {

@@ -33,7 +33,6 @@ type Config struct {
 	EmoteService emoteservice.Config `yaml:"emote_service"`
 
 	LLM2       llm.Config `yaml:"llm2"`
-	AgenticLLM llm.Config `yaml:"agentic_llm"`
 	ImageLLM   llm.Config `yaml:"image_llm"`
 	// NativeImages sends user images to the character model directly instead
 	// of injecting an ImageLLM-written description into the message text.

@@ -3,6 +3,7 @@ package api
 import (
 	"app/db"
 	"app/internal/app/conns"
+	"app/pkg/tools"
 	"app/pkg/ws"
 	"crypto/sha256"
 	"encoding/hex"
@@ -125,7 +126,6 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 	wsConn, err := ws.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Error("failed to upgrade to websocket connection", "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
 
 		return
 	}
@@ -157,6 +157,7 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// READ FROM WS
 	go func() {
+		defer tools.LogPanic(logger, "overlay ws reader")
 		defer wsClient.Close()
 		for {
 			msg, err := wsClient.Read()
@@ -168,10 +169,10 @@ func (api *API) wsHandler(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 
-			var upd *obsAction
-			err = json.Unmarshal(msg.Message, &upd)
-			if err != nil {
+			var upd obsAction
+			if err := json.Unmarshal(msg.Message, &upd); err != nil {
 				logger.Error("failed to unmarshal message from ws", "err", err)
+				continue
 			}
 
 			switch upd.Action {

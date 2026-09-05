@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"app/pkg/tools"
 	"context"
 	"embed"
 	"errors"
@@ -356,6 +357,7 @@ func (p *Processor) overlayAudioWriter(userID uuid.UUID) conns.AudioWriter {
 func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conns.Update, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, cancel context.CancelFunc) {
 	defer cancel()
 	logger := p.logger.With("user", broadcaster.TwitchLogin, "component", "control_signals")
+	defer tools.LogPanic(logger, "control signals")
 
 	// Helpers for control actions
 	skipMessage := func(msgID uuid.UUID) {

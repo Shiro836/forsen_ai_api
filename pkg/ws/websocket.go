@@ -3,7 +3,6 @@ package ws
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -11,9 +10,10 @@ import (
 
 var ErrClosed = errors.New("ws is closed")
 
-var Upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
+// Upgrader keeps gorilla's default origin check: an Origin header must match
+// the request host, no Origin header passes. Every client page opens its
+// socket against window.location.host, so this holds on each of our hosts.
+var Upgrader = websocket.Upgrader{}
 
 const TextMessage = websocket.TextMessage
 

@@ -270,7 +270,7 @@ func TestLiveWorkerProcessEmote(t *testing.T) {
 		store,
 		client,
 		client,
-		NewClassifier(integrationLogger(), oai.New(cfg.Vision.AccessToken, cfg.Vision.URL, cfg.Vision.Model, cfg.Vision.MaxTokens), cfg),
+		NewClassifier(integrationLogger(), oai.New(&cfg.Vision), cfg),
 		nil,
 		objects,
 		cfg,
@@ -316,7 +316,7 @@ func TestLiveWorkerProcessesStaticEmote(t *testing.T) {
 	worker := NewWorker(
 		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		store, client, client,
-		NewClassifier(integrationLogger(), oai.New(cfg.Vision.AccessToken, cfg.Vision.URL, cfg.Vision.Model, cfg.Vision.MaxTokens), cfg),
+		NewClassifier(integrationLogger(), oai.New(&cfg.Vision), cfg),
 		nil, nil, cfg,
 	)
 	require.NoError(t, worker.ProcessEmote(ctx, ProviderSevenTV, praygeID))
@@ -368,7 +368,7 @@ func TestLiveWorkerWritesEmbeddings(t *testing.T) {
 	worker := NewWorker(
 		slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		store, client, client,
-		NewClassifier(integrationLogger(), oai.New(cfg.Vision.AccessToken, cfg.Vision.URL, cfg.Vision.Model, cfg.Vision.MaxTokens), cfg),
+		NewClassifier(integrationLogger(), oai.New(&cfg.Vision), cfg),
 		embedder, nil, cfg,
 	)
 	require.NoError(t, worker.ProcessEmote(ctx, ProviderSevenTV, forsenCreamID))
@@ -407,7 +407,7 @@ func TestLiveEmbedderOutageKeepsTheClassification(t *testing.T) {
 	cfg.withDefaults()
 	client := seventv.New(&cfg.SevenTV)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	classifier := NewClassifier(integrationLogger(), oai.New(cfg.Vision.AccessToken, cfg.Vision.URL, cfg.Vision.Model, cfg.Vision.MaxTokens), cfg)
+	classifier := NewClassifier(integrationLogger(), oai.New(&cfg.Vision), cfg)
 
 	broken := NewWorker(logger, store, client, client, classifier, failingEmbedder{}, nil, cfg)
 	require.Error(t, broken.ProcessEmote(ctx, ProviderSevenTV, praygeID), "the embedder failure must surface")
@@ -577,7 +577,7 @@ func TestLiveClassifyForsenCream(t *testing.T) {
 
 	classifier := NewClassifier(
 		integrationLogger(),
-		oai.New(cfg.Vision.AccessToken, cfg.Vision.URL, cfg.Vision.Model, cfg.Vision.MaxTokens),
+		oai.New(&cfg.Vision),
 		cfg)
 
 	grid, err := classifier.BuildGrid(ctx, webp)

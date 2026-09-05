@@ -35,7 +35,7 @@ func TestDetectCharacters_DBIntegration(t *testing.T) {
 	database, err := db.New(ctx, &testCfg.DB)
 	require.NoError(t, err)
 
-	client := oai.New(testCfg.OAI.AccessToken, testCfg.OAI.URL, testCfg.OAI.Model, testCfg.OAI.MaxTokens)
+	client := oai.New(&testCfg.OAI)
 	detector := agentic.NewDetector(client)
 
 	// Fetch all characters from DB

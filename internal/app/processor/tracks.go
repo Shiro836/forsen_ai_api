@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"app/pkg/tools"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -275,6 +276,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 	errCh := make(chan error, 1)
 
 	go func() {
+		defer tools.LogPanic(logger, "tts stream")
 		defer close(chunkCh)
 		errCh <- streamer.TTSStream(streamCtx, ttsText, voiceRef, func(c ai.StreamChunk) error {
 			select {
@@ -289,6 +291,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 	done := make(chan struct{})
 
 	go func() {
+		defer tools.LogPanic(logger, "streaming play")
 		defer close(done)
 		defer cancelStream()
 

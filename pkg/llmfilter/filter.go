@@ -14,8 +14,8 @@
 // offsets are recovered locally. Spans are trusted only when removing the tags
 // reproduces the target exactly. On any divergence the model is asked to redo it
 // in the same conversation rather than guessing at a repair. A target it cannot
-// echo at all falls back to listing the offending substrings, which are located
-// locally; an unusable answer there still fails.
+// echo at all is re-sent as an indexed unit list and the model answers with
+// index ranges; an unusable answer there still fails.
 //
 // A target in a script the model cannot sound out (Han, kana) is preceded by a
 // romanized SPOKEN FORM, so text that is innocent on the page but voiced as a
@@ -26,7 +26,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 
 	"app/pkg/llm"
 	"app/pkg/textfilter"
@@ -248,14 +251,31 @@ Output: 1937年12月，日军攻占南京后进行了大规模屠杀，数十万
 // call. custom holds the streamer's extra filtering instructions ("" for
 // built-in policy only).
 func (f *Filter) Spans(ctx context.Context, text, custom string) ([]textfilter.Span, error) {
-	return f.run(ctx, text, spokenForm(text)+"TARGET:\n"+text, custom)
+	alone := spokenForm(text) + "TARGET:\n" + text
+	passes := []pass{{"policy", systemPrompt, alone}}
+	if custom = strings.TrimSpace(custom); custom != "" {
+		passes = append(passes, pass{"streamer rules", streamerPrompt(custom), alone})
+	}
+	return f.run(ctx, text, passes)
 }
 
 // ReplySpans annotates reply, using prompt as context to resolve who the reply
 // is about, and returns spans over reply only. custom holds the streamer's
 // extra filtering instructions ("" for built-in policy only).
+//
+// The reply is also judged without the prompt. Context is what catches "I hate
+// them", but it launders the reverse trick: a request that asks the character
+// to say an innocent word that sounds like a slur ("nikah") in a slur's slot —
+// given the request, the model reads the word by its requested meaning and
+// clears it. The audience hears the reply alone, so it is judged alone too.
 func (f *Filter) ReplySpans(ctx context.Context, prompt, reply, custom string) ([]textfilter.Span, error) {
-	return f.run(ctx, reply, "CONTEXT — a viewer asked: "+prompt+"\n\n"+spokenForm(reply)+"TARGET:\n"+reply, custom)
+	alone := spokenForm(reply) + "TARGET:\n" + reply
+	withContext := "CONTEXT — a viewer asked: " + prompt + "\n\n" + alone
+	passes := []pass{{"policy", systemPrompt, withContext}, {"reply-alone policy", systemPrompt, alone}}
+	if custom = strings.TrimSpace(custom); custom != "" {
+		passes = append(passes, pass{"streamer rules", streamerPrompt(custom), withContext})
+	}
+	return f.run(ctx, reply, passes)
 }
 
 // spokenForm returns the SPOKEN FORM block for a target the model cannot sound
@@ -285,35 +305,34 @@ func hintedScript(r rune) bool {
 		(r >= 0x3040 && r <= 0x30FF) // hiragana, katakana
 }
 
-// run executes the built-in policy pass and, when custom rules exist, the
-// streamer-rules pass concurrently, merging their spans. Either pass failing
-// fails the whole filter — a silently dropped pass would speak banned content.
-func (f *Filter) run(ctx context.Context, target, userMessage, custom string) ([]textfilter.Span, error) {
-	custom = strings.TrimSpace(custom)
-	if custom == "" {
-		return f.annotate(ctx, target, userMessage, systemPrompt)
-	}
+// pass is one LLM call: the system prompt that sets the policy and the user
+// message carrying the target. name labels the pass in errors.
+type pass struct {
+	name, system, user string
+}
 
-	var (
-		customSpans []textfilter.Span
-		customErr   error
-		done        = make(chan struct{})
-	)
-	go func() {
-		defer close(done)
-		customSpans, customErr = f.annotate(ctx, target, userMessage, streamerPrompt(custom))
-	}()
-
-	baseSpans, baseErr := f.annotate(ctx, target, userMessage, systemPrompt)
-	<-done
-
-	if baseErr != nil {
-		return nil, baseErr
+// run executes the passes concurrently and merges their spans. Any pass
+// failing fails the whole filter — a silently dropped pass would speak banned
+// content.
+func (f *Filter) run(ctx context.Context, target string, passes []pass) ([]textfilter.Span, error) {
+	results := make([][]textfilter.Span, len(passes))
+	errs := make([]error, len(passes))
+	var wg sync.WaitGroup
+	for i, p := range passes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i], errs[i] = f.annotate(ctx, target, p.user, p.system)
+		}()
 	}
-	if customErr != nil {
-		return nil, fmt.Errorf("streamer rules pass: %w", customErr)
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			return nil, fmt.Errorf("%s pass: %w", passes[i].name, err)
+		}
 	}
-	return textfilter.Merge(baseSpans, customSpans), nil
+	return textfilter.Merge(results...), nil
 }
 
 func (f *Filter) annotate(ctx context.Context, target, userMessage, system string) ([]textfilter.Span, error) {
@@ -352,85 +371,11 @@ func (f *Filter) annotate(ctx context.Context, target, userMessage, system strin
 		messages = append(messages, msg("user", correction(target, got)))
 	}
 
-	return f.listSpans(ctx, target, messages)
-}
-
-const listInstruction = `Your previous answer did not reproduce the TARGET verbatim, so it cannot be used.
-
-Do NOT echo the target again. Instead list ONLY the substrings of the TARGET that must be tagged, one per line, each copied character-for-character from the TARGET. If nothing must be tagged, reply with exactly: NONE`
-
-// listSpans is the escape hatch for a target the model cannot echo at all: a
-// long run of a repeated token makes it miscount or loop until the token
-// ceiling, and no repair message fixes that — measured, the same wrong echo
-// comes back every attempt. Listing the offending substrings keeps a slur
-// buried in spam censored instead of failing the message; an answer that
-// neither says NONE nor locates anything still errors, because speaking an
-// unfiltered message is worse than dropping it.
-func (f *Filter) listSpans(ctx context.Context, target string, messages []llm.Message) ([]textfilter.Span, error) {
-	out, err := f.client.Ask(ctx, append(messages, msg("user", listInstruction)), temperature)
-	if err != nil {
-		return nil, fmt.Errorf("llmfilter: ask (substring listing): %w", err)
-	}
-
-	logger := slog.With("attempts", maxAttempts, "target_runes", len([]rune(target)))
-
-	if isNone(out) {
-		logger.Warn("llmfilter: verbatim echo failed, model listed no spans")
-		return nil, nil
-	}
-
-	spans := locateListed(target, out)
-	if len(spans) == 0 {
-		return nil, fmt.Errorf("llmfilter: model did not reproduce the target verbatim after %d attempts, and listed nothing locatable", maxAttempts)
-	}
-
-	logger.Warn("llmfilter: verbatim echo failed, located listed substrings instead", "spans", len(spans))
-	return spans, nil
+	return f.indexedSpans(ctx, target, userMessage, system)
 }
 
 func isNone(out string) bool {
 	return strings.EqualFold(strings.Trim(strings.TrimSpace(out), ".`\"'*- "), "none")
-}
-
-// locateListed maps each listed substring onto every occurrence in target.
-// Every occurrence, not the first: the model lists what offends, and the same
-// word further along the message offends just as much.
-func locateListed(target, out string) []textfilter.Span {
-	var spans []textfilter.Span
-	for line := range strings.SplitSeq(out, "\n") {
-		sub := cleanListed(line)
-		if sub == "" {
-			continue
-		}
-		spans = append(spans, occurrences(target, sub)...)
-	}
-	return textfilter.Merge(spans)
-}
-
-// cleanListed strips the decoration models add to list items — bullets, list
-// numbering, quotes, and the <f> tags they were told to stop emitting.
-func cleanListed(line string) string {
-	s := strings.TrimSpace(line)
-	s = strings.ReplaceAll(s, openTag, "")
-	s = strings.ReplaceAll(s, closeTag, "")
-	s = strings.TrimLeft(s, "-*•0123456789.) \t")
-	return strings.Trim(s, "\"'`")
-}
-
-func occurrences(target, sub string) []textfilter.Span {
-	rt, rs := []rune(target), []rune(sub)
-	if len(rs) == 0 || len(rs) > len(rt) {
-		return nil
-	}
-
-	var out []textfilter.Span
-	for i := 0; i+len(rs) <= len(rt); i++ {
-		if string(rt[i:i+len(rs)]) == string(rs) {
-			out = append(out, textfilter.Span{Start: i, End: i + len(rs)})
-			i += len(rs) - 1
-		}
-	}
-	return out
 }
 
 func msg(role, text string) llm.Message {
@@ -556,4 +501,104 @@ func matchAt(hay, sub []rune, at int) bool {
 		}
 	}
 	return true
+}
+
+// indexedSpans is the escape hatch for a target the model cannot echo: a
+// long run of a repeated unit makes it loop until the token ceiling, and no
+// repair message fixes that — measured, the same runaway comes back every
+// attempt. The target is re-sent as "index:unit" lines and the model answers
+// with index ranges, so nothing has to be reproduced and an offset is a
+// lookup rather than a count. Judged on the whole corpus this format recalls
+// far worse than the echo (50 vs 10 failures), which is why it is only the
+// fallback; an answer without a usable range still fails, because speaking an
+// unfiltered message is worse than dropping it.
+const indexedInstruction = `The TARGET below is given as an indexed list, one unit per line as "index:unit". A unit is a word, or a single Chinese/Japanese character followed by its romanized pronunciation in parentheses. Do NOT echo the text. Instead of wrapping spans in <f></f>, reply ONLY with the index ranges you would have wrapped, one per line as "START-END" (first and last unit index, inclusive), or exactly NONE if nothing must be tagged. Mask as little as possible; a run of repeated offending text may be given as one range.`
+
+type textUnit struct{ start, end int }
+
+// unitsOf splits text into whitespace-separated words, except that each Han or
+// kana character is its own unit so a span can land on a single character.
+func unitsOf(text string) []textUnit {
+	r := []rune(text)
+	var us []textUnit
+	isSpace := func(c rune) bool { return c == ' ' || c == '\n' || c == '\t' }
+	i := 0
+	for i < len(r) {
+		if isSpace(r[i]) {
+			i++
+			continue
+		}
+		if hintedScript(r[i]) {
+			us = append(us, textUnit{i, i + 1})
+			i++
+			continue
+		}
+		j := i
+		for j < len(r) && !isSpace(r[j]) && !hintedScript(r[j]) {
+			j++
+		}
+		us = append(us, textUnit{i, j})
+		i = j
+	}
+	return us
+}
+
+func indexedTarget(text string) string {
+	r := []rune(text)
+	var b strings.Builder
+	for k, u := range unitsOf(text) {
+		word := string(r[u.start:u.end])
+		if u.end-u.start == 1 && hintedScript(r[u.start]) {
+			word += " (" + strings.TrimSpace(unidecode.Unidecode(word)) + ")"
+		}
+		fmt.Fprintf(&b, "%d:%s\n", k, word)
+	}
+	return b.String()
+}
+
+var indexRange = regexp.MustCompile(`(?m)^\s*(\d+)\s*-\s*(\d+)\s*$`)
+
+func (f *Filter) indexedSpans(ctx context.Context, target, userMessage, system string) ([]textfilter.Span, error) {
+	// the CONTEXT line (if any) stays; the SPOKEN FORM and TARGET blocks are
+	// replaced by the indexed listing, which carries pronunciations itself
+	prefix := ""
+	if i := strings.Index(userMessage, "SPOKEN FORM"); i >= 0 {
+		prefix = userMessage[:i]
+	} else if i := strings.Index(userMessage, "TARGET:\n"); i >= 0 {
+		prefix = userMessage[:i]
+	}
+	user := prefix + indexedInstruction + "\n\nTARGET (indexed):\n" + indexedTarget(target)
+
+	out, err := f.client.Ask(ctx, []llm.Message{msg("system", system), msg("user", user)}, temperature)
+	if err != nil {
+		return nil, fmt.Errorf("llmfilter: ask (indexed): %w", err)
+	}
+
+	logger := slog.With("attempts", maxAttempts, "target_runes", len([]rune(target)))
+	if isNone(out) {
+		logger.Warn("llmfilter: verbatim echo failed, indexed pass found nothing")
+		return nil, nil
+	}
+	spans := rangesToSpans(target, out)
+	if len(spans) == 0 {
+		return nil, fmt.Errorf("llmfilter: model did not reproduce the target verbatim after %d attempts, and the indexed answer had no usable range: %q", maxAttempts, clipStart(out, 80))
+	}
+	logger.Warn("llmfilter: verbatim echo failed, used indexed ranges instead", "spans", len(spans))
+	return spans, nil
+}
+
+// rangesToSpans maps "START-END" unit ranges (inclusive) onto rune spans;
+// ranges outside the unit list are dropped.
+func rangesToSpans(target, out string) []textfilter.Span {
+	us := unitsOf(target)
+	var spans []textfilter.Span
+	for _, m := range indexRange.FindAllStringSubmatch(out, -1) {
+		a, _ := strconv.Atoi(m[1])
+		b, _ := strconv.Atoi(m[2])
+		if a < 0 || b >= len(us) || a > b {
+			continue
+		}
+		spans = append(spans, textfilter.Span{Start: us[a].start, End: us[b].end})
+	}
+	return textfilter.Merge(spans)
 }

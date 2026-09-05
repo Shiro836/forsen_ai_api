@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"app/pkg/tools"
 	"context"
 	"fmt"
 	"log/slog"
@@ -62,6 +63,7 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 	pollCtx, pollCancel := context.WithCancel(ctx)
 	defer pollCancel()
 	go func() {
+		defer tools.LogPanic(logger, "reward poll")
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for {

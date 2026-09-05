@@ -44,7 +44,7 @@ func main() {
 	}
 	defer database.Close()
 
-	aiClient := oai.New(config.OAI.AccessToken, config.OAI.URL, config.OAI.Model, config.OAI.MaxTokens)
+	aiClient := oai.New(&config.OAI)
 
 	svc, err := clanker.NewService(
 		logger.WithGroup("clanker"),

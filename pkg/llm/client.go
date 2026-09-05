@@ -25,6 +25,8 @@ type Config struct {
 	Model     string `yaml:"model"`
 	MaxTokens int    `yaml:"max_tokens"`
 	MinTokens int    `yaml:"min_tokens"`
+
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 type Client struct {

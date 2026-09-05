@@ -98,7 +98,7 @@ func newFilter() *llmfilter.Filter {
 	if os.Getenv("FILTER_CANDIDATE") != "" {
 		c = testCfg.OAICandidate
 	}
-	return llmfilter.New(oai.New(c.AccessToken, c.URL, c.Model, c.MaxTokens))
+	return llmfilter.New(oai.New(&c))
 }
 
 // spanCase is one corpus entry. input is the TARGET; context, when set, makes

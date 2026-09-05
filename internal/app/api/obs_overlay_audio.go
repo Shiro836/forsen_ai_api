@@ -47,7 +47,6 @@ func (api *API) wsAudioHandler(w http.ResponseWriter, r *http.Request) {
 	wsConn, err := ws.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Error("failed to upgrade to websocket connection", "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 

@@ -117,7 +117,7 @@ func TestEmoteCorpus(t *testing.T) {
 	// The classifier logs which liquid the second pass named, and that is the
 	// first thing to look at when a fluids case moves, so the harness lets it out.
 	classifier := NewClassifier(slog.New(slog.NewTextHandler(os.Stderr, nil)),
-		oai.New(corpusCfg.Vision.AccessToken, corpusCfg.Vision.URL, corpusCfg.Vision.Model, corpusCfg.Vision.MaxTokens),
+		oai.New(&corpusCfg.Vision),
 		corpusCfg)
 
 	var (

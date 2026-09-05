@@ -259,8 +259,9 @@
     {{ if .LogoutButton }}
     <script>
         document.getElementById("logout").addEventListener("click", function () {
-            document.cookie = "session_id= ;path=/ ;";
-            window.location.href = "/";
+            fetch("/logout", { method: "POST" }).finally(function () {
+                window.location.href = "/";
+            });
         });
     </script>
     {{ end }}

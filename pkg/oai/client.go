@@ -34,16 +34,21 @@ type Client struct {
 	dialect dialect
 }
 
-func New(apiKey, baseURL, model string, maxTokens int) *Client {
-	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
-	if baseURL != "" {
-		opts = append(opts, option.WithBaseURL(baseURL))
+// New builds a client for cfg. cfg.Timeout is a hard cap per request: the SDK
+// does not retry past it. Zero leaves requests uncapped.
+func New(cfg *llm.Config) *Client {
+	opts := []option.RequestOption{option.WithAPIKey(cfg.AccessToken)}
+	if cfg.URL != "" {
+		opts = append(opts, option.WithBaseURL(cfg.URL))
+	}
+	if cfg.Timeout > 0 {
+		opts = append(opts, option.WithRequestTimeout(cfg.Timeout))
 	}
 	return &Client{
 		API:       openai.NewClient(opts...),
-		Model:     model,
-		MaxTokens: int64(maxTokens),
-		dialect:   dialectFor(baseURL),
+		Model:     cfg.Model,
+		MaxTokens: int64(cfg.MaxTokens),
+		dialect:   dialectFor(cfg.URL),
 	}
 }
 

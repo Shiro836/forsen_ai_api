@@ -143,6 +143,8 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Get("/settings", http.RedirectHandler("/", http.StatusMovedPermanently).ServeHTTP)
 
+		router.Get("/login", http.HandlerFunc(api.login))
+		router.Post("/logout", http.HandlerFunc(api.logout))
 		router.Get("/twitch_redirect_handler", http.HandlerFunc(api.twitchRedirectHandler))
 
 		router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))

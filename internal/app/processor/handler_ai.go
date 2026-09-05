@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"app/pkg/tools"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -178,6 +179,7 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 	}
 
 	go func() {
+		defer tools.LogPanic(logger, "character reply")
 		defer close(llmResultDone)
 		llmResult, llmResultErr = h.llmModel.CharacterReply(ctx, input.Character, input.Requester, updatedMessage, attachments)
 	}()
@@ -253,6 +255,7 @@ func (h *AIHandler) fetchImages(ctx context.Context, logger *slog.Logger, ids []
 		images[i] = fetchedImage{id: id}
 		wg.Add(1)
 		go func(i int, id string) {
+			defer tools.LogPanic(logger, "image fetch")
 			defer wg.Done()
 			obj, err := h.s3.GetObject(ctx, s3client.UserImagesBucket, id)
 			if err != nil {
@@ -306,6 +309,7 @@ func (h *AIHandler) describeImages(ctx context.Context, logger *slog.Logger, msg
 		}
 		wg.Add(1)
 		go func(i int, img fetchedImage) {
+			defer tools.LogPanic(logger, "image describe")
 			defer wg.Done()
 			messages := []llm.Message{
 				{Role: "system", Content: []llm.MessageContent{{Type: "text", Text: "."}}},

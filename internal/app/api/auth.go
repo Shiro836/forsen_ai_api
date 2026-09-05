@@ -3,9 +3,13 @@ package api
 import (
 	"app/db"
 	"app/pkg/ctxstore"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"time"
@@ -14,7 +18,13 @@ import (
 	"github.com/google/uuid"
 )
 
-const cookieSessionID = "session_id"
+const (
+	cookieSessionID  = "session_id"
+	cookieOAuthState = "oauth_state"
+
+	twitchClientID = "zi6vy3y3iq38svpmlub5fd26uwsee8"
+	oauthStateTTL  = 10 * time.Minute
+)
 
 type htmlErr struct {
 	ErrorCode    int
@@ -31,13 +41,7 @@ func (api *API) AuthMiddleware(next http.Handler) http.Handler {
 
 			if err != nil {
 				if db.ErrCode(err) == db.ErrCodeNoRows {
-					http.SetCookie(w, &http.Cookie{
-						Name:  cookieSessionID,
-						Value: "",
-
-						Path:   "/",
-						MaxAge: -1,
-					})
+					http.SetCookie(w, sessionCookie("", -1))
 
 					http.Redirect(w, r, "/", http.StatusFound)
 
@@ -103,7 +107,64 @@ func (api *API) checkPermissions(requiredPermissions ...db.Permission) func(http
 	}
 }
 
+// sessionCookie is host-only and Lax so it rides top-level navigations
+// (the Twitch redirect back) but never cross-site POSTs or websocket
+// handshakes; HttpOnly keeps it out of reach of injected script.
+func sessionCookie(value string, maxAge int) *http.Cookie {
+	return secureCookie(cookieSessionID, value, maxAge)
+}
+
+func stateCookie(value string, maxAge int) *http.Cookie {
+	return secureCookie(cookieOAuthState, value, maxAge)
+}
+
+func secureCookie(name, value string, maxAge int) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		MaxAge:   maxAge,
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+func (api *API) login(w http.ResponseWriter, r *http.Request) {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
+
+		return
+	}
+	state := hex.EncodeToString(raw[:])
+
+	http.SetCookie(w, stateCookie(state, int(oauthStateTTL.Seconds())))
+
+	q := url.Values{}
+	q.Set("response_type", "code")
+	q.Set("client_id", twitchClientID)
+	q.Set("redirect_uri", "https://"+r.Host+"/twitch_redirect_handler")
+	q.Set("scope", "channel:read:subscriptions channel:manage:redemptions moderator:read:followers")
+	q.Set("state", state)
+
+	http.Redirect(w, r, "https://id.twitch.tv/oauth2/authorize?"+q.Encode(), http.StatusFound)
+}
+
+func (api *API) logout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, sessionCookie("", -1))
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
+	stateCk, err := r.Cookie(cookieOAuthState)
+	if err != nil || subtle.ConstantTimeCompare([]byte(stateCk.Value), []byte(r.URL.Query().Get("state"))) != 1 {
+		submitPage(w, errPage(r, http.StatusBadRequest, "login state mismatch, start the login again"))
+
+		return
+	}
+	http.SetCookie(w, stateCookie("", -1))
+
 	code := r.URL.Query().Get("code")
 	if len(code) == 0 {
 		submitPage(w, errPage(r, http.StatusInternalServerError, r.URL.Query().Get("error_description")))
@@ -127,15 +188,7 @@ func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:  cookieSessionID,
-		Value: user.Session,
-
-		Path:    "/",
-		Expires: time.Now().Add(time.Hour * 24 * 365),
-
-		Secure: true,
-	})
+	http.SetCookie(w, sessionCookie(user.Session, int((time.Hour*24*365).Seconds())))
 
 	user.ID = id
 

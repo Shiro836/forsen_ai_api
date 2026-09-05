@@ -70,11 +70,14 @@ func main() {
 	imageLlm := llm.New(httpClient, &cfg.ImageLLM)
 
 	var characterLlm processor.CharacterLLM = llm.ChatClient{Client: llm.New(httpClient, &cfg.LLM2)}
-	oaiClient := oai.New(cfg.OAI.AccessToken, cfg.OAI.URL, cfg.OAI.Model, cfg.OAI.MaxTokens)
-	if cfg.FilterLLM.URL == "" {
-		log.Fatal("filter_llm is not configured")
+	if cfg.OAI.Timeout <= 0 {
+		log.Fatal("oai.timeout is not configured")
 	}
-	textFilter := llmfilter.New(oai.New(cfg.FilterLLM.AccessToken, cfg.FilterLLM.URL, cfg.FilterLLM.Model, cfg.FilterLLM.MaxTokens))
+	if cfg.FilterLLM.URL == "" || cfg.FilterLLM.Timeout <= 0 {
+		log.Fatal("filter_llm url/timeout is not configured")
+	}
+	oaiClient := oai.New(&cfg.OAI)
+	textFilter := llmfilter.New(oai.New(&cfg.FilterLLM))
 	ffmpegClient := ffmpeg.New(&cfg.Ffmpeg)
 	chatTTSEngine := ai.NewStyleTTSClient(httpClient, &cfg.StyleTTS)
 	indexClient := ai.NewIndexTTSClient(httpClient, &cfg.IndexTTS)

@@ -1,6 +1,7 @@
 package oai
 
 import (
+	"app/pkg/llm"
 	"context"
 	"encoding/json"
 	"io"
@@ -27,7 +28,7 @@ func TestAskVisionJSONSendsTheSchemaAsAGrammar(t *testing.T) {
 	defer server.Close()
 
 	schema := json.RawMessage(`{"type":"object","required":["description"]}`)
-	_, err := New("", server.URL, "qwen36-hauhau", 512).
+	_, err := New(&llm.Config{URL: server.URL, Model: "qwen36-hauhau", MaxTokens: 512}).
 		AskVisionJSON(context.Background(), "judge this", []Image{{MIME: "image/png", Data: []byte{1, 2}}}, schema, 0)
 	require.NoError(t, err)
 

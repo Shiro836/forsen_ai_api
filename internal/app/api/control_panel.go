@@ -6,6 +6,7 @@ import (
 	"app/pkg/imagetag"
 	immediateticker "app/pkg/immediate_ticker"
 	"app/pkg/textfilter"
+	"app/pkg/tools"
 	"app/pkg/ws"
 	"encoding/json"
 	"errors"
@@ -210,7 +211,6 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 	wsConn, err := ws.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logger.Error("failed to upgrade control panel websocket connection", "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
 
 		return
 	}
@@ -232,6 +232,7 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 	lastActive := time.Now()
 
 	go func() {
+		defer tools.LogPanic(logger, "control panel ws reader")
 		defer wsClient.Close()
 
 	read_loop:
@@ -244,7 +245,7 @@ func (api *API) controlPanelWSConn(w http.ResponseWriter, r *http.Request) {
 				break read_loop
 			}
 
-			var upd *actionMessage
+			var upd actionMessage
 			err = json.Unmarshal(msg.Message, &upd)
 			if err != nil {
 				logger.Error("failed to unmarshal message from ws", "err", err)
@@ -484,11 +485,11 @@ const (
 type ActionString string
 
 const (
-	ActionDeleteString       ActionString = "delete"
-	ActionUpsertString       ActionString = "upsert"
-	ActionImagesShowString   ActionString = "show_images"
-	ActionImagesHideString   ActionString = "hide_images"
-	ActionCleanOverlayString ActionString = "clean_overlay"
+	ActionDeleteString        ActionString = "delete"
+	ActionUpsertString        ActionString = "upsert"
+	ActionImagesShowString    ActionString = "show_images"
+	ActionImagesHideString    ActionString = "hide_images"
+	ActionCleanOverlayString  ActionString = "clean_overlay"
 	ActionReloadOverlayString ActionString = "reload_overlay"
 )
 

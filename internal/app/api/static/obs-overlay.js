@@ -155,20 +155,10 @@ async function pageReady() {
         }
     };
 
-    // voice pulse: character breathes with the output level. The peak is
-    // clamped against the caption card's bottom edge (its height varies with
-    // line count), so the head never breathes into the text box.
+    // voice pulse: character breathes with the output level, capped at 5%
     let pulse = 1;
     (function pulseLoop() {
-        let maxExtra = 0.05;
-        if (player.cardEl.classList.contains('visible')) {
-            const baseHeight = charAnchor.getBoundingClientRect().height / pulse;
-            if (baseHeight > 0) {
-                const allowedHeight = window.innerHeight - player.cardEl.getBoundingClientRect().bottom - 8;
-                maxExtra = Math.max(0, Math.min(maxExtra, allowedHeight / baseHeight - 1));
-            }
-        }
-        const target = 1 + Math.min(player.level() * 0.2, maxExtra);
+        const target = 1 + Math.min(player.level() * 0.2, 0.05);
         pulse += (target - pulse) * 0.3;
         charAnchor.style.setProperty('--pulse', pulse.toFixed(4));
         requestAnimationFrame(pulseLoop);

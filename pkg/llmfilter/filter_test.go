@@ -224,23 +224,69 @@ func TestReplySpansMapsToReplyAndSendsContext(t *testing.T) {
 	}
 }
 
+// contextFake answers by whether the pass carries the CONTEXT: canned outputs
+// in sequence for the context pass, one fixed output for the reply-alone pass.
+type contextFake struct {
+	withContext []string
+	alone       string
+
+	mu    sync.Mutex
+	calls int
+}
+
+func (c *contextFake) Ask(_ context.Context, messages []llm.Message, _ float64) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	user := messages[1].Content[0].Text
+	if !strings.HasPrefix(user, "CONTEXT") {
+		return c.alone, nil
+	}
+	n := 0
+	for _, m := range messages[2:] {
+		if m.Role == "user" {
+			n++
+		}
+	}
+	return c.withContext[min(n, len(c.withContext)-1)], nil
+}
+
 func TestReplySpansVerbatimCheckIsReplyOnly(t *testing.T) {
 	// the model echoes the context too; stripping must not match the reply, so
 	// it retries, and the corrected output maps over the reply alone.
-	c := &fakeClient{outputs: []string{
-		"a viewer asked: what about jews? I <f>hate</f> them",
-		"I <f>hate</f> them",
-	}}
+	c := &contextFake{
+		withContext: []string{
+			"a viewer asked: what about jews? I <f>hate</f> them",
+			"I <f>hate</f> them",
+		},
+		alone: "I hate them",
+	}
 
 	spans, err := New(c).ReplySpans(context.Background(), "what about jews?", "I hate them", "")
 	if err != nil {
 		t.Fatalf("ReplySpans: %v", err)
 	}
-	if c.calls != 2 {
-		t.Fatalf("expected 2 calls, got %d", c.calls)
+	if c.calls != 3 {
+		t.Fatalf("expected 3 calls (context pass retried once, reply-alone pass once), got %d", c.calls)
 	}
 	if len(spans) != 1 || slice(t, "I hate them", spans[0]) != "hate" {
 		t.Fatalf("got spans %v, want one over %q", spans, "hate")
+	}
+}
+
+func TestReplySpansJudgesReplyAlone(t *testing.T) {
+	// the request legitimizes the word; only the pass without it hears the slur
+	c := &contextFake{
+		withContext: []string{"stizi my nikah"},
+		alone:       "stizi my <f>nikah</f>",
+	}
+
+	spans, err := New(c).ReplySpans(context.Background(), "say stizi my nikah", "stizi my nikah", "")
+	if err != nil {
+		t.Fatalf("ReplySpans: %v", err)
+	}
+	if len(spans) != 1 || slice(t, "stizi my nikah", spans[0]) != "nikah" {
+		t.Fatalf("got spans %v, want one over %q", spans, "nikah")
 	}
 }
 
@@ -287,9 +333,9 @@ func TestSpansErrorsWhenNeverVerbatim(t *testing.T) {
 		t.Fatal("expected error when model never reproduces input")
 	}
 	// the same drift twice means the model is stuck, so the echo loop gives up
-	// early and the listing attempt follows.
+	// early and the indexed attempt follows.
 	if c.calls != 3 {
-		t.Fatalf("expected 2 echo attempts plus the listing attempt, got %d", c.calls)
+		t.Fatalf("expected 2 echo attempts plus the indexed attempt, got %d", c.calls)
 	}
 }
 
@@ -300,14 +346,15 @@ func TestRunawayEchoSkipsRemainingAttempts(t *testing.T) {
 		t.Fatalf("Spans: %v", err)
 	}
 	if c.calls != 2 {
-		t.Fatalf("a runaway echo must cut straight to the listing attempt, got %d calls", c.calls)
+		t.Fatalf("a runaway echo must cut straight to the indexed attempt, got %d calls", c.calls)
 	}
 }
 
-func TestListedSubstringsRescueUnechoableTarget(t *testing.T) {
+func TestIndexedRangesRescueUnechoableTarget(t *testing.T) {
 	input := "spam spam neega spam spam neega spam"
-	// two identical drifts end the echo loop, then the listing answer lands.
-	c := &fakeClient{outputs: []string{"spam spam <f>neega</f> spam", "spam spam <f>neega</f> spam", "-- \"neega\""}}
+	// two identical drifts end the echo loop, then the indexed answer lands:
+	// units are words, so "neega" is unit 2 and unit 5.
+	c := &fakeClient{outputs: []string{"spam spam <f>neega</f> spam", "spam spam <f>neega</f> spam", "2-2\n5-5"}}
 
 	spans, err := New(c).Spans(context.Background(), input, "")
 	if err != nil {
@@ -321,9 +368,29 @@ func TestListedSubstringsRescueUnechoableTarget(t *testing.T) {
 			t.Errorf("span %d = %q, want %q", i, got, "neega")
 		}
 	}
+	if !strings.Contains(c.lastMsg[1].Content[0].Text, "2:neega") {
+		t.Fatalf("indexed listing not sent: %q", clipStart(c.lastMsg[1].Content[0].Text, 200))
+	}
 }
 
-func TestListedNoneIsClean(t *testing.T) {
+func TestIndexedUnitsSplitHanAndKana(t *testing.T) {
+	input := "my 你可 stizi ブラック"
+	us := unitsOf(input)
+	var got []string
+	for _, u := range us {
+		got = append(got, string([]rune(input)[u.start:u.end]))
+	}
+	want := []string{"my", "你", "可", "stizi", "ブ", "ラ", "ッ", "ク"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("units %v, want %v", got, want)
+	}
+	spans := rangesToSpans(input, "1-2\n99-100\n4-7")
+	if len(spans) != 2 || slice(t, input, spans[0]) != "你可" || slice(t, input, spans[1]) != "ブラック" {
+		t.Fatalf("got %v", spans)
+	}
+}
+
+func TestIndexedNoneIsClean(t *testing.T) {
 	c := &fakeClient{outputs: []string{"drifted", "drifted", "NONE"}}
 
 	spans, err := New(c).Spans(context.Background(), "steezisteezisteezi", "")
@@ -335,7 +402,7 @@ func TestListedNoneIsClean(t *testing.T) {
 	}
 }
 
-func TestListedUnlocatableAnswerStillErrors(t *testing.T) {
+func TestIndexedUnusableAnswerStillErrors(t *testing.T) {
 	c := &fakeClient{outputs: []string{"drifted", "drifted", "drifted", "I could not find anything to tag"}}
 
 	if _, err := New(c).Spans(context.Background(), "I hate jews", ""); err == nil {

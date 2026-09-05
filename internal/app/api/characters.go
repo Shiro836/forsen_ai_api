@@ -6,6 +6,7 @@ import (
 	"app/internal/app/processor"
 	"app/pkg/ai"
 	"app/pkg/ctxstore"
+	"app/pkg/tools"
 	"app/pkg/ws"
 	"context"
 	"encoding/json"
@@ -829,6 +830,7 @@ func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state 
 	jobCh := make(chan tryJob)
 
 	go func() {
+		defer tools.LogPanic(api.logger, "try ws reader")
 		defer close(jobCh)
 
 		for {
@@ -840,7 +842,7 @@ func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state 
 				return
 			}
 
-			var action *tryAction
+			var action tryAction
 			err = json.Unmarshal(msg.Message, &action)
 			if err != nil {
 				api.logger.Error("failed to unmarshal message from ws", "err", err)
@@ -956,6 +958,7 @@ func (api *API) serveTryWS(w http.ResponseWriter, r *http.Request, card *db.Card
 
 	wg.Add(1)
 	go func() {
+		defer tools.LogPanic(logger, "try ws sender")
 		defer wg.Done()
 		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()

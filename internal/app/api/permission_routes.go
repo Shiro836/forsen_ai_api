@@ -32,7 +32,7 @@ func (permissionAction permissionAction) String() string {
 func authPage(r *http.Request) *page {
 	page := createPage(r)
 	page.Content = getHtml("index.html", &LoginPage{
-		RedirectUrl: "https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=zi6vy3y3iq38svpmlub5fd26uwsee8&redirect_uri=https://" + r.Host + "/twitch_redirect_handler&scope=channel:read:subscriptions+channel:manage:redemptions+moderator:read:followers",
+		RedirectUrl: "/login",
 	})
 
 	return page

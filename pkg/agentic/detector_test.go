@@ -173,7 +173,7 @@ func TestDetectCharacters(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := oai.New(testCfg.OAI.AccessToken, testCfg.OAI.URL, testCfg.OAI.Model, testCfg.OAI.MaxTokens)
+			client := oai.New(&testCfg.OAI)
 			detector := agentic.NewDetector(client)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
