@@ -13,6 +13,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/internal/app/monitoring"
+	"app/pkg/archive"
 
 	"github.com/google/uuid"
 )
@@ -216,7 +217,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 	}
 }
 
-func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, msg *db.Message) error {
+func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, msg *db.Message) (err error) {
 	logger := p.logger.With("user", broadcaster.TwitchLogin, "msg_id", msg.ID)
 
 	userSettings, err := p.db.GetUserSettings(ctx, broadcaster.ID)
@@ -234,11 +235,24 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 
 	p.connManager.NotifyControlPanel(broadcaster.ID)
 
+	// foreign-reward redeems (not bound in reward_buttons) are not ours to
+	// archive; everything that reaches a handler is
+	col := archive.NewCollector(broadcaster.ID, msg.ID)
+	ctx = archive.WithCollector(ctx, col)
+	outcome := ""
+	defer func() {
+		if outcome == "" {
+			return
+		}
+		p.storeArchive(ctx, logger, state, msg.ID, col, outcome, err)
+	}()
+
 	if len(msg.TwitchMessage.RewardID) == 0 {
 		if !userSettings.IngestAllMessages {
 			if _, err := p.db.SkipWaitingNoRewardMessages(ctx, broadcaster.ID); err != nil {
 				logger.Error("error bulk-skipping chat messages", "err", err)
 			}
+			outcome = archive.OutcomeBulkSkipped
 			return nil
 		}
 
@@ -251,9 +265,12 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 			if _, err := p.db.SkipWaitingNoRewardMessages(ctx, broadcaster.ID); err != nil {
 				logger.Error("error bulk-skipping chat messages", "err", err)
 			}
+			outcome = archive.OutcomeBulkSkipped
 			return nil
 		}
 
+		col.SetHandler("chat_tts", nil, nil)
+		outcome = archive.OutcomePlayed
 		input := InteractionInput{
 			Requester:    msg.TwitchMessage.TwitchLogin,
 			TwitchUserID: msg.TwitchMessage.TwitchUserID,
@@ -305,6 +322,10 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		}
 	}
 
+	rt := int(rewardType)
+	col.SetHandler(rewardType.String(), &rt, cardID)
+	outcome = archive.OutcomePlayed
+
 	input := InteractionInput{
 		Requester:    msg.TwitchMessage.TwitchLogin,
 		TwitchUserID: msg.TwitchMessage.TwitchUserID,
@@ -344,6 +365,30 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 	}
 
 	return nil
+}
+
+// storeArchive writes the message's telemetry once. It refines the outcome
+// from what actually happened (a skip or an abort trumps "played") and
+// outlives ctx: the archive of a message cut by a restart is still worth
+// having.
+func (p *Processor) storeArchive(ctx context.Context, logger *slog.Logger, state *ProcessorState, msgID uuid.UUID, col *archive.Collector, outcome string, handlerErr error) {
+	if state.IsSkipped(msgID) {
+		outcome = archive.OutcomeSkipped
+	} else if handlerErr != nil {
+		outcome = archive.OutcomeError
+	} else if ctx.Err() != nil {
+		outcome = archive.OutcomeAborted
+	}
+
+	if !col.Wait(10 * time.Second) {
+		logger.Warn("archive uploads still pending, storing without them")
+	}
+
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := p.db.UpdateMessageArchive(writeCtx, msgID, col.Finish(outcome, handlerErr)); err != nil {
+		logger.Error("failed to store message archive", "err", err)
+	}
 }
 
 // overlayAudioWriter routes a message's audio frames to the broadcaster's

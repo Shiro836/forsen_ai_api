@@ -10,6 +10,14 @@
             Try Character: {{ .CharacterName }}
             {{ end }}
         </h1>
+        <label class="ml-auto flex items-center gap-2 text-sm select-none cursor-pointer">
+            <input type="checkbox" id="regex_filter_toggle" class="h-4 w-4" {{ if .RegexFilter }}checked{{ end }}>
+            Regex filter
+        </label>
+        <label class="flex items-center gap-2 text-sm select-none cursor-pointer">
+            <input type="checkbox" id="llm_filter_toggle" class="h-4 w-4" {{ if .LLMFilter }}checked{{ end }}>
+            LLM filter
+        </label>
     </div>
 
     <!-- Stage: same visual language as the OBS overlay -->

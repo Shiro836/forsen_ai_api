@@ -1,0 +1,57 @@
+<!-- Archive store (adr/history-archive.md). Single node, ~2.5k message rows a
+     day: the defaults are sized for a dedicated box, this trims them so the
+     server stays a small tenant next to the model servers. Mounted into
+     /etc/clickhouse-server/config.d/ by docker-compose. -->
+<clickhouse>
+    <logger>
+        <level>warning</level>
+    </logger>
+
+    <timezone>UTC</timezone>
+
+    <!-- relative to the container's mem_limit (12g in docker-compose), which
+         ClickHouse reads as available RAM: 0.7 is ~8.4 GiB for queries and
+         merges, the rest for caches and the OS -->
+    <max_server_memory_usage_to_ram_ratio>0.7</max_server_memory_usage_to_ram_ratio>
+    <mark_cache_size>536870912</mark_cache_size>
+    <uncompressed_cache_size>0</uncompressed_cache_size>
+    <max_concurrent_queries>32</max_concurrent_queries>
+
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <events>true</events>
+        <asynchronous_metrics>true</asynchronous_metrics>
+    </prometheus>
+
+    <!-- only the native and HTTP ports are used -->
+    <mysql_port remove="1"/>
+    <postgresql_port remove="1"/>
+
+    <!-- system.* logs dwarf the archive itself on an idle server; keep a week
+         of query_log for debugging and drop the rest -->
+    <query_log>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        <flush_interval_milliseconds>30000</flush_interval_milliseconds>
+    </query_log>
+    <trace_log remove="1"/>
+    <metric_log remove="1"/>
+    <asynchronous_metric_log remove="1"/>
+    <part_log remove="1"/>
+    <text_log remove="1"/>
+    <query_thread_log remove="1"/>
+    <query_views_log remove="1"/>
+    <session_log remove="1"/>
+    <processors_profile_log remove="1"/>
+    <error_log remove="1"/>
+    <latency_log remove="1"/>
+    <query_metric_log remove="1"/>
+    <blob_storage_log remove="1"/>
+    <opentelemetry_span_log remove="1"/>
+    <zookeeper_log remove="1"/>
+    <backup_log remove="1"/>
+    <s3queue_log remove="1"/>
+    <azure_queue_log remove="1"/>
+    <dead_letter_queue remove="1"/>
+</clickhouse>

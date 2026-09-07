@@ -3,6 +3,7 @@ package imagetag
 import (
 	"fmt"
 	"regexp"
+	"unicode/utf8"
 )
 
 // An image reference is either the chat tag <img:code> or a bare site link
@@ -44,8 +45,33 @@ func ReplaceImageTags(s string) string {
 	idx := 0
 	return tagRe.ReplaceAllStringFunc(s, func(_ string) string {
 		idx++
-		return fmt.Sprintf("image_%d", idx)
+		return placeholder(idx)
 	})
+}
+
+func placeholder(idx int) string {
+	return fmt.Sprintf("image_%d", idx)
+}
+
+// Tag is one image reference in a string: its rune range and the placeholder
+// ReplaceImageTags speaks in its place.
+type Tag struct {
+	Start       int
+	End         int
+	Placeholder string
+}
+
+// Tags lists the image references in s, in order.
+func Tags(s string) []Tag {
+	var tags []Tag
+	for i, loc := range tagRe.FindAllStringIndex(s, -1) {
+		tags = append(tags, Tag{
+			Start:       utf8.RuneCountInString(s[:loc[0]]),
+			End:         utf8.RuneCountInString(s[:loc[1]]),
+			Placeholder: placeholder(i + 1),
+		})
+	}
+	return tags
 }
 
 // ReplaceID replaces the first reference to id, in any form, with repl.

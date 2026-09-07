@@ -399,8 +399,9 @@ loop:
 					Request:  dbMessage.TwitchMessage.Message,
 					Response: msgData.AIResponse,
 
-					FilteredText:    msgData.FilteredText,
-					RequestFiltered: msgData.RequestFiltered,
+					FilteredText:      msgData.FilteredText,
+					RequestFiltered:   msgData.RequestFiltered,
+					RequesterFiltered: msgData.RequesterFiltered,
 
 					Status: dbMessage.Status.String(),
 
@@ -463,9 +464,11 @@ type msgUpsert struct {
 	Response string `json:"response"`
 
 	// FilteredText marks the ranges of Response the panel should highlight;
-	// RequestFiltered does the same for Request.
-	FilteredText    []textfilter.Span `json:"filtered_text,omitempty"`
-	RequestFiltered []textfilter.Span `json:"request_filtered,omitempty"`
+	// RequestFiltered and RequesterFiltered do the same for Request and
+	// RequestedBy.
+	FilteredText      []textfilter.Span `json:"filtered_text,omitempty"`
+	RequestFiltered   []textfilter.Span `json:"request_filtered,omitempty"`
+	RequesterFiltered []textfilter.Span `json:"requester_filtered,omitempty"`
 
 	Status string `json:"status"`
 

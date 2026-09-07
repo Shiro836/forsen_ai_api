@@ -19,10 +19,12 @@ import (
 	"app/db"
 	"app/internal/app/api"
 	"app/internal/app/conns"
+	"app/internal/app/history"
 	"app/internal/app/monitoring"
 	"app/internal/app/processor"
 	"app/pkg/agentic"
 	"app/pkg/ai"
+	"app/pkg/clickhouse"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
 	"app/pkg/llmfilter"
@@ -95,9 +97,23 @@ func main() {
 	if err := s3.EnsureBucket(ctx, s3client.CharDataBucket); err != nil {
 		log.Fatal("failed to ensure s3 char data bucket: ", err)
 	}
+	if err := s3.EnsureBucket(ctx, s3client.TTSArchiveBucket); err != nil {
+		log.Fatal("failed to ensure s3 tts archive bucket: ", err)
+	}
 
 	// attach s3 to db so it can transparently store media
 	db.AttachS3Client(s3)
+
+	chConn, err := clickhouse.Open(ctx, &cfg.ClickHouse)
+	if err != nil {
+		log.Fatal("failed to init clickhouse: ", err)
+	}
+	if chConn == nil {
+		logger.Warn("clickhouse not configured: message archive export and history are disabled")
+	} else {
+		defer chConn.Close()
+	}
+	historyReader := history.NewReader(db, chConn)
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
 
@@ -118,7 +134,7 @@ func main() {
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, agenticHandler, procService)
+	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, agenticHandler, procService, historyReader)
 
 	router := api.NewRouter()
 
@@ -169,7 +185,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				if err := db.CleanQueue(ctx); err != nil {
+				if err := db.CleanQueue(ctx, chConn != nil); err != nil {
 					logger.Error("failed to clean db msg queue", "err", err)
 				}
 			case <-ctx.Done():
@@ -178,6 +194,14 @@ func main() {
 			}
 		}
 	}()
+
+	if chConn != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			history.NewExporter(logger.WithGroup("archive_export"), db, chConn).Run(ctx)
+		}()
+	}
 
 	wg.Add(1)
 	go func() {

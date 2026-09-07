@@ -165,17 +165,20 @@ func TestUnderLoad(t *testing.T) {
 	connManager := conns.NewConnectionManager(context.Background(), slog.Default(), processor)
 
 	wg := sync.WaitGroup{}
+	// events published before a subscription exist for nobody, so processors
+	// must not start until every subscriber is registered
+	subscribed := sync.WaitGroup{}
 
 	for i := 0; i < cnt; i++ {
 		i := i
 		wg.Add(1)
+		subscribed.Add(1)
 		go func() {
 			defer wg.Done()
 
 			subCh, unsub := connManager.Subscribe(users[i].ID)
 			subCh2, unsub2 := connManager.Subscribe(users[i].ID)
-
-			time.Sleep(20 * time.Millisecond)
+			subscribed.Done()
 
 			for j := 0; j < eventsRepeated; j++ {
 				recievedEvent, ok := <-subCh
@@ -205,7 +208,7 @@ func TestUnderLoad(t *testing.T) {
 		}()
 	}
 
-	time.Sleep(5 * time.Millisecond)
+	subscribed.Wait()
 
 	for i := 0; i < cnt; i++ {
 		connManager.HandleUser(users[i])

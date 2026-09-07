@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func createMockValidators() (func(string) bool, func(string) bool, func(string) bool) {
@@ -509,8 +508,7 @@ func TestProcessMessage_CorrectBehavior(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actions, err := ProcessMessage(tt.message, checkVoice, checkFilter, checkSfx)
-			require.NoError(t, err)
+			actions := ProcessMessage(tt.message, checkVoice, checkFilter, checkSfx)
 			assert.Equal(t, tt.expected, actions, "message: %s", tt.message)
 		})
 	}
@@ -651,8 +649,7 @@ func TestProcessMessage_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			actions, err := ProcessMessage(tt.message, checkVoice, checkFilter, checkSfx)
-			require.NoError(t, err)
+			actions := ProcessMessage(tt.message, checkVoice, checkFilter, checkSfx)
 			assert.Equal(t, tt.expected, actions, "message: %s", tt.message)
 		})
 	}
@@ -673,10 +670,7 @@ func TestProcessMessage_ErrorHandling(t *testing.T) {
 			}
 		}()
 
-		_, err := ProcessMessage("forsen: hello", nil, checkFilter, checkSfx)
-		if err != nil {
-			t.Logf("Error occurred: %v", err)
-		}
+		_ = ProcessMessage("forsen: hello", nil, checkFilter, checkSfx)
 	})
 }
 
@@ -687,7 +681,7 @@ func BenchmarkProcessMessage_Simple(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ProcessMessage(message, checkVoice, checkFilter, checkSfx)
+		_ = ProcessMessage(message, checkVoice, checkFilter, checkSfx)
 	}
 }
 
@@ -697,7 +691,7 @@ func BenchmarkProcessMessage_Complex(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ProcessMessage(message, checkVoice, checkFilter, checkSfx)
+		_ = ProcessMessage(message, checkVoice, checkFilter, checkSfx)
 	}
 }
 
@@ -707,7 +701,7 @@ func BenchmarkProcessMessage_Long(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = ProcessMessage(message, checkVoice, checkFilter, checkSfx)
+		_ = ProcessMessage(message, checkVoice, checkFilter, checkSfx)
 	}
 }
 
@@ -715,11 +709,10 @@ func TestFilterPop(t *testing.T) {
 	checkVoice, checkFilter, checkSfx := createMockValidators()
 	message := "{9} [166] [166] {.} cancer: Oh! Sorry about that mr. bast, I dropped my plates. {9} [166] OH! OH! OH! OH! OH! OH! OH!"
 
-	actions, err := ProcessMessage(message, checkVoice, checkFilter, checkSfx)
+	actions := ProcessMessage(message, checkVoice, checkFilter, checkSfx)
 
 	fmt.Println(actions)
 
-	require.NoError(t, err)
 	// ProcessMessage emits whitespace-only Text actions between tokens; downstream
 	// (handler_universal/tts.go) filters those out. {.} is a filter-pop, not an SFX.
 	// SFX actions don't carry the current voice (only Filters + Sfx), by design.

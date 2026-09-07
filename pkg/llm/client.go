@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"app/pkg/archive"
 	"app/pkg/tools"
 	"bytes"
 	"context"
@@ -43,6 +44,9 @@ func New(httpClient HTTPClient, cfg *Config) *Client {
 
 type ImageURL struct {
 	URL string `json:"url"`
+
+	// ref stands in for a data URI in the archived request body
+	ref string
 }
 
 type MessageContent struct {
@@ -129,11 +133,21 @@ type ChatResponseChoice struct {
 	FinishReason string              `json:"finish_reason"`
 }
 
-type ChatResponse struct {
-	Choices []ChatResponseChoice `json:"choices"`
+type ChatUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
 }
 
+type ChatResponse struct {
+	Model   string               `json:"model"`
+	Choices []ChatResponseChoice `json:"choices"`
+	Usage   ChatUsage            `json:"usage"`
+}
+
+// Attachment is an image sent with a chat request. ID names it in the archived
+// request in place of the bytes (a user image id).
 type Attachment struct {
+	ID          string
 	Data        []byte
 	ContentType string
 }
@@ -229,7 +243,7 @@ func imageParts(images []Attachment) []MessageContent {
 		}
 		encoded := base64.StdEncoding.EncodeToString(att.Data)
 		imageURL := fmt.Sprintf("data:%s;base64,%s", ctype, encoded)
-		parts = append(parts, MessageContent{Type: "image_url", ImageURL: &ImageURL{URL: imageURL}})
+		parts = append(parts, MessageContent{Type: "image_url", ImageURL: &ImageURL{URL: imageURL, ref: att.ID}})
 	}
 	return parts
 }
@@ -378,8 +392,15 @@ func (c *Client) ReqChat(ctx context.Context, req *ChatRequest) (*ChatResponse, 
 
 	start := time.Now()
 
+	call := archive.LLMCall{Model: req.Model, Endpoint: "chat", Request: archiveBody(req), At: start.UnixMilli()}
+	defer func() {
+		call.LatencyMs = int(time.Since(start).Milliseconds())
+		archive.RecordLLM(ctx, call)
+	}()
+
 	response, err := c.httpClient.Do(request)
 	if err != nil {
+		call.Error = err.Error()
 		return nil, fmt.Errorf("failed to do chat http request: %w", err)
 	}
 	defer tools.DrainAndClose(response.Body)
@@ -387,11 +408,13 @@ func (c *Client) ReqChat(ctx context.Context, req *ChatRequest) (*ChatResponse, 
 	responseData, err := io.ReadAll(response.Body)
 	if err != nil {
 		metrics.LLMErrors.WithLabelValues("500").Inc()
+		call.Error = err.Error()
 		return nil, fmt.Errorf("failed to read chat http response body: %w", err)
 	}
 
 	if response.StatusCode != http.StatusOK {
 		metrics.LLMErrors.WithLabelValues(strconv.Itoa(response.StatusCode)).Inc()
+		call.Error = fmt.Sprintf("status %d: %s", response.StatusCode, responseData)
 		return nil, fmt.Errorf("unexpected status code: %d, body: %s", response.StatusCode, string(responseData))
 	}
 
@@ -399,10 +422,52 @@ func (c *Client) ReqChat(ctx context.Context, req *ChatRequest) (*ChatResponse, 
 
 	if err := json.Unmarshal(responseData, &resp); err != nil {
 		metrics.LLMErrors.WithLabelValues("500").Inc()
+		call.Error = err.Error()
 		return nil, fmt.Errorf("failed to unmarshal chat http response body: %w", err)
 	}
 
 	metrics.LLMQueryTime.Observe(time.Since(start).Seconds())
 
+	if len(resp.Choices) > 0 {
+		call.Response = resp.Choices[0].Message.Content
+	}
+	// llama-server ignores the requested model name and reports the one it
+	// loaded; that is the name worth archiving
+	if resp.Model != "" {
+		call.Model = resp.Model
+	}
+	call.PromptTok = resp.Usage.PromptTokens
+	call.OutputTok = resp.Usage.CompletionTokens
+
 	return &resp, nil
+}
+
+// archiveBody is the request as sent, with inline images replaced by their
+// ids: a data URI is megabytes and the image already lives in the images bucket.
+func archiveBody(req *ChatRequest) json.RawMessage {
+	msgs := make([]Message, len(req.Messages))
+	copy(msgs, req.Messages)
+	for i, m := range msgs {
+		var parts []MessageContent
+		for j, p := range m.Content {
+			if p.ImageURL == nil || !strings.HasPrefix(p.ImageURL.URL, "data:") {
+				continue
+			}
+			if parts == nil {
+				parts = make([]MessageContent, len(m.Content))
+				copy(parts, m.Content)
+			}
+			parts[j].ImageURL = &ImageURL{URL: "image:" + p.ImageURL.ref}
+		}
+		if parts != nil {
+			msgs[i].Content = parts
+		}
+	}
+	r := *req
+	r.Messages = msgs
+	body, err := json.Marshal(&r)
+	if err != nil {
+		return nil
+	}
+	return body
 }

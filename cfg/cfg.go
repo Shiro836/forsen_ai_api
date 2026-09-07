@@ -5,6 +5,7 @@ import (
 	"app/internal/app/api"
 	"app/internal/emoteservice"
 	"app/pkg/ai"
+	"app/pkg/clickhouse"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
 	"app/pkg/s3client"
@@ -32,8 +33,8 @@ type Config struct {
 	// EmoteService is read only by cmd/emote-service; it has its own postgres.
 	EmoteService emoteservice.Config `yaml:"emote_service"`
 
-	LLM2       llm.Config `yaml:"llm2"`
-	ImageLLM   llm.Config `yaml:"image_llm"`
+	LLM2     llm.Config `yaml:"llm2"`
+	ImageLLM llm.Config `yaml:"image_llm"`
 	// NativeImages sends user images to the character model directly instead
 	// of injecting an ImageLLM-written description into the message text.
 	NativeImages bool       `yaml:"native_images"`
@@ -58,6 +59,11 @@ type Config struct {
 	Ffmpeg ffmpeg.Config `yaml:"ffmpeg"`
 
 	S3 s3client.Config `yaml:"s3"`
+
+	// ClickHouse is the message archive (adr/history-archive.md). Empty addr
+	// disables the exporter and the history views; the queue purge then
+	// ignores the export watermark.
+	ClickHouse clickhouse.Config `yaml:"clickhouse"`
 }
 
 type IngestConfig struct {

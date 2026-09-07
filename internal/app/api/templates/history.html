@@ -1,0 +1,22 @@
+<div class="[overflow-wrap:anywhere] min-w-0">
+    <div id="history_filters" class="flex flex-wrap items-center gap-3 pb-3">
+        <input type="search" name="q" autocomplete="off" placeholder="search requester, message, reply"
+            class='{{template "input-class"}} py-1 px-3 w-80 text-sm' hx-get="{{ .FeedURL }}"
+            hx-trigger="input changed delay:300ms, search" hx-target="#history_feed" hx-include="#history_filters">
+        {{ if .Channels }}
+        <select name="channel" class='{{template "input-class"}} py-1 px-2 text-sm' hx-get="{{ .FeedURL }}"
+            hx-trigger="change" hx-target="#history_feed" hx-include="#history_filters">
+            <option value="">all channels</option>
+            {{ range .Channels }}<option value="{{ . }}">{{ . }}</option>{{ end }}
+        </select>
+        {{ end }}
+        <button type="button" class='{{template "button-2"}} px-3 py-1 text-sm' hx-get="{{ .FeedURL }}"
+            hx-target="#history_feed" hx-include="#history_filters">Refresh</button>
+        {{ if not .Enabled }}
+        <span class="text-sm text-amber-600 dark:text-amber-400">Archive unavailable, showing recent messages only.</span>
+        {{ end }}
+    </div>
+    <div id="history_feed" hx-get="{{ .FeedURL }}" hx-trigger="load" hx-include="#history_filters">
+        <div class="py-4 text-center text-sm opacity-60">loading…</div>
+    </div>
+</div>

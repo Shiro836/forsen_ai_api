@@ -8,8 +8,8 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
-	"app/pkg/imagetag"
 	"app/pkg/textfilter"
+	ttsprocessor "app/pkg/tts_processor"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -45,16 +45,16 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 
 	skipLLMFilter := input.SkipLLMFilterFully || input.UserSettings.DisableLLMFilter
 
-	// Filter the raw message (not the image-tag-replaced one) so the spans line
-	// up with what the control panel displays; image tags survive censoring
-	// (disjoint spans) and are replaced afterward for speech.
-	requestSpans, err := h.service.filterSpans(ctx, input.UserSettings, input.Message, skipLLMFilter)
+	tokens := h.service.lexUniversal(ctx, input.Message)
+	spoken, requestMap, ranges := spokenUniversal(input.Message, tokens)
+	requestRun, err := h.service.filterSpans(ctx, input.UserSettings, spoken, skipLLMFilter)
 	if err != nil {
 		return fmt.Errorf("failed to filter request: %w", err)
 	}
-	filteredRequest := imagetag.ReplaceImageTags(textfilter.Censor(input.Message, requestSpans, "(filtered)"))
+	requestSpans := requestRun.Spans()
+	recordFilter(ctx, requestRun, requestMap)
 
-	if len(requestSpans) > 0 {
+	if requestSpans := requestMap.MapBack(requestSpans); len(requestSpans) > 0 {
 		if err := h.db.UpdateMessageData(ctx, msgID, &db.MessageData{RequestFiltered: requestSpans}); err != nil {
 			logger.Warn("failed to store filtered spans", "err", err)
 		}
@@ -65,10 +65,11 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 		return nil
 	}
 
-	actions, err := h.service.processUniversalTTSMessage(ctx, filteredRequest, input.UserSettings)
-	if err != nil {
-		return err
-	}
+	spokenRunes := []rune(spoken)
+	actions := limitSfx(ttsprocessor.Actions(tokens, func(i int) string {
+		r := ranges[i]
+		return textfilter.Censor(string(spokenRunes[r.Start:r.End]), textfilter.Window(requestSpans, r.Start, r.End), "(filtered)")
+	}), input.UserSettings)
 
 	// Increment TTS redeems once per unique referenced voice
 	uniqueVoiceIDs := make(map[uuid.UUID]struct{})

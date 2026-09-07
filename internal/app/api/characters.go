@@ -845,6 +845,20 @@ type tryPageData struct {
 	CharacterName string
 	AgenticMode   bool
 	UniversalMode bool
+	// The toggles' initial state: the user's live settings at the time the
+	// page opens.
+	LLMFilter   bool
+	RegexFilter bool
+}
+
+func (api *API) tryPage(r *http.Request, user *db.User, data tryPageData) template.HTML {
+	settings, err := api.db.GetUserSettings(r.Context(), user.ID)
+	if err != nil {
+		settings = &db.UserSettings{}
+	}
+	data.LLMFilter = !settings.DisableLLMFilter
+	data.RegexFilter = !settings.DisableRegexFilter
+	return getHtml("try_character.html", &data)
 }
 
 // tryCharacter serves the try page for testing a character
@@ -882,17 +896,20 @@ func (api *API) tryCharacter(r *http.Request) template.HTML {
 		})
 	}
 
-	return getHtml("try_character.html", &tryPageData{
+	return api.tryPage(r, user, tryPageData{
 		CharacterID:   characterID.String(),
 		CharacterName: card.Name,
-		AgenticMode:   false,
-		UniversalMode: false,
 	})
 }
 
 type tryAction struct {
 	Action string `json:"action"`
 	Text   string `json:"text"`
+	// The page's toggles. nil is a cached older script: the LLM filter stays
+	// off as try runs always had it, the regex filter follows the account
+	// setting.
+	LLMFilter   *bool `json:"llm_filter"`
+	RegexFilter *bool `json:"regex_filter"`
 }
 
 type tryJob struct {
@@ -949,14 +966,23 @@ func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state 
 
 			msgID := uuid.New()
 
+			// the toggles override the account settings in both directions, and
+			// handlers consult the settings, so the copy carries their values
+			llmFilter := action.LLMFilter != nil && *action.LLMFilter
+			actionSettings := *userSettings
+			actionSettings.DisableLLMFilter = !llmFilter
+			if action.RegexFilter != nil {
+				actionSettings.DisableRegexFilter = !*action.RegexFilter
+			}
+
 			input := processor.InteractionInput{
 				Requester:          dbUser.TwitchLogin,
 				Broadcaster:        dbUser,
 				Message:            action.Text,
 				Character:          card,
-				UserSettings:       userSettings,
+				UserSettings:       &actionSettings,
 				MsgID:              msgID.String(),
-				SkipLLMFilterFully: true,
+				SkipLLMFilterFully: !llmFilter,
 				State:              state,
 				AudioWriter:        audioWriter,
 			}
@@ -1134,10 +1160,9 @@ func (api *API) tryAgentic(r *http.Request) template.HTML {
 		})
 	}
 
-	return getHtml("try_character.html", &tryPageData{
+	return api.tryPage(r, user, tryPageData{
 		CharacterName: "Agentic Flow",
 		AgenticMode:   true,
-		UniversalMode: false,
 	})
 }
 
@@ -1167,9 +1192,8 @@ func (api *API) tryUniversalTTS(r *http.Request) template.HTML {
 		})
 	}
 
-	return getHtml("try_character.html", &tryPageData{
+	return api.tryPage(r, user, tryPageData{
 		CharacterName: "Universal TTS",
-		AgenticMode:   false,
 		UniversalMode: true,
 	})
 }

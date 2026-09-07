@@ -40,11 +40,12 @@ func Merge(sets ...[]Span) []Span {
 	return out
 }
 
-// Mapping translates rune offsets over a Collapse result back to the original
-// text. A nil Mapping is the identity.
+// Mapping translates rune offsets over a Builder's derived text back to its
+// source. A nil Mapping is the identity.
 type Mapping struct {
 	origStart []int
 	origEnd   []int
+	skipped   []Span
 }
 
 // Collapse replaces each span with repl, like Censor, and returns a Mapping so
@@ -55,37 +56,17 @@ func Collapse(text string, spans []Span, repl string) (string, *Mapping) {
 		return text, nil
 	}
 
-	r := []rune(text)
-	replRunes := []rune(repl)
-
-	var b strings.Builder
-	m := &Mapping{}
-
-	appendLiteral := func(from, to int) {
-		for i := from; i < to; i++ {
-			m.origStart = append(m.origStart, i)
-			m.origEnd = append(m.origEnd, i+1)
-		}
-		b.WriteString(string(r[from:to]))
-	}
-
-	prev := 0
+	b := NewBuilder(text)
 	for _, s := range spans {
-		appendLiteral(prev, s.Start)
-		for range replRunes {
-			m.origStart = append(m.origStart, s.Start)
-			m.origEnd = append(m.origEnd, s.End)
-		}
-		b.WriteString(repl)
-		prev = s.End
+		b.Copy(s.Start)
+		b.Replace(s.End, repl)
 	}
-	appendLiteral(prev, len(r))
-
-	return b.String(), m
+	return b.Build()
 }
 
-// MapBack translates spans over the collapsed text to spans over the original.
-// A span touching a replacement expands to cover the full replaced range.
+// MapBack translates spans over the derived text to spans over the source,
+// merged. A span touching a replacement expands to cover the full replaced
+// range; skipped source ranges are cut out.
 func (m *Mapping) MapBack(spans []Span) []Span {
 	if m == nil {
 		return spans
@@ -102,7 +83,24 @@ func (m *Mapping) MapBack(spans []Span) []Span {
 		if s.Start >= s.End {
 			continue
 		}
-		out = append(out, Span{Start: m.origStart[s.Start], End: m.origEnd[s.End-1]})
+		out = append(out, m.cut(Span{Start: m.origStart[s.Start], End: m.origEnd[s.End-1]})...)
+	}
+	return Merge(out)
+}
+
+func (m *Mapping) cut(s Span) []Span {
+	var out []Span
+	for _, hole := range m.skipped {
+		if hole.End <= s.Start || hole.Start >= s.End {
+			continue
+		}
+		if hole.Start > s.Start {
+			out = append(out, Span{Start: s.Start, End: hole.Start})
+		}
+		s.Start = hole.End
+	}
+	if s.Start < s.End {
+		out = append(out, s)
 	}
 	return out
 }

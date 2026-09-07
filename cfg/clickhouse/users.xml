@@ -1,0 +1,13 @@
+<!-- Per-query limits for the app/grafana user (the account itself is created
+     by the image entrypoint from CLICKHOUSE_USER/CLICKHOUSE_PASSWORD).
+     Mounted into /etc/clickhouse-server/users.d/ by docker-compose. -->
+<clickhouse>
+    <profiles>
+        <default>
+            <max_memory_usage>4000000000</max_memory_usage>
+            <max_execution_time>60</max_execution_time>
+            <max_threads>8</max_threads>
+            <do_not_merge_across_partitions_select_final>1</do_not_merge_across_partitions_select_final>
+        </default>
+    </profiles>
+</clickhouse>

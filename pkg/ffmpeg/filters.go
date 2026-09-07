@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path"
@@ -335,6 +336,18 @@ func (c *Client) applyFilter(ctx context.Context, audioData []byte, filterType F
 	return output, nil
 }
 
+// SweepHz is the apulsator rate for a half-cycle pan across dur, clamped to
+// the filter's accepted range: past ~50 s the sweep lands early and drifts
+// back instead of failing the whole render.
+func SweepHz(dur time.Duration) float64 {
+	const minHz, maxHz = 0.01, 100.0
+	secs := dur.Seconds()
+	if secs <= 0 {
+		return 0.5
+	}
+	return math.Min(maxHz, math.Max(minHz, 0.5/secs))
+}
+
 // buildFilter constructs the ffmpeg filter string based on the filter type
 func (c *Client) buildFilter(filterType FilterType, duration time.Duration) string {
 	switch filterType {
@@ -384,12 +397,10 @@ func (c *Client) buildFilter(filterType FilterType, duration time.Duration) stri
 		return "pan=stereo|c0=1*c0|c1=0*c0"
 
 	case FilterLeftToRight:
-		frequency := 0.5 / duration.Seconds()
-		return fmt.Sprintf("apulsator=hz=%.6f:offset_l=0.25:offset_r=0.75", frequency)
+		return fmt.Sprintf("apulsator=hz=%.6f:offset_l=0.25:offset_r=0.75", SweepHz(duration))
 
 	case FilterRightToLeft:
-		frequency := 0.5 / duration.Seconds()
-		return fmt.Sprintf("apulsator=hz=%.6f:offset_l=0.75:offset_r=0.25", frequency)
+		return fmt.Sprintf("apulsator=hz=%.6f:offset_l=0.75:offset_r=0.25", SweepHz(duration))
 
 	case FilterQuietToLoud:
 		return fmt.Sprintf("volume='0.1+0.9*t/%.1f':eval=frame", duration.Seconds())

@@ -90,7 +90,14 @@
         }
 
         ensurePlayer();
-        ws.send(JSON.stringify({ action: action, text: text }));
+        const llmToggle = document.getElementById("llm_filter_toggle");
+        const regexToggle = document.getElementById("regex_filter_toggle");
+        ws.send(JSON.stringify({
+            action: action,
+            text: text,
+            llm_filter: llmToggle ? llmToggle.checked : false,
+            regex_filter: regexToggle ? regexToggle.checked : true,
+        }));
         input.focus();
     }
 

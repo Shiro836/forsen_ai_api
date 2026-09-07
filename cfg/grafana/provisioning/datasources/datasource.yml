@@ -13,3 +13,18 @@ datasources:
     access: proxy
     url: http://loki:3100
 
+  # password comes from .env (gitignored) through the container environment
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    uid: ClickHouse
+    access: proxy
+    jsonData:
+      host: clickhouse
+      port: 9000
+      protocol: native
+      username: app
+      defaultDatabase: archive
+      dialTimeout: 10
+      queryTimeout: 60
+    secureJsonData:
+      password: $CLICKHOUSE_PASSWORD

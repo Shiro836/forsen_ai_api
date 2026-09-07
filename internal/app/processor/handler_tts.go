@@ -7,7 +7,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
-	"app/pkg/imagetag"
+	"app/pkg/textfilter"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,8 +51,23 @@ func (h *TTSHandler) Handle(ctx context.Context, input InteractionInput, eventWr
 		EventData: []byte("/characters/" + input.Character.ID.String() + "/image"),
 	})
 
-	ttsMsg := imagetag.ReplaceImageTags(input.Message)
-	filteredRequest := h.service.FilterText(ctx, input.UserSettings, ttsMsg)
+	skipLLMFilter := input.SkipLLMFilterFully || input.UserSettings.DisableLLMFilter
+
+	spoken, requestMap := spokenRequest("", input.Message)
+	requestRun, err := h.service.filterSpans(ctx, input.UserSettings, spoken, skipLLMFilter)
+	if err != nil {
+		return fmt.Errorf("failed to filter request: %w", err)
+	}
+	requestSpans := requestRun.Spans()
+	filteredRequest := textfilter.Censor(spoken, requestSpans, "(filtered)")
+	recordFilter(ctx, requestRun, requestMap)
+
+	if requestSpans := requestMap.MapBack(requestSpans); len(requestSpans) > 0 {
+		if err := h.db.UpdateMessageData(ctx, msgID, &db.MessageData{RequestFiltered: requestSpans}); err != nil {
+			logger.Warn("failed to store filtered spans", "err", err)
+		}
+		h.service.connManager.NotifyControlPanel(input.Broadcaster.ID)
+	}
 
 	if input.State.IsSkipped(msgID) {
 		return nil

@@ -68,9 +68,9 @@ func chainFor(t ffmpeg.FilterType, dur time.Duration) string {
 	case ffmpeg.FilterLeftSide:
 		return "pan=stereo|c0=1*c0|c1=0*c0"
 	case ffmpeg.FilterLeftToRight:
-		return fmt.Sprintf("apulsator=hz=%.6f:offset_l=0.25:offset_r=0.75", 0.5/secs)
+		return fmt.Sprintf("apulsator=hz=%.6f:offset_l=0.25:offset_r=0.75", ffmpeg.SweepHz(dur))
 	case ffmpeg.FilterRightToLeft:
-		return fmt.Sprintf("apulsator=hz=%.6f:offset_l=0.75:offset_r=0.25", 0.5/secs)
+		return fmt.Sprintf("apulsator=hz=%.6f:offset_l=0.75:offset_r=0.25", ffmpeg.SweepHz(dur))
 	case ffmpeg.FilterQuietToLoud:
 		return fmt.Sprintf("volume='0.1+0.9*t/%.1f':eval=frame", secs)
 	case ffmpeg.FilterLoudToQuiet:

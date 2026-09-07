@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
+	"app/pkg/archive"
 	"app/pkg/llm"
 
 	"github.com/openai/openai-go"
@@ -139,14 +141,7 @@ func (c *Client) AskGuided(ctx context.Context, messages []llm.Message, schema j
 	}
 	c.applyTuning(&params, temperature)
 
-	resp, err := c.API.Chat.Completions.New(ctx, params)
-	if err != nil {
-		return "", fmt.Errorf("oai chat: %w", err)
-	}
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("oai: no choices returned")
-	}
-	return resp.Choices[0].Message.Content, nil
+	return c.complete(ctx, params)
 }
 
 // Ask runs a plain (non-JSON) chat completion and returns the assistant's raw
@@ -166,12 +161,35 @@ func (c *Client) Ask(ctx context.Context, messages []llm.Message, temperature fl
 		reqOpts = append(reqOpts, option.WithJSONSet("thinking", map[string]string{"type": "disabled"}))
 	}
 
+	return c.complete(ctx, params, reqOpts...)
+}
+
+// complete runs the request and records it for the message archive. Options
+// applied through reqOpts (the deepseek thinking switch) are not part of the
+// recorded body.
+func (c *Client) complete(ctx context.Context, params openai.ChatCompletionNewParams, reqOpts ...option.RequestOption) (string, error) {
+	body, _ := json.Marshal(params)
+	start := time.Now()
+	call := archive.LLMCall{Model: c.Model, Endpoint: "oai", Request: body, At: start.UnixMilli()}
+	defer func() {
+		call.LatencyMs = int(time.Since(start).Milliseconds())
+		archive.RecordLLM(ctx, call)
+	}()
+
 	resp, err := c.API.Chat.Completions.New(ctx, params, reqOpts...)
 	if err != nil {
+		call.Error = err.Error()
 		return "", fmt.Errorf("oai chat: %w", err)
 	}
+	if resp.Model != "" {
+		call.Model = resp.Model
+	}
+	call.PromptTok = int(resp.Usage.PromptTokens)
+	call.OutputTok = int(resp.Usage.CompletionTokens)
 	if len(resp.Choices) == 0 {
+		call.Error = "no choices returned"
 		return "", fmt.Errorf("oai: no choices returned")
 	}
-	return resp.Choices[0].Message.Content, nil
+	call.Response = resp.Choices[0].Message.Content
+	return call.Response, nil
 }

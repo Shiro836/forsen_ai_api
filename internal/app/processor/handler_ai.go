@@ -13,6 +13,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
+	"app/pkg/archive"
 	"app/pkg/imagetag"
 	"app/pkg/llm"
 	"app/pkg/s3client"
@@ -143,19 +144,29 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 	skipLLMFilter := input.SkipLLMFilterFully || skipLLMFilterPerUser
 
 	ttsUserMsg := imagetag.ReplaceImageTags(input.Message)
-	// Filter the raw message (not the image-tag-replaced one) so the spans line
-	// up with what the control panel displays; image tags survive censoring
-	// (disjoint spans) and are replaced afterward for speech.
-	requestPrefix := input.Requester + " asked me: "
-	requestText := requestPrefix + input.Message
-	requestSpans, err := h.service.filterSpans(ctx, input.UserSettings, requestText, skipLLMFilter)
+	spokenRequestText, requestMap := spokenRequest(input.Requester+" asked me: ", input.Message)
+	requestRun, err := h.service.filterSpans(ctx, input.UserSettings, spokenRequestText, skipLLMFilter)
 	if err != nil {
 		return fmt.Errorf("failed to filter request: %w", err)
 	}
-	filteredRequestText := imagetag.ReplaceImageTags(textfilter.Censor(requestText, requestSpans, "(filtered)"))
+	requestSpans := requestRun.Spans()
+	filteredRequestText := textfilter.Censor(spokenRequestText, requestSpans, "(filtered)")
+	recordFilter(ctx, requestRun, requestMap)
 
-	if requestFiltered := spansAfterPrefix(requestSpans, utf8.RuneCountInString(requestPrefix)); len(requestFiltered) > 0 {
-		h.db.UpdateMessageData(ctx, msgID, &db.MessageData{RequestFiltered: requestFiltered})
+	requesterLen := utf8.RuneCountInString(input.Requester)
+	archive.RecordFilter(ctx, archive.FilterRun{
+		Target:  archive.FilterTargetRequester,
+		Regex:   textfilter.Window(requestRun.Regex, 0, requesterLen),
+		LLM:     textfilter.Window(requestRun.LLM, 0, requesterLen),
+		Skipped: requestRun.Skipped,
+	})
+
+	requestData := db.MessageData{
+		RequestFiltered:   requestMap.MapBack(requestSpans),
+		RequesterFiltered: textfilter.Window(requestSpans, 0, requesterLen),
+	}
+	if len(requestData.RequestFiltered) > 0 || len(requestData.RequesterFiltered) > 0 {
+		h.db.UpdateMessageData(ctx, msgID, &requestData)
 		h.service.connManager.NotifyControlPanel(input.Broadcaster.ID)
 	}
 
@@ -196,10 +207,12 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 		return nil
 	}
 
-	responseSpans, err := h.service.filterReplySpans(ctx, input.UserSettings, ttsUserMsg, llmResult, skipLLMFilter)
+	responseRun, err := h.service.filterReplySpans(ctx, input.UserSettings, ttsUserMsg, llmResult, skipLLMFilter)
 	if err != nil {
 		return fmt.Errorf("failed to filter response: %w", err)
 	}
+	recordFilter(ctx, responseRun, nil)
+	responseSpans := responseRun.Spans()
 
 	h.db.UpdateMessageData(ctx, msgID, &db.MessageData{AIResponse: llmResult, FilteredText: responseSpans})
 	h.service.connManager.NotifyControlPanel(input.Broadcaster.ID)
@@ -292,7 +305,7 @@ func attachImages(msg string, images []fetchedImage) (string, []llm.Attachment) 
 			msg = imagetag.ReplaceID(msg, img.id, "")
 			continue
 		}
-		attachments = append(attachments, llm.Attachment{Data: img.data, ContentType: "image/png"})
+		attachments = append(attachments, llm.Attachment{ID: img.id, Data: img.data, ContentType: "image/png"})
 	}
 	return imagetag.ReplaceImageTags(msg), attachments
 }
@@ -317,7 +330,7 @@ func (h *AIHandler) describeImages(ctx context.Context, logger *slog.Logger, msg
 Do not use first-person expressions like "I" or "we," and avoid conversational greetings.
 The description should read like a clever commentary, not like someone talking about themselves.  in 4 to 20 sentences. No markdown.`}}},
 			}
-			analysis, err := h.imageLlm.AskMessages(ctx, messages, []llm.Attachment{{Data: img.data, ContentType: "image/png"}})
+			analysis, err := h.imageLlm.AskMessages(archive.WithLLMKind(ctx, "image_describe"), messages, []llm.Attachment{{ID: img.id, Data: img.data, ContentType: "image/png"}})
 			if err != nil || len(analysis) == 0 {
 				logger.Warn("image analysis failed", "id", img.id, "err", err)
 				return

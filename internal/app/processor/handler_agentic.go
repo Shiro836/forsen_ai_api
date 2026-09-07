@@ -9,7 +9,9 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/agentic"
+	"app/pkg/archive"
 	"app/pkg/llm"
+	"app/pkg/textfilter"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -51,7 +53,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 		return fmt.Errorf("failed to get all characters: %w", err)
 	}
 
-	detectedChars, err := h.detector.DetectCharacters(ctx, input.Message, allChars)
+	detectedChars, err := h.detector.DetectCharacters(archive.WithLLMKind(ctx, "detect"), input.Message, allChars)
 	if err != nil {
 		logger.Error("failed to detect characters", "err", err)
 		return fmt.Errorf("agentic flow failed: %w", err)
@@ -83,7 +85,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 		charCardsSlice = append(charCardsSlice, card)
 	}
 
-	firstSpeakerName, err := h.planner.SelectFirstSpeaker(ctx, input.Message, charCardsSlice)
+	firstSpeakerName, err := h.planner.SelectFirstSpeaker(archive.WithLLMKind(ctx, "plan"), input.Message, charCardsSlice)
 	if err != nil {
 		logger.Error("failed to select first speaker", "err", err)
 		return fmt.Errorf("failed to select first speaker: %w", err)
@@ -114,8 +116,14 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 
 	firstMsg := stripLeadingSpeakerPrefix(firstCard.Name, firstResponse)
 	appendHistoryTurn(&history, firstCard.Name, firstMsg)
+	archive.RecordTurn(ctx, archive.AgenticTurn{CardID: firstCard.ID.String(), Speaker: firstCard.Name, Text: firstMsg})
 
-	curText := h.service.FilterText(ctx, input.UserSettings, firstMsg)
+	skipLLMFilter := input.SkipLLMFilterFully || input.UserSettings.DisableLLMFilter
+
+	curText, err := h.filterTurn(ctx, input.UserSettings, input.Message, firstMsg, skipLLMFilter)
+	if err != nil {
+		return fmt.Errorf("failed to filter first turn: %w", err)
+	}
 	curCard := firstCard
 	var prevDone <-chan struct{}
 
@@ -155,7 +163,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 		// next turn's LLM call and gated synthesis run while this turn plays
 		curText, curCard = "", nil
 		if turn+1 < MaxAgenticTurns {
-			nextText, nextCard, err := h.prepareNextAgenticTurnText(ctx, input.Message, &history, charNames, charCards, nameToID, input.UserSettings)
+			nextText, nextCard, err := h.prepareNextAgenticTurnText(ctx, input.Message, &history, charNames, charCards, nameToID, input.UserSettings, skipLLMFilter)
 			if err != nil {
 				logger.Error("failed to prepare next agentic turn", "err", err)
 			} else {
@@ -194,8 +202,9 @@ func (h *AgenticHandler) prepareNextAgenticTurnText(
 	charCards map[uuid.UUID]*db.Card,
 	nameToID map[string]uuid.UUID,
 	userSettings *db.UserSettings,
+	skipLLMFilter bool,
 ) (string, *db.Card, error) {
-	nextSpeakerName, err := h.planner.SelectNextSpeaker(ctx, scenario, *history, charNames)
+	nextSpeakerName, err := h.planner.SelectNextSpeaker(archive.WithLLMKind(ctx, "plan"), scenario, *history, charNames)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to select next speaker: %w", err)
 	}
@@ -221,8 +230,24 @@ func (h *AgenticHandler) prepareNextAgenticTurnText(
 
 	cleanResponse := stripLeadingSpeakerPrefix(nextCard.Name, response)
 	appendHistoryTurn(history, nextCard.Name, cleanResponse)
+	archive.RecordTurn(ctx, archive.AgenticTurn{CardID: nextCard.ID.String(), Speaker: nextCard.Name, Text: cleanResponse})
 
-	return h.service.FilterText(ctx, userSettings, cleanResponse), nextCard, nil
+	filtered, err := h.filterTurn(ctx, userSettings, scenario, cleanResponse, skipLLMFilter)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to filter turn: %w", err)
+	}
+	return filtered, nextCard, nil
+}
+
+// filterTurn censors one character line for speech. A turn is model output
+// answering the viewer's scenario, so it is judged the way an AI reply is.
+func (h *AgenticHandler) filterTurn(ctx context.Context, userSettings *db.UserSettings, scenario, text string, skipLLM bool) (string, error) {
+	run, err := h.service.filterReplySpans(ctx, userSettings, scenario, text, skipLLM)
+	if err != nil {
+		return "", err
+	}
+	recordFilter(ctx, run, nil)
+	return textfilter.Censor(text, run.Spans(), "(filtered)"), nil
 }
 
 func appendHistoryTurn(history *[]llm.Message, speakerName, text string) {

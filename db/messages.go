@@ -159,7 +159,10 @@ func (db *DB) GetMessageByID(ctx context.Context, msgID uuid.UUID) (*Message, er
 	return &msg, nil
 }
 
-func (db *DB) CleanQueue(ctx context.Context) error {
+// CleanQueue purges finished rows beyond the last ~200 updates. With
+// respectWatermark it never deletes a row the archive exporter has not
+// acknowledged, so an archive outage grows the queue instead of losing rows.
+func (db *DB) CleanQueue(ctx context.Context, respectWatermark bool) error {
 	_, err := db.Exec(ctx, `
 		delete from
 			msg_queue
@@ -167,7 +170,9 @@ func (db *DB) CleanQueue(ctx context.Context) error {
 			(status = $1 or status = $2)
 		and
 			updated < currval('updated_seq') - 200
-	`, MsgStatusDeleted, MsgStatusProcessed)
+		and
+			(not $3 or updated <= (select coalesce(max(watermark), 0) from export_state))
+	`, MsgStatusDeleted, MsgStatusProcessed, respectWatermark)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -201,8 +206,9 @@ func (db *DB) UpdateMessageStatus(ctx context.Context, msgID uuid.UUID, status M
 type MessageData struct {
 	AIResponse string `json:"ai_response,omitzero"`
 
-	FilteredText    []textfilter.Span `json:"filtered_text,omitempty"`
-	RequestFiltered []textfilter.Span `json:"request_filtered,omitempty"`
+	FilteredText      []textfilter.Span `json:"filtered_text,omitempty"`
+	RequestFiltered   []textfilter.Span `json:"request_filtered,omitempty"`
+	RequesterFiltered []textfilter.Span `json:"requester_filtered,omitempty"`
 
 	ShowImages *bool    `json:"show_images,omitempty"`
 	ImageIDs   []string `json:"image_ids,omitempty"`
@@ -220,6 +226,26 @@ func (db *DB) UpdateMessageData(ctx context.Context, msgID uuid.UUID, data *Mess
 	`, data, msgID)
 	if err != nil {
 		return fmt.Errorf("failed to update message data: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateMessageArchive stores a message's telemetry (pkg/archive) in the side
+// column. The updated bump is what carries the row past a skip that already
+// marked it Deleted, so the exporter never passes it before the archive lands.
+func (db *DB) UpdateMessageArchive(ctx context.Context, msgID uuid.UUID, archive any) error {
+	_, err := db.Exec(ctx, `
+		update
+			msg_queue
+		set
+			archive = $1::jsonb,
+			updated = nextval('updated_seq')
+		where
+			id = $2
+	`, archive, msgID)
+	if err != nil {
+		return fmt.Errorf("failed to update message archive: %w", err)
 	}
 
 	return nil

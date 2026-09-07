@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"app/db"
+	"app/pkg/archive"
 	"app/pkg/charutil"
 )
 
@@ -61,7 +62,7 @@ func (c ChatClient) CharacterReply(ctx context.Context, card *db.Card, requester
 		user = Message{Role: "user", Content: append([]MessageContent{{Type: "text", Text: message}}, parts...)}
 	}
 	msgs := append(chatSystemAndExamples(card.Data), user)
-	return c.chatReply(ctx, msgs)
+	return c.chatReply(archive.WithLLMKind(ctx, "character"), msgs)
 }
 
 func (c ChatClient) DialogueReply(ctx context.Context, card *db.Card, scenario string, history ...string) (string, error) {
@@ -82,7 +83,7 @@ func (c ChatClient) DialogueReply(ctx context.Context, card *db.Card, scenario s
 	fmt.Fprintf(&u, "Write only the next single line spoken by %s, in character, with no name prefix.", d.Name)
 
 	msgs := append(chatSystemAndExamples(d), Message{Role: "user", StrContent: u.String()})
-	return c.chatReply(ctx, msgs)
+	return c.chatReply(archive.WithLLMKind(ctx, "dialogue"), msgs)
 }
 
 func (c ChatClient) chatReply(ctx context.Context, msgs []Message) (string, error) {

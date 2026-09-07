@@ -1,11 +1,13 @@
 //go:build integration
 
-// The integration corpus for the LLM filter. It runs against a live provider
-// (cfg oai, or oai_candidate when FILTER_CANDIDATE is set) and is split by
-// theme: corpus_recall_test.go (what must be caught), corpus_precision_test.go
-// (what must stay untouched), corpus_context_test.go (reply judged against its
-// prompt), corpus_streamer_test.go (streamer rules), corpus_robustness_test.go
-// (markup, spam, injection). Every case is a spanCase run through runSpanCases.
+// The integration corpus for the LLM filter. It runs against the production
+// provider (cfg filter_llm) unless FILTER_PROVIDER says otherwise, and is
+// split by theme: corpus_recall_test.go (what must be caught),
+// corpus_precision_test.go (what must stay untouched), corpus_context_test.go
+// (reply judged against its prompt), corpus_streamer_test.go (streamer rules),
+// corpus_robustness_test.go (markup, spam, injection), corpus_figures_test.go
+// (glorification of banned figures). Every case is a spanCase run through
+// runSpanCases.
 package llmfilter_test
 
 import (
@@ -84,16 +86,16 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// newFilter uses the cfg block named by FILTER_PROVIDER (oai, oai_candidate,
-// filter_llm — the last is what production runs), defaulting to oai;
+// newFilter uses the cfg block named by FILTER_PROVIDER (filter_llm, oai,
+// oai_candidate), defaulting to filter_llm, what production runs;
 // FILTER_CANDIDATE=1 is shorthand for oai_candidate.
 func newFilter() *llmfilter.Filter {
-	c := testCfg.OAI
+	c := testCfg.FilterLLM
 	switch os.Getenv("FILTER_PROVIDER") {
+	case "oai":
+		c = testCfg.OAI
 	case "oai_candidate":
 		c = testCfg.OAICandidate
-	case "filter_llm":
-		c = testCfg.FilterLLM
 	}
 	if os.Getenv("FILTER_CANDIDATE") != "" {
 		c = testCfg.OAICandidate

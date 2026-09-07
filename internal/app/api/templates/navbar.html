@@ -35,6 +35,11 @@
                     data-path="/admin" hx-get="/admin" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
                     hx-push-url="true" hx-sync="closest #tabs:abort">Admin Page</button>
             </div>
+            <div class="pt-1 pb-1 w-full">
+                <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
+                    data-path="/admin/history" hx-get="/admin/history" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                    hx-push-url="true" hx-sync="closest #tabs:abort">History</button>
+            </div>
         </div>
         {{ end }}
         <div class="w-max border-t {{template "ui-border-clr"}} pt-1 pb-1">

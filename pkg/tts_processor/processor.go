@@ -1,10 +1,29 @@
+// Package ttsprocessor lexes a universal TTS message into spoken text and the
+// inline tags that shape it: `name:` switches voice, `{name}` pushes a filter
+// (`{.}` pops), `[name]` plays a sound. Whether a candidate is a tag is the
+// caller's call, through the check callbacks; anything unrecognized stays
+// text and is spoken as written.
 package ttsprocessor
 
-import (
-	"fmt"
-	"slices"
-	"strings"
+import "slices"
+
+type Kind int
+
+const (
+	Text Kind = iota
+	Voice
+	Filter
+	Sfx
 )
+
+// Token is one lexed piece of a message. Start and End are rune offsets into
+// the message; Value is the text itself or the tag's name.
+type Token struct {
+	Kind  Kind
+	Start int
+	End   int
+	Value string
+}
 
 type Action struct {
 	Filters []string
@@ -15,151 +34,118 @@ type Action struct {
 	Sfx string
 }
 
-func ProcessMessage(message string, checkVoice func(string) bool, checkFilter func(string) bool, checkSfx func(string) bool) ([]Action, error) {
-	curFilters := []string{}
-	curVoice := ""
+// Lex splits message into text and recognized tags. Tokens are in message
+// order; a `:` with nothing pending before it belongs to no token.
+func Lex(message string, checkVoice func(string) bool, checkFilter func(string) bool, checkSfx func(string) bool) []Token {
+	r := []rune(message)
+	var tokens []Token
+	start := 0
 
-	s := strings.Builder{}
-
-	actions := []Action{}
-
-	for _, chr := range message {
-		switch chr {
-		case ']', '}':
-			openingBracket := '['
-			if chr == '}' {
-				openingBracket = '{'
-			}
-
-			text := s.String()
-
-			openPosition := strings.LastIndex(text, string(openingBracket))
-			if openPosition == -1 {
-				_, err := s.WriteRune(chr)
-				if err != nil {
-					return nil, fmt.Errorf("error writing to string builder: %w", err)
-				}
-
-				continue
-			}
-
-			content := text[openPosition+1:]
-			if openingBracket == '[' && checkSfx(content) {
-				text = text[:openPosition]
-				if len(text) > 0 {
-					actions = append(actions, Action{
-						Filters: slices.Clone(curFilters),
-						Voice:   curVoice,
-						Text:    text,
-					})
-				}
-
-				actions = append(actions, Action{
-					Filters: slices.Clone(curFilters),
-					Sfx:     content,
-				})
-
-				s.Reset()
-
-				continue
-			}
-
-			if openingBracket == '{' && checkFilter(content) {
-				text = text[:openPosition]
-
-				if len(text) > 0 {
-					actions = append(actions, Action{
-						Filters: slices.Clone(curFilters),
-						Voice:   curVoice,
-						Text:    text,
-					})
-				}
-
-				s.Reset()
-
-				if content == "." {
-					if len(curFilters) != 0 {
-						curFilters = curFilters[:len(curFilters)-1]
-					}
-				} else {
-					curFilters = append(curFilters, content)
-				}
-
-				continue
-			}
-
-			_, err := s.WriteRune(chr)
-			if err != nil {
-				return nil, fmt.Errorf("error writing to string builder: %w", err)
-			}
-		case ':':
-			text := s.String()
-
-			newVoice := ""
-
-			if len(text) == 0 {
-				continue
-			}
-
-			// find last whitespace in text
-			lastWhitespace := strings.LastIndex(text, " ")
-			if lastWhitespace == -1 {
-				newVoice = text
-				if checkVoice(newVoice) {
-					curVoice = newVoice
-					s.Reset()
-
-					continue
-				}
-
-				_, err := s.WriteRune(chr)
-				if err != nil {
-					return nil, fmt.Errorf("error writing to string builder: %w", err)
-				}
-
-				continue
-			}
-
-			if lastWhitespace != len(text)-1 {
-				newVoice = text[lastWhitespace+1:]
-			}
-
-			if checkVoice(newVoice) {
-				text = text[:lastWhitespace+1]
-
-				if len(text) > 0 {
-					actions = append(actions, Action{
-						Filters: slices.Clone(curFilters),
-						Voice:   curVoice,
-						Text:    text,
-					})
-				}
-				curVoice = newVoice
-
-				s.Reset()
-
-				continue
-			}
-
-			fallthrough
-
-		default:
-			_, err := s.WriteRune(chr)
-			if err != nil {
-				return nil, fmt.Errorf("error writing to string builder: %w", err)
-			}
+	text := func(from, to int) {
+		if to > from {
+			tokens = append(tokens, Token{Kind: Text, Start: from, End: to, Value: string(r[from:to])})
 		}
 	}
 
-	if s.Len() > 0 {
-		actions = append(actions, Action{
-			Filters: curFilters,
-			Voice:   curVoice,
-			Text:    s.String(),
-		})
+	for i, chr := range r {
+		switch chr {
+		case ']', '}':
+			opening := '['
+			kind, check := Sfx, checkSfx
+			if chr == '}' {
+				opening = '{'
+				kind, check = Filter, checkFilter
+			}
 
-		s.Reset()
+			open := lastIndex(r[start:i], opening)
+			if open == -1 {
+				continue
+			}
+			open += start
+
+			content := string(r[open+1 : i])
+			if !check(content) {
+				continue
+			}
+
+			text(start, open)
+			tokens = append(tokens, Token{Kind: kind, Start: open, End: i + 1, Value: content})
+			start = i + 1
+
+		case ':':
+			if start == i {
+				start = i + 1
+				continue
+			}
+
+			// A voice name is the last space-delimited word before the colon.
+			nameStart := lastIndex(r[start:i], ' ')
+			if nameStart == -1 {
+				nameStart = start
+			} else {
+				nameStart += start + 1
+			}
+
+			name := string(r[nameStart:i])
+			if !checkVoice(name) {
+				continue
+			}
+
+			text(start, nameStart)
+			tokens = append(tokens, Token{Kind: Voice, Start: nameStart, End: i + 1, Value: name})
+			start = i + 1
+		}
 	}
 
-	return actions, nil
+	text(start, len(r))
+	return tokens
+}
+
+func lastIndex(r []rune, c rune) int {
+	for i := len(r) - 1; i >= 0; i-- {
+		if r[i] == c {
+			return i
+		}
+	}
+	return -1
+}
+
+// Actions folds tokens into playback actions: each text token becomes a
+// spoken action under the voice and filter stack in force at that point, each
+// sound tag an sfx action under the same filters. render supplies the spoken
+// form of text token i (censored, image placeholders); nil speaks it as is.
+func Actions(tokens []Token, render func(i int) string) []Action {
+	filters := []string{}
+	voice := ""
+	actions := []Action{}
+
+	for i, tok := range tokens {
+		switch tok.Kind {
+		case Text:
+			text := tok.Value
+			if render != nil {
+				text = render(i)
+			}
+			actions = append(actions, Action{Filters: slices.Clone(filters), Voice: voice, Text: text})
+		case Voice:
+			voice = tok.Value
+		case Filter:
+			if tok.Value == "." {
+				if len(filters) != 0 {
+					filters = filters[:len(filters)-1]
+				}
+			} else {
+				filters = append(filters, tok.Value)
+			}
+		case Sfx:
+			actions = append(actions, Action{Filters: slices.Clone(filters), Sfx: tok.Value})
+		}
+	}
+
+	return actions
+}
+
+// ProcessMessage lexes message and folds it into actions in one step.
+func ProcessMessage(message string, checkVoice func(string) bool, checkFilter func(string) bool, checkSfx func(string) bool) []Action {
+	return Actions(Lex(message, checkVoice, checkFilter, checkSfx), nil)
 }

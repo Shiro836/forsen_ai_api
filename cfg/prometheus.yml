@@ -36,3 +36,9 @@ scrape_configs:
       - targets: ['host.docker.internal:9000']
         labels:
           service: 'minio'
+
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse:9363']
+        labels:
+          service: 'clickhouse'

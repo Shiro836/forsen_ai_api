@@ -3,11 +3,11 @@ package main
 import (
 	"app/cfg"
 	"app/db"
+	"app/pkg/clickhouse"
 	"context"
 	"flag"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -25,8 +25,6 @@ const dropEverythingQuery = `
 
 const drop = false
 
-const migrationsFolder = "db/migrations"
-
 func main() {
 	var cfgPath string
 	flag.StringVar(&cfgPath, "cfg-path", "cfg/cfg.yaml", "path to config file")
@@ -41,51 +39,37 @@ func main() {
 
 	createDbCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	db, err := db.New(createDbCtx, &cfg.DB)
+	pg, err := db.New(createDbCtx, &cfg.DB)
 	if err != nil {
 		log.Fatal("failed to init postgre db: ", err)
 	}
 
-	files, err := os.ReadDir(migrationsFolder)
-	if err != nil {
-		log.Fatalf("can't read migrations folder: %v", err)
-	}
-
 	if drop {
-		_, err := db.Exec(context.Background(), dropEverythingQuery)
+		_, err := pg.Exec(context.Background(), dropEverythingQuery)
 		if err != nil {
 			log.Fatalf("can't drop everything: %v", err)
 		}
 		log.Println("dropped all tables")
 	}
 
-	for _, file := range files {
-		filePath := migrationsFolder + "/" + file.Name()
-		fileContent, err := os.ReadFile(filePath)
-		if err != nil {
-			log.Fatalf("can't read file %s: %v", filePath, err)
-		}
-
-		log.Printf("applying migration %s", filePath)
-
-		// Execute each statement separately so that statements like
-		// CREATE INDEX CONCURRENTLY (which cannot run inside a transaction)
-		// are not batched together with other statements.
-		for _, stmt := range strings.Split(string(fileContent), ";") {
-			stmt = strings.TrimSpace(stmt)
-			if len(stmt) == 0 {
-				continue
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			_, err = db.Exec(ctx, stmt)
-			cancel()
-			if err != nil {
-				log.Fatalf("can't execute migration %s: %v", filePath, err)
-				return
-			}
-		}
+	migrateCtx, cancelMigrate := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancelMigrate()
+	if err := pg.ApplyMigrations(migrateCtx, db.Migrations, db.MigrationsDir, func(name string) {
+		log.Printf("applying migration %s", name)
+	}); err != nil {
+		log.Fatalf("can't apply migrations: %v", err)
 	}
 
 	log.Println("migrations applied")
+
+	if cfg.ClickHouse.Addr == "" {
+		log.Println("clickhouse not configured, skipping archive migrations")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := clickhouse.Migrate(ctx, &cfg.ClickHouse, db.ClickHouseMigrations, db.ClickHouseMigrationsDir); err != nil {
+		log.Fatalf("can't apply clickhouse migrations: %v", err)
+	}
+	log.Println("clickhouse migrations applied")
 }

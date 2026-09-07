@@ -18,6 +18,11 @@ type Metrics struct {
 	HandlerErrors      *prometheus.CounterVec
 	RewardRedeems      *prometheus.CounterVec
 	NvidiaStats        *prometheus.GaugeVec
+
+	ArchiveExportRows     *prometheus.CounterVec
+	ArchiveExportErrors   prometheus.Counter
+	ArchiveUnexportedRows prometheus.Gauge
+	ArchiveWatermark      prometheus.Gauge
 }
 
 var AppMetrics = &Metrics{
@@ -67,6 +72,28 @@ var AppMetrics = &Metrics{
 		Subsystem: "gpu",
 		Name:      "stats_info",
 	}, []string{"gpu_id", "stat_name"}),
+	ArchiveExportRows: prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "archive",
+		Subsystem: "export",
+		Name:      "rows_total",
+		Help:      "Rows written to ClickHouse per table; skipped_foreign counts unowned redeems passed over",
+	}, []string{"table"}),
+	ArchiveExportErrors: prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "archive",
+		Subsystem: "export",
+		Name:      "errors_total",
+	}),
+	ArchiveUnexportedRows: prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "archive",
+		Subsystem: "export",
+		Name:      "unexported_rows",
+		Help:      "msg_queue rows past the watermark; the purge cannot delete them, so this grows during a ClickHouse outage",
+	}),
+	ArchiveWatermark: prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "archive",
+		Subsystem: "export",
+		Name:      "watermark",
+	}),
 }
 
 func RegisterMetrics(reg prometheus.Registerer) {
@@ -82,4 +109,8 @@ func RegisterMetrics(reg prometheus.Registerer) {
 	reg.MustRegister(AppMetrics.HandlerErrors)
 	reg.MustRegister(AppMetrics.RewardRedeems)
 	reg.MustRegister(AppMetrics.NvidiaStats)
+	reg.MustRegister(AppMetrics.ArchiveExportRows)
+	reg.MustRegister(AppMetrics.ArchiveExportErrors)
+	reg.MustRegister(AppMetrics.ArchiveUnexportedRows)
+	reg.MustRegister(AppMetrics.ArchiveWatermark)
 }

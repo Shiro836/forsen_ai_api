@@ -1,0 +1,603 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Redeems per day, by channel",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(enqueued_at, INTERVAL 1 DAY) AS t, channel_login, count() AS redeems FROM messages FINAL WHERE $__timeFilter(enqueued_at) AND outcome != '' GROUP BY t, channel_login ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 80
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Outcomes per day",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(enqueued_at, INTERVAL 1 DAY) AS t, outcome, count() AS n FROM messages FINAL WHERE $__timeFilter(enqueued_at) AND outcome != '' GROUP BY t, outcome ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "percent"
+            },
+            "fillOpacity": 80
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "LLM tokens per day, by model",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(at, INTERVAL 1 DAY) AS t, model, sum(prompt_tokens) AS prompt, sum(completion_tokens) AS completion FROM llm_calls FINAL WHERE $__timeFilter(at) GROUP BY t, model ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 80
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "LLM latency p50 / p95, by kind",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(at, INTERVAL 1 HOUR) AS t, kind, quantile(0.5)(latency_ms)/1000 AS p50, quantile(0.95)(latency_ms)/1000 AS p95 FROM llm_calls FINAL WHERE $__timeFilter(at) AND error = '' GROUP BY t, kind ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "TTS synthesized vs played, seconds per day",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(at, INTERVAL 1 DAY) AS t, engine, sum(audio_sec) AS synthesized, sum(played_sec) AS played FROM tts_tracks FINAL WHERE $__timeFilter(at) GROUP BY t, engine ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "TTS first-audio latency p50 / p95 (streaming)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(at, INTERVAL 1 HOUR) AS t, engine, quantile(0.5)(first_chunk_ms)/1000 AS p50, quantile(0.95)(first_chunk_ms)/1000 AS p95 FROM tts_tracks FINAL WHERE $__timeFilter(at) AND first_chunk_ms > 0 GROUP BY t, engine ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Filter: share of LLM runs with a hit",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(at, INTERVAL 1 DAY) AS t, target, countIf(llm_hits > 0) / count() AS hit_rate FROM filter_runs FINAL WHERE $__timeFilter(at) AND skipped = 0 GROUP BY t, target ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Filter LLM latency p50 / p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 24,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(at, INTERVAL 1 HOUR) AS t, target, quantile(0.5)(latency_ms)/1000 AS p50, quantile(0.95)(latency_ms)/1000 AS p95 FROM filter_runs FINAL WHERE $__timeFilter(at) AND skipped = 0 GROUP BY t, target ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "title": "Skips and cuts per day",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 24,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT toStartOfInterval(at, INTERVAL 1 DAY) AS t, cut, count() AS n FROM tts_tracks FINAL WHERE $__timeFilter(at) AND cut != '' GROUP BY t, cut ORDER BY t",
+          "format": 1,
+          "queryType": "timeseries",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": {
+              "mode": "normal"
+            },
+            "fillOpacity": 80
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "title": "Top channels (selected range)",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 8,
+        "h": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT channel_login, count() AS redeems, round(sum(audio_sec)) AS tts_seconds, sum(prompt_tokens + completion_tokens) AS tokens FROM messages FINAL WHERE $__timeFilter(enqueued_at) AND outcome != '' GROUP BY channel_login ORDER BY redeems DESC LIMIT 30",
+          "format": 1,
+          "queryType": "table",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 11,
+      "title": "Top chatters (selected range)",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 32,
+        "w": 8,
+        "h": 10
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT twitch_login, count() AS redeems, uniqExact(channel_id) AS channels FROM messages FINAL WHERE $__timeFilter(enqueued_at) AND outcome != '' GROUP BY twitch_login ORDER BY redeems DESC LIMIT 30",
+          "format": 1,
+          "queryType": "table",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 12,
+      "title": "Export backlog (rows past watermark)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 32,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "refId": "A",
+          "expr": "archive_export_unexported_rows",
+          "legendFormat": "unexported rows",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 13,
+      "title": "Export errors / h",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 37,
+        "w": 8,
+        "h": 5
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "refId": "A",
+          "expr": "increase(archive_export_errors_total[1h])",
+          "legendFormat": "errors",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 14,
+      "title": "Archive size on disk",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT table, formatReadableSize(sum(bytes_on_disk)) AS on_disk, sum(rows) AS rows, count() AS parts FROM system.parts WHERE active AND database = currentDatabase() GROUP BY table ORDER BY table",
+          "format": 1,
+          "queryType": "table",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 15,
+      "title": "Time per stage, avg per redeem (last 7d vs range)",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "ClickHouse"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 42,
+        "w": 16,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "ClickHouse"
+          },
+          "refId": "A",
+          "editorType": "sql",
+          "rawSql": "SELECT handler, count() AS n, round(avg(dateDiff('millisecond', started_at, finished_at))/1000, 2) AS total_s, round(avg(llm_ms)/1000, 2) AS llm_s, round(avg(synth_ms)/1000, 2) AS tts_first_audio_s FROM (SELECT m.id, m.handler, m.started_at, m.finished_at, (SELECT sum(latency_ms) FROM llm_calls FINAL l WHERE l.msg_id = m.id) AS llm_ms, (SELECT min(first_chunk_ms) FROM tts_tracks FINAL t WHERE t.msg_id = m.id) AS synth_ms FROM messages FINAL m WHERE $__timeFilter(enqueued_at) AND outcome = 'played') GROUP BY handler ORDER BY n DESC",
+          "format": 1,
+          "queryType": "table",
+          "builderOptions": {}
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "tags": [
+    "archive"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Archive",
+  "uid": "archive",
+  "version": 1,
+  "weekStart": ""
+}

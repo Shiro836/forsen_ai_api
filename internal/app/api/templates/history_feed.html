@@ -1,0 +1,83 @@
+{{ define "history-outcome" }}<span class="inline-block rounded px-2 py-0.5 text-xs font-medium
+{{- if eq .Key "played" }} bg-emerald-500/20 text-emerald-700 dark:text-emerald-300
+{{- else if eq .Key "skipped" }} bg-amber-500/20 text-amber-700 dark:text-amber-300
+{{- else if eq .Key "error" }} bg-red-500/20 text-red-700 dark:text-red-300
+{{- else if eq .Key "live" }} bg-sky-500/20 text-sky-700 dark:text-sky-300
+{{- else }} bg-slate-500/20{{ end }}">{{ .Label }}</span>{{ end }}
+{{ define "history-card" }}
+<div id="hist_{{ .ID }}" class="rounded border {{template "ui-border-clr"}} p-3 mb-3"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+        <span class="opacity-60" title="{{ .WhenTitle }}">{{ .When }}</span>
+        {{ if .Channel }}<span class="inline-block rounded px-2 py-0.5 text-xs font-medium bg-slate-500/20">{{ .Channel }}</span>{{ end }}
+        <span class="font-semibold">{{ .RequestedBy }}</span>
+        <span class="inline-block rounded px-2 py-0.5 text-xs font-medium bg-sky-500/20 text-sky-700 dark:text-sky-300">{{ .Type }}</span>
+        {{ if .CharName }}<span class="opacity-80">{{ .CharName }}</span>{{ end }}
+        {{ template "history-outcome" .Outcome }}
+    </div>
+    <div class="pt-2 whitespace-pre-wrap">{{ .Request }}</div>
+    {{ if .ImageURLs }}
+    <div class="flex flex-wrap gap-2 pt-2">
+        {{ range .ImageURLs }}<a href="{{ . }}" target="_blank"><img src="{{ . }}" loading="lazy" class="max-h-32 rounded"></a>{{ end }}
+    </div>
+    {{ end }}
+    {{ if .Response }}
+    <div class="pt-2 pl-3 border-l-2 border-violet-400/60 whitespace-pre-wrap">{{ .Response }}</div>
+    {{ end }}
+    {{ if .Turns }}
+    <div class="pt-2 flex flex-col gap-1">
+        {{ range .Turns }}<div class="pl-3 border-l-2 border-violet-400/60 whitespace-pre-wrap"><span class="font-semibold">{{ .Speaker }}: </span>{{ .Text }}</div>{{ end }}
+    </div>
+    {{ end }}
+    {{ if .Error }}<div class="pt-2 text-sm text-red-600 dark:text-red-400">{{ .Error }}</div>{{ end }}
+    {{ if .Tracks }}
+    <div class="pt-2">
+        {{ range .Tracks }}
+        <div class="flex flex-wrap items-center gap-3 py-1">
+            <span class="inline-block rounded px-2 py-0.5 text-xs font-medium bg-violet-500/20 text-violet-700 dark:text-violet-300">{{ .Engine }}</span>
+            {{ if .AudioURL }}<audio controls preload="none" src="{{ .AudioURL }}" class="h-8 max-w-xs"></audio>
+            {{ else }}<span class="text-xs opacity-60">no audio archived</span>{{ end }}
+            <span class="text-xs opacity-70">{{ .Meta }}</span>
+        </div>
+        {{ end }}
+    </div>
+    {{ end }}
+    {{ if .Stats }}<div class="pt-2 text-xs opacity-60">{{ .Stats }}</div>{{ end }}
+    {{ if .LLMCalls }}
+    <details class="mt-2 text-xs">
+        <summary class="cursor-pointer opacity-70 select-none">LLM calls ({{ len .LLMCalls }})</summary>
+        {{ range .LLMCalls }}
+        <div class="mt-2 rounded border {{template "ui-border-clr"}} p-2">
+            <div class="flex flex-wrap gap-2 items-center pb-1">
+                <span class="inline-block rounded px-2 py-0.5 text-xs font-medium bg-violet-500/20 text-violet-700 dark:text-violet-300">{{ .Kind }}</span>
+                <span class="font-mono">{{ .Model }}</span>
+                <span class="opacity-70">{{ .Meta }}</span>
+                {{ if .Error }}<span class="inline-block rounded px-2 py-0.5 text-xs font-medium bg-red-500/20 text-red-700 dark:text-red-300">error</span>{{ end }}
+            </div>
+            <pre class="whitespace-pre-wrap max-h-64 overflow-auto rounded bg-slate-100 dark:bg-slate-800 p-2">{{ .Request }}</pre>
+            {{ if .Error }}<pre class="whitespace-pre-wrap text-red-600 dark:text-red-400 pt-1">{{ .Error }}</pre>{{ end }}
+            <pre class="whitespace-pre-wrap max-h-64 overflow-auto rounded bg-slate-100 dark:bg-slate-800 p-2 mt-1">{{ .Response }}</pre>
+        </div>
+        {{ end }}
+    </details>
+    {{ end }}
+</div>
+{{ end }}
+{{ if .Error }}
+<div class="py-4 text-center text-sm text-red-600 dark:text-red-400">failed to load: {{ .Error }}</div>
+{{ else }}
+{{ if .Head }}
+<div id="history_head" hx-get="{{ .Head.URL }}" hx-trigger="{{ .Head.Trigger }}" hx-swap="outerHTML" hx-include="#history_filters"></div>
+{{ end }}
+{{ range .Cards }}{{ template "history-card" . }}{{ end }}
+{{ range .Updated }}{{ template "history-card" . }}{{ end }}
+{{ if not .HeadOnly }}
+{{ if .NextURL }}
+<div class="py-4 text-center text-sm opacity-60" hx-get="{{ .NextURL }}" hx-trigger="revealed" hx-swap="outerHTML"
+    hx-include="#history_filters">loading…</div>
+{{ else if .Cards }}
+<div class="py-4 text-center text-sm opacity-60">end of history</div>
+{{ else }}
+<div class="py-4 text-center text-sm opacity-60">nothing here yet</div>
+{{ end }}
+{{ end }}
+{{ end }}

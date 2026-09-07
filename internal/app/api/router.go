@@ -15,6 +15,7 @@ import (
 
 	"app/db"
 	"app/internal/app/conns"
+	"app/internal/app/history"
 	"app/internal/app/processor"
 	"app/internal/emoteservice"
 	"app/pkg/ffmpeg"
@@ -69,12 +70,14 @@ type API struct {
 	// emotes is nil when the emote service is not configured; the 7tv tab then
 	// renders an "unavailable" notice instead of failing.
 	emotes *emoteClient
+
+	history *history.Reader
 }
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservice.Config, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client, ffmpegClient *ffmpeg.Client,
 	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
-	voiceSampler VoiceSampler) *API {
+	voiceSampler VoiceSampler, historyReader *history.Reader) *API {
 	api := &API{
 		cfg: cfg,
 
@@ -98,6 +101,8 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservi
 		bitsDetector: newBitsDetector(logger),
 
 		emotes: newEmoteClient(emoteCfg),
+
+		history: historyReader,
 	}
 
 	api.imageCache = NewImageCache(db)
@@ -179,6 +184,9 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/control", api.nav(api.controlPanelMenu))
 		router.Get("/control/ws/{twitch_user_id}", api.controlPanelWSConn)
 		router.Get("/control/{twitch_user_id}", api.nav(api.controlPanel))
+		router.Get("/control/{twitch_user_id}/history", http.HandlerFunc(api.controlPanelHistory))
+		router.Get("/control/{twitch_user_id}/history/feed", http.HandlerFunc(api.controlPanelHistoryFeed))
+		router.Get("/archive-audio/{channel_id}/{msg_id}/{track_id}", http.HandlerFunc(api.archiveAudio))
 
 		// 7TV emote moderation. Authorization is resolved per request rather than
 		// by route group: /emotes/{id} needs that channel's own streamer or the
@@ -263,6 +271,8 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Use(api.checkPermissions(db.PermissionAdmin))
 
 			router.Get("/admin", api.nav(api.admin))
+			router.Get("/admin/history", api.nav(api.adminHistory))
+			router.Get("/admin/history/feed", http.HandlerFunc(api.adminHistoryFeed))
 
 			router.Post("/admin/add_mod", http.HandlerFunc(api.managePermission(permissionActionAdd, db.PermissionMod)))
 			router.Post("/admin/remove_mod", http.HandlerFunc(api.managePermission(permissionActionRemove, db.PermissionMod)))

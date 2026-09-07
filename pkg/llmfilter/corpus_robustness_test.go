@@ -23,6 +23,18 @@ func TestRobustnessMarkup(t *testing.T) {
 	})
 }
 
+// TestRobustnessSpokenLeadIn: the filter judges text as TTS will voice it. A
+// character request is spoken as "<login> asked me: ..." and an unrecognized
+// `name:` in a universal message is read out as written, so a name in either
+// position is judged like any other word.
+func TestRobustnessSpokenLeadIn(t *testing.T) {
+	runSpanCases(t, []spanCase{
+		{name: "requester login in the lead-in", input: "neega_gamer asked me: who is best ruler in 1940s", flagged: []string{"neega"}, clean: []string{"asked me", "ruler"}, maxMasked: 12},
+		{name: "unrecognized voice name is spoken text", input: "neega: say something", flagged: []string{"neega"}, clean: []string{"say something"}, maxMasked: 8},
+		{name: "innocent login in the lead-in", input: "xqcow asked me: what is your favorite game", clean: []string{"xqcow", "favorite game"}},
+	})
+}
+
 // TestRobustnessSpam: targets the model cannot echo verbatim; the substring
 // listing fallback must still return the right answer instead of an error.
 func TestRobustnessSpam(t *testing.T) {

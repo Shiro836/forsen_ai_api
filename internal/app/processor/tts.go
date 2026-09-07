@@ -13,6 +13,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/ai"
+	"app/pkg/archive"
 	"app/pkg/artfilter"
 	"app/pkg/ffmpeg"
 	ttsprocessor "app/pkg/tts_processor"
@@ -185,7 +186,10 @@ func (s *Service) ChatTTSWithTimings(ctx context.Context, msg string, refAudio [
 // one self-contained chunk frame on the audio socket, then track_done. Word
 // timings ride in the chunk header; the overlay paints karaoke against its
 // own audio clock, so no per-word events are needed anymore.
-func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
+//
+// track carries what the caller knows about the synthesis (engine, text,
+// voice, timing); playback fills in the rest and records it.
+func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, msg string, msdID uuid.UUID, audio []byte, textTimings []whisperx.Timiing, state *ProcessorState, userSettings *db.UserSettings, track archive.TTSTrack) (<-chan struct{}, error) {
 	mp3Audio, err := s.ffmpeg.Ffmpeg2Mp3(ctx, audio, userSettings.DisableAudioNormalization)
 	if err == nil {
 		audio = mp3Audio
@@ -223,15 +227,29 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 
 	done := make(chan struct{})
 
-	go func() {
+	col := archive.FromContext(ctx)
+	col.Go(func() {
 		defer tools.LogPanic(logger, "play")
 		defer close(done)
 
+		trackID := uuid.New()
+		var startTime time.Time
+
+		track.AudioSec = audioLen.Seconds()
+		track.Chunks = 1
+		defer func() {
+			var sent []byte
+			if !startTime.IsZero() {
+				track.PlayedSec = min(time.Since(startTime), audioLen).Seconds()
+				sent = audio
+			}
+			s.archiveTrackAudio(ctx, logger, col, col.RecordTrack(track), trackID, sent)
+		}()
+
 		if state.IsSkipped(msdID) {
+			track.Cut = archive.CutSkip
 			return
 		}
-
-		trackID := uuid.New()
 
 		eventWriter(trackMetaEvent(msdID, trackID, displayMsg))
 
@@ -246,17 +264,19 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 
 		audioWriter(trackDoneFrame(msdID, trackID, audioLen))
 
-		startTime := time.Now()
+		startTime = time.Now()
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ctx.Done():
+				track.Cut = archive.CutAborted
 				return
 			case <-ticker.C:
 				if state.IsSkipped(msdID) {
 					eventWriter(skipEvent(msdID, true))
+					track.Cut = archive.CutSkip
 					return
 				}
 
@@ -265,7 +285,7 @@ func (s *Service) playTTS(ctx context.Context, logger *slog.Logger, eventWriter 
 				}
 			}
 		}
-	}()
+	})
 
 	return done, nil
 }
@@ -325,7 +345,10 @@ func timingTextPrefixes(msg string, timings []whisperx.Timiing) []string {
 	return prefixes
 }
 
-func (s *Service) processUniversalTTSMessage(ctx context.Context, msg string, userSettings *db.UserSettings) ([]ttsprocessor.Action, error) {
+// lexUniversal splits a universal TTS message into text and the tags this
+// deployment recognizes: public voice short names, ffmpeg filter numbers and
+// emotions, embedded sound effects.
+func (s *Service) lexUniversal(ctx context.Context, msg string) []ttsprocessor.Token {
 	checkVoice := func(voice string) bool {
 		name := strings.TrimSpace(voice)
 		if len(name) == 0 {
@@ -375,11 +398,11 @@ func (s *Service) processUniversalTTSMessage(ctx context.Context, msg string, us
 		return true
 	}
 
-	actions, err := ttsprocessor.ProcessMessage(msg, checkVoice, checkFilter, checkSfx)
-	if err != nil {
-		return nil, err
-	}
+	return ttsprocessor.Lex(msg, checkVoice, checkFilter, checkSfx)
+}
 
+// limitSfx drops sound effects past the streamer's per-message cap.
+func limitSfx(actions []ttsprocessor.Action, userSettings *db.UserSettings) []ttsprocessor.Action {
 	maxSfxCount := db.DefaultMaxSfxCount
 	if userSettings.MaxSfxCount != nil {
 		maxSfxCount = *userSettings.MaxSfxCount
@@ -398,10 +421,11 @@ func (s *Service) processUniversalTTSMessage(ctx context.Context, msg string, us
 		limitedActions = append(limitedActions, action)
 	}
 
-	return limitedActions, nil
+	return limitedActions
 }
 
 func (s *Service) playUniversalTTS(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, actions []ttsprocessor.Action, msgID uuid.UUID, state *ProcessorState, userSettings *db.UserSettings) (<-chan struct{}, error) {
+	synthStart := time.Now()
 	combinedAudio, combinedText, combinedTimings, err := s.craftUniversalTTSAudio(ctx, logger, actions, userSettings)
 	if err != nil {
 		done := make(chan struct{})
@@ -409,8 +433,10 @@ func (s *Service) playUniversalTTS(ctx context.Context, logger *slog.Logger, eve
 		logger.Error("error crafting universal TTS audio", "err", err)
 		return done, err
 	}
+	synthMs := int(time.Since(synthStart).Milliseconds())
+	track := archive.TTSTrack{Engine: "universal", Text: combinedText, FirstChunkMs: synthMs, SynthMs: synthMs}
 
-	return s.playTTS(ctx, logger, eventWriter, audioWriter, combinedText, msgID, combinedAudio, combinedTimings, state, userSettings)
+	return s.playTTS(ctx, logger, eventWriter, audioWriter, combinedText, msgID, combinedAudio, combinedTimings, state, userSettings, track)
 }
 
 // oldTTSFilter routes a segment through StyleTTS2 instead of IndexTTS.

@@ -31,6 +31,7 @@ import (
 	"strings"
 	"sync"
 
+	"app/pkg/archive"
 	"app/pkg/llm"
 	"app/pkg/textfilter"
 
@@ -72,6 +73,7 @@ const systemPrompt = `You are a content-safety annotator for a Twitch livestream
 - Slurs in ANY language, or hatred and dehumanization aimed at people because of a protected characteristic: race, ethnicity, national origin, religion, gender, gender identity, sexual orientation, disability, age, or serious medical condition.
 - Genuine threats of, incitement to, or glorification of violence or sexual violence against real people.
 - ANY sexual content involving minors or children, in any framing — including attributing such an interest to someone. This is the most serious; always tag it.
+- Glorifying figures whose praise gets a channel banned — Hitler and Nazi leaders, terrorists and mass shooters, Epstein and other child abusers: praising, defending or wishing for them ("was right", "did nothing wrong", "a legend"), their slogans and codes (sieg heil, 1488), or wearing such a name as one's own handle, nickname or speaker label ("hitler asked me: ...", "hitler: say hi"). Mask the name or the slogan. Only glorification counts: naming them factually, critically or as an insulting comparison stays untouched, and presidents, generals, rappers and other merely controversial people are not on this list.
 Everything else is allowed and must be left untouched: ordinary profanity and swearing in any language, edgy or dark humor, criticism of ideas, beliefs, things, or behavior (criticizing a religion or an opinion is not hate — only hating its people is), sexual jokes or fetish talk about adults, insults not based on a protected characteristic, negativity not aimed at a protected group, and violence that is clearly part of a game, fiction, or hyperbole.
 
 These are NOT violations and must stay untouched, whatever the surrounding context, no matter how rude they sound:
@@ -256,7 +258,7 @@ func (f *Filter) Spans(ctx context.Context, text, custom string) ([]textfilter.S
 	if custom = strings.TrimSpace(custom); custom != "" {
 		passes = append(passes, pass{"streamer rules", streamerPrompt(custom), alone})
 	}
-	return f.run(ctx, text, passes)
+	return f.run(archive.WithLLMKind(ctx, "filter"), text, passes)
 }
 
 // ReplySpans annotates reply, using prompt as context to resolve who the reply
@@ -275,7 +277,7 @@ func (f *Filter) ReplySpans(ctx context.Context, prompt, reply, custom string) (
 	if custom = strings.TrimSpace(custom); custom != "" {
 		passes = append(passes, pass{"streamer rules", streamerPrompt(custom), withContext})
 	}
-	return f.run(ctx, reply, passes)
+	return f.run(archive.WithLLMKind(ctx, "filter"), reply, passes)
 }
 
 // spokenForm returns the SPOKEN FORM block for a target the model cannot sound

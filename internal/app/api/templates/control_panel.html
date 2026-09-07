@@ -1,6 +1,14 @@
-<div class="flex flex-col">
+<div class="flex flex-col" id="panel_root">
+    <div class="flex items-center pb-4">
+        <div class="pr-8 text-lg font-medium">{{ .User.TwitchLogin }}</div>
+        <div class="flex rounded border {{template "ui-border-clr"}} overflow-hidden text-sm" id="panel_tabs">
+            <button type="button" data-tab="live" class="px-4 py-1 font-medium bg-slate-200 dark:bg-slate-700">Live queue</button>
+            <button type="button" data-tab="history" class="px-4 py-1 font-medium border-l {{template "ui-border-clr"}}"
+                hx-get="/control/{{ .User.TwitchUserID }}/history" hx-trigger="click once" hx-target="#panel_history">History</button>
+        </div>
+    </div>
+    <div id="panel_live" class="flex flex-col">
     <div class="flex">
-        <div class="pr-16">Control panel of {{ .User.TwitchLogin }}</div>
         <div class="flex hidden" id="connected_indicator">
             <svg class="items-center" xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" viewBox="0 0 24 24"
                 fill="none">
@@ -59,10 +67,33 @@
     <div>
         <div id="control_panel_activity_checker"></div>
     </div>
+    </div>
+    <div id="panel_history" class="hidden"></div>
 </div>
 
 
 <script>
+    (function () {
+        var tabs = document.getElementById('panel_tabs');
+        var root = document.getElementById('panel_root');
+        var live = document.getElementById('panel_live');
+        var hist = document.getElementById('panel_history');
+        tabs.querySelectorAll('button').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var which = btn.dataset.tab;
+                tabs.querySelectorAll('button').forEach(function (b) {
+                    b.classList.toggle('bg-slate-200', b === btn);
+                    b.classList.toggle('dark:bg-slate-700', b === btn);
+                });
+                live.classList.toggle('hidden', which !== 'live');
+                hist.classList.toggle('hidden', which !== 'history');
+                // only the card feed wants a fixed width to wrap text against
+                root.classList.toggle('w-full', which === 'history');
+                root.classList.toggle('pr-6', which === 'history');
+            });
+        });
+    })();
+
     function set_connected_true() {
         document.getElementById('connected_indicator').classList.remove('hidden');
         document.getElementById('disconnected_indicator').classList.add('hidden');
@@ -170,6 +201,7 @@
 
             msg = JSON.parse(utf8String);
             console.log(msg);
+            document.body.dispatchEvent(new Event('history-refresh'));
 
             if (msg['clear_all'] === true) {
                 document.getElementById('messages_box').innerHTML = '';
@@ -263,7 +295,7 @@
                             row = table.insertRow(-1);
                             row.id = id;
 
-                            row.insertCell(-1).textContent = data['requested_by'];
+                            row.insertCell(-1).appendChild(textDiv(data['requested_by'], data['requester_filtered']));
                             row.insertCell(-1).textContent = data['type'];
                             row.insertCell(-1).textContent = data['char_name'];
                             row.insertCell(-1).appendChild(textDiv(data['request'], data['request_filtered']));
@@ -286,7 +318,7 @@
                             row.cells[7].className = '{{template "ui-border-clr"}} border-l border-t'
                         }
                         else {
-                            row.cells[0].textContent = data['requested_by'];
+                            row.cells[0].replaceChildren(textDiv(data['requested_by'], data['requester_filtered']));
                             row.cells[1].textContent = data['type'];
                             row.cells[2].textContent = data['char_name'];
                             row.cells[3].replaceChildren(textDiv(data['request'], data['request_filtered']));
@@ -349,48 +381,4 @@
     }
 
     connect();
-
-    // Initialize ColumnResizer
-    function initColumnResizer() {
-        const table = document.querySelector('table');
-        console.log('Initializing ColumnResizer. Table found:', !!table, 'ColumnResizer object:', ColumnResizer);
-
-        if (table && typeof ColumnResizer !== 'undefined') {
-            // Handle webpack default export if present
-            const Resizer = ColumnResizer.default || ColumnResizer;
-            try {
-                // Check if already initialized to avoid duplicates if called multiple times
-                if (table.classList.contains('grip-resizable')) {
-                    console.log('ColumnResizer already initialized');
-                    return;
-                }
-
-                new Resizer(table, {
-                    resizeMode: 'overflow', // Allow independent column resizing
-                    liveDrag: true,
-                    draggingClass: 'resizing',
-                    minWidth: 30,
-                    removePadding: false // Keep existing Tailwind padding
-                });
-                console.log('ColumnResizer initialized successfully');
-            } catch (e) {
-                console.error('Failed to initialize ColumnResizer:', e);
-            }
-        } else {
-            console.log('ColumnResizer not ready yet');
-        }
-    }
-
-    // Run immediately (for HTMX swaps where script is executed)
-    initColumnResizer();
-
-    // Also listen for HTMX swaps to re-init if needed (though the script re-runs on swap usually)
-    document.body.addEventListener('htmx:afterSwap', function (evt) {
-        initColumnResizer();
-    });
-
-    // Fallback for initial page load if script runs before DOM (unlikely at bottom of body but good safety)
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initColumnResizer);
-    }
 </script>

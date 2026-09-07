@@ -13,6 +13,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/pkg/ai"
+	"app/pkg/archive"
 	"app/pkg/artfilter"
 	"app/pkg/ffmpeg"
 	"app/pkg/whisperx"
@@ -270,6 +271,9 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 	art := artfilter.Detect(msg)
 	displayMsg := art.Mask(msg, artPlaceholder)
 
+	col := archive.FromContext(ctx)
+	synthStart := time.Now()
+
 	streamCtx, cancelStream := context.WithCancel(ctx)
 
 	chunkCh := make(chan ai.StreamChunk, 8)
@@ -290,7 +294,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 
 	done := make(chan struct{})
 
-	go func() {
+	col.Go(func() {
 		defer tools.LogPanic(logger, "streaming play")
 		defer close(done)
 		defer cancelStream()
@@ -301,6 +305,40 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 		var offset time.Duration
 		seq := 0
 		emitted := false
+
+		// loudness is measured once on the first chunk and reused for the whole
+		// track: every chunk gets the same linear gain, matching the batch
+		// path's -16 LUFS without flattening dynamics between sentences
+		var loudness *ffmpeg.LoudnessStats
+		loudnessMeasured := false
+
+		var firstChunkAt, lastChunkAt time.Time
+		var streamed []byte
+		cut := ""
+		fellBack := false
+
+		defer func() {
+			if fellBack {
+				return
+			}
+			t := archive.TTSTrack{
+				Engine:   "index",
+				Text:     ttsText,
+				VoiceSHA: voiceSHA(voiceRef),
+				AudioSec: offset.Seconds(),
+				Chunks:   seq,
+				Cut:      cut,
+				Loudness: loudness,
+			}
+			if !firstChunkAt.IsZero() {
+				t.FirstChunkMs = int(firstChunkAt.Sub(synthStart).Milliseconds())
+				t.SynthMs = int(lastChunkAt.Sub(synthStart).Milliseconds())
+			}
+			if emitted {
+				t.PlayedSec = min(time.Since(playStart), offset).Seconds()
+			}
+			s.archiveTrackAudio(ctx, logger, col, col.RecordTrack(t), trackID, streamed)
+		}()
 
 		type readyChunk struct {
 			header *chunkHeader
@@ -317,6 +355,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 				playStart = time.Now()
 				emitted = true
 			}
+			streamed = append(streamed, c.mp3...)
 			// mirror the overlay scheduler: a chunk emitted past its timeline
 			// position slips the whole track, so the wall-clock end (which
 			// gates "current message" and the next track) must slip with it
@@ -327,20 +366,20 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 			audioWriter(chunkFrame(c.header, c.mp3))
 		}
 
-		// loudness is measured once on the first chunk and reused for the whole
-		// track: every chunk gets the same linear gain, matching the batch
-		// path's -16 LUFS without flattening dynamics between sentences
-		var loudness *ffmpeg.LoudnessStats
-		loudnessMeasured := false
-
 		// returns false when the track must stop consuming (error or TTS limit)
 		process := func(chunk ai.StreamChunk) bool {
+			lastChunkAt = time.Now()
+			if firstChunkAt.IsZero() {
+				firstChunkAt = lastChunkAt
+			}
+
 			chunkDur, okDur := wavDuration(chunk.Audio)
 			if !okDur {
 				var err error
 				chunkDur, err = s.getAudioLength(ctx, chunk.Audio)
 				if err != nil {
 					logger.Error("failed to measure chunk duration, ending track early", "err", err)
+					cut = archive.CutError
 					return false
 				}
 			}
@@ -364,6 +403,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 			}
 			if err != nil {
 				logger.Error("failed to encode chunk, ending track early", "err", err)
+				cut = archive.CutError
 				return false
 			}
 
@@ -403,6 +443,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 			// remaining GPU decodes server-side
 			if offset >= maxDur {
 				logger.Info("tts limit reached, closing stream", "offset", offset, "limit", maxDur)
+				cut = archive.CutTTSLimit
 				return false
 			}
 
@@ -420,10 +461,12 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 			select {
 			case <-ctx.Done():
 				aborted = true
+				cut = archive.CutAborted
 				break receive
 			case <-skipTick.C:
 				if state.IsSkipped(msgID) {
 					aborted = true
+					cut = archive.CutSkip
 					break receive
 				}
 			case <-gateCh:
@@ -459,6 +502,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 				return
 			}
 			logger.Warn("stream produced no chunks, falling back to batch TTS", "err", streamErr)
+			fellBack = true
 			fallbackDone, err := s.playTTSBatchFromText(ctx, logger, eventWriter, audioWriter, msg, msgID, voiceRef, state, userSettings, gate)
 			if err != nil {
 				logger.Error("batch fallback failed", "err", err)
@@ -474,6 +518,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 		if streamErr != nil && streamCtx.Err() == nil {
 			// mid-stream failure: the track just ends early, like a skip
 			logger.Warn("stream failed mid-track", "err", streamErr)
+			cut = archive.CutError
 		}
 
 		audioWriter(trackDoneFrame(msgID, trackID, offset))
@@ -484,10 +529,12 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 		for {
 			select {
 			case <-ctx.Done():
+				cut = archive.CutAborted
 				return
 			case <-ticker.C:
 				if state.IsSkipped(msgID) {
 					eventWriter(skipEvent(msgID, true))
+					cut = archive.CutSkip
 					return
 				}
 				if time.Since(playStart) > offset {
@@ -495,7 +542,7 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 				}
 			}
 		}
-	}()
+	})
 
 	return done, nil
 }
@@ -503,10 +550,13 @@ func (s *Service) playTTSStreaming(ctx context.Context, logger *slog.Logger, eve
 // playTTSBatchFromText is the streaming path's fallback: synthesize whole,
 // then play through the regular batch pipeline once the gate (if any) opens.
 func (s *Service) playTTSBatchFromText(ctx context.Context, logger *slog.Logger, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, msg string, msgID uuid.UUID, voiceRef []byte, state *ProcessorState, userSettings *db.UserSettings, gate <-chan struct{}) (<-chan struct{}, error) {
+	synthStart := time.Now()
 	audio, timings, err := s.TTSWithTimings(ctx, msg, voiceRef)
 	if err != nil {
 		return nil, fmt.Errorf("batch synthesis failed: %w", err)
 	}
+	synthMs := int(time.Since(synthStart).Milliseconds())
+	track := archive.TTSTrack{Engine: "index", Text: stripForTTS(msg), VoiceSHA: voiceSHA(voiceRef), FirstChunkMs: synthMs, SynthMs: synthMs}
 
 	if gate != nil {
 		select {
@@ -524,5 +574,5 @@ func (s *Service) playTTSBatchFromText(ctx context.Context, logger *slog.Logger,
 		return done, nil
 	}
 
-	return s.playTTS(ctx, logger, eventWriter, audioWriter, msg, msgID, audio, timings, state, userSettings)
+	return s.playTTS(ctx, logger, eventWriter, audioWriter, msg, msgID, audio, timings, state, userSettings, track)
 }

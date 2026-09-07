@@ -12,6 +12,7 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/internal/app/monitoring"
+	"app/pkg/archive"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -54,7 +55,7 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 	}
 
 	asciiOnly := filterASCII(input.Message)
-	filteredRequest := h.service.FilterText(ctx, input.UserSettings, asciiOnly)
+	filteredRequest := h.service.FilterText(ctx, input.UserSettings, archive.FilterTargetRequest, asciiOnly)
 	if len(filteredRequest) == 0 {
 		return nil
 	}
@@ -99,17 +100,20 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 		return nil
 	}
 
+	synthStart := time.Now()
 	requestAudio, textTimings, err := h.service.ChatTTSWithTimings(ctx, filteredRequest, voiceRef)
 	if err != nil {
 		logger.Error("chat TTS error", "err", err)
 		return nil
 	}
+	synthMs := int(time.Since(synthStart).Milliseconds())
+	track := archive.TTSTrack{Engine: "style", Text: stripForTTS(filteredRequest), VoiceSHA: voiceSHA(voiceRef), FirstChunkMs: synthMs, SynthMs: synthMs}
 
 	if input.State.IsSkipped(msgID) {
 		return nil
 	}
 
-	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, filteredRequest, msgID, requestAudio, textTimings, input.State, input.UserSettings)
+	requestTtsDone, err := h.service.playTTS(ctx, logger, eventWriter, input.AudioWriter, filteredRequest, msgID, requestAudio, textTimings, input.State, input.UserSettings, track)
 	if err != nil {
 		return err
 	}

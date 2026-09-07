@@ -1,4 +1,3 @@
-version: '3.9'
 
 services:
   # influxdb:
@@ -71,6 +70,7 @@ services:
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
       - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
     volumes:
       - grafana-data-1:/etc/grafana
       - grafana-data-2:/var/lib/grafana
@@ -78,6 +78,35 @@ services:
       - ./cfg/grafana/dashboards:/var/lib/grafana/dashboards
     env_file:
       - .env
+    restart: unless-stopped
+    networks:
+      - forsen
+
+  # message archive (adr/history-archive.md); only reachable from localhost
+  # and the compose network (grafana). Native port 9000 is remapped: minio
+  # already owns host 9000.
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.3.31
+    ports:
+      - 127.0.0.1:8123:8123
+      - 127.0.0.1:9010:9000
+    environment:
+      CLICKHOUSE_DB: archive
+      CLICKHOUSE_USER: app
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 0
+    env_file:
+      - .env
+    volumes:
+      - ch-data:/var/lib/clickhouse
+      - ./cfg/clickhouse/config.xml:/etc/clickhouse-server/config.d/archive.xml:ro
+      - ./cfg/clickhouse/users.xml:/etc/clickhouse-server/users.d/archive.xml:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    cpus: "8"
+    mem_limit: 12g
     restart: unless-stopped
     networks:
       - forsen
@@ -116,6 +145,7 @@ services:
       - forsen
 
 volumes:
+  ch-data:
   pg-data:
   emote-pg-data:
   grafana-data-1:
