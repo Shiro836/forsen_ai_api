@@ -19,6 +19,9 @@ import (
 // flip to false for the legacy per-segment renderer.
 const useTreeRenderer = true
 
+// DefaultUniversalVoice speaks every universal TTS segment without a voice tag.
+const DefaultUniversalVoice = "obiwan"
+
 type universalAudioRenderer interface {
 	Render(ctx context.Context, segments []audiotree.Segment, padding time.Duration, disableLimiter bool) ([]byte, []audiotree.Placement, error)
 }
@@ -49,7 +52,7 @@ type universalJob struct {
 
 func (s *Service) craftUniversalTTSAudio(ctx context.Context, logger *slog.Logger, actions []ttsprocessor.Action, userSettings *db.UserSettings) ([]byte, string, []whisperx.Timiing, error) {
 	concatPadding := 500 * time.Millisecond
-	defaultVoice := "obiwan"
+	defaultVoice := DefaultUniversalVoice
 
 	ttsLimit := db.DefaultTtsLimitSeconds
 	if userSettings.TtsLimit != nil {

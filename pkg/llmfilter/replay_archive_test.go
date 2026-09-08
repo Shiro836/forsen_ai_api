@@ -17,16 +17,11 @@ import (
 	"app/pkg/textfilter"
 )
 
-// TestReplayArchive re-judges recent real requests from the archive with the
-// current prompt and prints every message whose masked words changed against
-// what production recorded, so a prompt edit is checked on real chat rather
-// than only on the corpus. Enabled by ARCHIVE_REPLAY=<message count>; the
-// diff is eyeballed, nothing here fails.
-//
-// It runs the built-in policy only, without the streamer's rules or the
-// processor's art and repeat collapse, so a recorded span that came from a
-// streamer rule ("no politics") or a whole-message span on repetition spam
-// shows up as a change without meaning the prompt behaves differently.
+// TestReplayArchive re-judges recent archived requests with the current prompt
+// and prints the messages whose masked words changed; ARCHIVE_REPLAY=<count>
+// enables it, nothing fails. Built-in policy only: a change that came from a
+// streamer rule or from repeat collapse is a replay artifact, not a prompt
+// difference.
 func TestReplayArchive(t *testing.T) {
 	limit, _ := strconv.Atoi(os.Getenv("ARCHIVE_REPLAY"))
 	if limit <= 0 {
@@ -40,8 +35,8 @@ func TestReplayArchive(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// The AI handler filters the spoken lead-in together with the message and
-	// production recorded spans over that string, so it is rebuilt the same way.
+	// recorded AI-request spans are over the "<login> asked me: " lead-in plus
+	// the message, so that string is rebuilt below
 	rows, err := conn.Query(ctx, `
 		select m.twitch_login, m.reward_type, m.message, f.llm_spans
 		from messages m final

@@ -9,17 +9,18 @@ if [ ! -f "$CFG_PATH" ]; then
     exit 1
 fi
 
-# Extract connection string
-# This is a simple regex extraction, assuming the format in cfg.yaml
-CONN_STR=$(grep "conn_str:" "$CFG_PATH" | sed -E 's/.*conn_str: "([^"]+)".*/\1/')
+# Several blocks carry a conn_str (emote_service has its own postgres); only
+# the top-level db: block is the app database.
+CONN_STR=$(awk '
+    /^db:/ { in_db = 1; next }
+    /^[^ \t#]/ { in_db = 0 }
+    in_db && /^[ \t]+conn_str:/ {
+        sub(/^[ \t]+conn_str:[ \t]*/, ""); gsub(/"/, ""); print; exit
+    }
+' "$CFG_PATH")
 
 if [ -z "$CONN_STR" ]; then
-    # Try without quotes if the first attempt failed
-    CONN_STR=$(grep "conn_str:" "$CFG_PATH" | sed -E 's/.*conn_str: ([^ ]+).*/\1/')
-fi
-
-if [ -z "$CONN_STR" ]; then
-    echo "Could not find conn_str in $CFG_PATH"
+    echo "Could not find db.conn_str in $CFG_PATH"
     exit 1
 fi
 

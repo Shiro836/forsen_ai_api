@@ -1,8 +1,7 @@
 // Package ttsprocessor lexes a universal TTS message into spoken text and the
 // inline tags that shape it: `name:` switches voice, `{name}` pushes a filter
-// (`{.}` pops), `[name]` plays a sound. Whether a candidate is a tag is the
-// caller's call, through the check callbacks; anything unrecognized stays
-// text and is spoken as written.
+// (`{.}` pops), `[name]` plays a sound. A candidate the check callbacks reject
+// stays text and is spoken as written.
 package ttsprocessor
 
 import "slices"
@@ -16,8 +15,7 @@ const (
 	Sfx
 )
 
-// Token is one lexed piece of a message. Start and End are rune offsets into
-// the message; Value is the text itself or the tag's name.
+// Token is one lexed piece of a message; Start and End are rune offsets.
 type Token struct {
 	Kind  Kind
 	Start int
@@ -34,8 +32,8 @@ type Action struct {
 	Sfx string
 }
 
-// Lex splits message into text and recognized tags. Tokens are in message
-// order; a `:` with nothing pending before it belongs to no token.
+// Lex splits message into text and recognized tags, in message order. A `:`
+// with nothing pending before it belongs to no token.
 func Lex(message string, checkVoice func(string) bool, checkFilter func(string) bool, checkSfx func(string) bool) []Token {
 	r := []rune(message)
 	var tokens []Token
@@ -78,7 +76,6 @@ func Lex(message string, checkVoice func(string) bool, checkFilter func(string) 
 				continue
 			}
 
-			// A voice name is the last space-delimited word before the colon.
 			nameStart := lastIndex(r[start:i], ' ')
 			if nameStart == -1 {
 				nameStart = start
@@ -110,10 +107,8 @@ func lastIndex(r []rune, c rune) int {
 	return -1
 }
 
-// Actions folds tokens into playback actions: each text token becomes a
-// spoken action under the voice and filter stack in force at that point, each
-// sound tag an sfx action under the same filters. render supplies the spoken
-// form of text token i (censored, image placeholders); nil speaks it as is.
+// Actions folds tokens into playback actions. render supplies the spoken form
+// of text token i; nil speaks it as written.
 func Actions(tokens []Token, render func(i int) string) []Action {
 	filters := []string{}
 	voice := ""
@@ -145,7 +140,6 @@ func Actions(tokens []Token, render func(i int) string) []Action {
 	return actions
 }
 
-// ProcessMessage lexes message and folds it into actions in one step.
 func ProcessMessage(message string, checkVoice func(string) bool, checkFilter func(string) bool, checkSfx func(string) bool) []Action {
 	return Actions(Lex(message, checkVoice, checkFilter, checkSfx), nil)
 }

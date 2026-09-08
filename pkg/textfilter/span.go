@@ -64,9 +64,9 @@ func Collapse(text string, spans []Span, repl string) (string, *Mapping) {
 	return b.Build()
 }
 
-// MapBack translates spans over the derived text to spans over the source,
-// merged. A span touching a replacement expands to cover the full replaced
-// range; skipped source ranges are cut out.
+// MapBack translates spans over the derived text to merged spans over the
+// source: a span touching a replacement covers the whole replaced range, and
+// skipped ranges are cut out.
 func (m *Mapping) MapBack(spans []Span) []Span {
 	if m == nil {
 		return spans

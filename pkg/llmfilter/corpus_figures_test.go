@@ -5,8 +5,7 @@ package llmfilter_test
 import "testing"
 
 // TestFiguresGlorification: praising, defending or wearing the name of a
-// figure whose glorification gets a Twitch channel banned; the name is the
-// masked span.
+// figure whose glorification gets a channel banned.
 func TestFiguresGlorification(t *testing.T) {
 	runSpanCases(t, []spanCase{
 		{name: "did nothing wrong", input: "hitler did nothing wrong", flagged: []string{"hitler"}, clean: []string{"nothing wrong"}, maxMasked: 6},
@@ -24,8 +23,8 @@ func TestFiguresGlorification(t *testing.T) {
 	})
 }
 
-// TestFiguresNeutral: the same figures named factually, critically or as a
-// joke, and glorification of people Twitch does not ban you for, stay clean.
+// TestFiguresNeutral: the same figures named factually or critically, and
+// praise of people Twitch does not ban you for, stay clean.
 func TestFiguresNeutral(t *testing.T) {
 	runSpanCases(t, []spanCase{
 		{name: "history", input: "hitler lost the war in 1945", clean: []string{"hitler", "1945"}},

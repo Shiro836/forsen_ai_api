@@ -53,15 +53,14 @@ func placeholder(idx int) string {
 	return fmt.Sprintf("image_%d", idx)
 }
 
-// Tag is one image reference in a string: its rune range and the placeholder
-// ReplaceImageTags speaks in its place.
+// Tag is one image reference: its rune range and the placeholder spoken in
+// its place.
 type Tag struct {
 	Start       int
 	End         int
 	Placeholder string
 }
 
-// Tags lists the image references in s, in order.
 func Tags(s string) []Tag {
 	var tags []Tag
 	for i, loc := range tagRe.FindAllStringIndex(s, -1) {

@@ -94,7 +94,12 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 		}
 	}
 
-	_, voiceRef, err := h.service.getVoiceReference(ctx, logger, voice)
+	voiceID, voiceRef, err := h.service.getVoiceReference(ctx, logger, voice)
+	if err == nil && input.UserSettings.CardDisabled(voiceID) && voice != defaultChatVoice {
+		logger.Info("chat voice disabled on this channel, using default", "voice", voice)
+		voice = defaultChatVoice
+		_, voiceRef, err = h.service.getVoiceReference(ctx, logger, voice)
+	}
 	if err != nil {
 		logger.Error("failed to get voice reference", "err", err, "voice", voice)
 		return nil

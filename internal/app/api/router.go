@@ -235,6 +235,7 @@ func (api *API) NewRouter() *chi.Mux {
 
 			router.Get("/characters/{character_id}/try", api.nav(api.tryCharacter))
 			router.Get("/ws/characters/{character_id}/try", api.tryCharacterWS)
+			router.Post("/characters/{character_id}/enabled", http.HandlerFunc(api.setCharacterEnabled))
 
 			router.Get("/characters/{character_id}/reward", api.nav(api.rewardChoose))
 			router.Post("/characters/{character_id}/reward_new", http.HandlerFunc(api.rewardNew))

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,56 +22,24 @@ type User struct {
 
 	TwitchLogin  string
 	TwitchUserID int
-
-	TwitchRefreshToken string
-	TwitchAccessToken  string
-
-	Session string
 }
 
 func (db *DB) UpsertUser(ctx context.Context, user *User) (uuid.UUID, error) {
 	var id uuid.UUID
 
 	err := db.QueryRow(ctx, `
-		INSERT INTO users (
-			twitch_login,
-			twitch_user_id,
-			twitch_refresh_token,
-			twitch_access_token,
-			session
-		) VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO users (twitch_login, twitch_user_id)
+		VALUES ($1, $2)
 		ON CONFLICT (twitch_user_id) DO UPDATE SET
-			twitch_login = excluded.twitch_login,
-			twitch_refresh_token = excluded.twitch_refresh_token,
-			twitch_access_token = excluded.twitch_access_token,
-			session = excluded.session
+			twitch_login = excluded.twitch_login
 		RETURNING id
-	`,
-		user.TwitchLogin,
-		user.TwitchUserID,
-		user.TwitchRefreshToken,
-		user.TwitchAccessToken,
-		user.Session,
-	).Scan(&id)
+	`, user.TwitchLogin, user.TwitchUserID).Scan(&id)
 
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("upsert user: %w", err)
 	}
 
 	return id, nil
-}
-
-func (db *DB) UpdateUserTokens(ctx context.Context, userID uuid.UUID, accessToken, refreshToken string) error {
-	_, err := db.Exec(ctx, `
-		UPDATE users
-		SET twitch_access_token = $2, twitch_refresh_token = $3
-		WHERE id = $1
-	`, userID, accessToken, refreshToken)
-	if err != nil {
-		return fmt.Errorf("update user tokens: %w", err)
-	}
-
-	return nil
 }
 
 func (db *DB) GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error) {
@@ -80,20 +49,10 @@ func (db *DB) GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error) 
 		SELECT
 			id,
 			twitch_login,
-			twitch_user_id,
-			twitch_refresh_token,
-			twitch_access_token,
-			session
+			twitch_user_id
 		FROM users
 		WHERE id = $1
-	`, userID).Scan(
-		&user.ID,
-		&user.TwitchLogin,
-		&user.TwitchUserID,
-		&user.TwitchRefreshToken,
-		&user.TwitchAccessToken,
-		&user.Session,
-	)
+	`, userID).Scan(&user.ID, &user.TwitchLogin, &user.TwitchUserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by id: %w", parseErr(err))
 	}
@@ -108,20 +67,10 @@ func (db *DB) GetUserByTwitchLogin(ctx context.Context, twitchLogin string) (*Us
 		SELECT
 			id,
 			twitch_login,
-			twitch_user_id,
-			twitch_refresh_token,
-			twitch_access_token,
-			session
+			twitch_user_id
 		FROM users
 		WHERE lower(twitch_login) = lower($1)
-	`, twitchLogin).Scan(
-		&user.ID,
-		&user.TwitchLogin,
-		&user.TwitchUserID,
-		&user.TwitchRefreshToken,
-		&user.TwitchAccessToken,
-		&user.Session,
-	)
+	`, twitchLogin).Scan(&user.ID, &user.TwitchLogin, &user.TwitchUserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by twitch login: %w", parseErr(err))
 	}
@@ -136,50 +85,12 @@ func (db *DB) GetUserByTwitchUserID(ctx context.Context, twitchUserID int) (*Use
 		SELECT
 			id,
 			twitch_login,
-			twitch_user_id,
-			twitch_refresh_token,
-			twitch_access_token,
-			session
+			twitch_user_id
 		FROM users
 		WHERE twitch_user_id = $1
-	`, twitchUserID).Scan(
-		&user.ID,
-		&user.TwitchLogin,
-		&user.TwitchUserID,
-		&user.TwitchRefreshToken,
-		&user.TwitchAccessToken,
-		&user.Session,
-	)
+	`, twitchUserID).Scan(&user.ID, &user.TwitchLogin, &user.TwitchUserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user by twitch user id: %w", parseErr(err))
-	}
-
-	return &user, nil
-}
-
-func (db *DB) GetUserBySession(ctx context.Context, session string) (*User, error) {
-	var user User
-
-	err := db.QueryRow(ctx, `
-		SELECT
-			id,
-			twitch_login,
-			twitch_user_id,
-			twitch_refresh_token,
-			twitch_access_token,
-			session
-		FROM users
-		WHERE session = $1
-	`, session).Scan(
-		&user.ID,
-		&user.TwitchLogin,
-		&user.TwitchUserID,
-		&user.TwitchRefreshToken,
-		&user.TwitchAccessToken,
-		&user.Session,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user by session: %w", parseErr(err))
 	}
 
 	return &user, nil
@@ -202,6 +113,27 @@ type UserSettings struct {
 	DisableRegexFilter bool `json:"disable_regex_filter,omitempty"` // When true, skip the regex/word-list content filter
 
 	CustomFilterPrompt string `json:"custom_filter_prompt,omitempty"` // Streamer-written instructions appended to the LLM filter system prompt
+
+	DisabledCardIDs []uuid.UUID `json:"disabled_card_ids,omitempty"` // Characters the streamer has switched off: not a voice, not a dialogue participant
+}
+
+func (s *UserSettings) CardDisabled(cardID uuid.UUID) bool {
+	return slices.Contains(s.DisabledCardIDs, cardID)
+}
+
+func (db *DB) SetCardDisabled(ctx context.Context, userID, cardID uuid.UUID, disabled bool) error {
+	settings, err := db.GetUserSettings(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to load settings: %w", err)
+	}
+
+	ids := slices.DeleteFunc(settings.DisabledCardIDs, func(id uuid.UUID) bool { return id == cardID })
+	if disabled {
+		ids = append(ids, cardID)
+	}
+	settings.DisabledCardIDs = ids
+
+	return db.UpdateUserData(ctx, userID, settings)
 }
 
 func (db *DB) UpdateUserData(ctx context.Context, userID uuid.UUID, settings *UserSettings) error {

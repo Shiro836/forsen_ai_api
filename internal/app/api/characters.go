@@ -42,7 +42,9 @@ type charElem struct {
 	TTSRewardCreated bool
 	AIRewardCreated  bool
 
-	Author string
+	Author       string
+	Disabled     bool
+	DefaultVoice bool
 }
 
 func (api *API) characters(r *http.Request) template.HTML {
@@ -65,6 +67,14 @@ func (api *API) characters(r *http.Request) template.HTML {
 		})
 	}
 
+	settings, err := api.db.GetUserSettings(r.Context(), user.ID)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "failed to get user settings: " + err.Error(),
+		})
+	}
+
 	chars := make([]*charElem, 0, len(charCards))
 	isAdmin := false
 	if perms, err := api.db.GetUserPermissions(r.Context(), user.ID, db.PermissionStatusGranted); err == nil {
@@ -82,12 +92,43 @@ func (api *API) characters(r *http.Request) template.HTML {
 			IsAdmin:          isAdmin,
 			TTSRewardCreated: false,
 			Author:           charCard.OwnerTwitchLogin,
+			Disabled:         settings.CardDisabled(charCard.ID),
+			DefaultVoice:     strings.EqualFold(charCard.ShortCharName.String, processor.DefaultUniversalVoice),
 		})
 	}
 
 	return getHtml("characters.html", &charsElem{
 		Characters: chars,
 	})
+}
+
+func (api *API) setCharacterEnabled(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	characterID, err := uuid.Parse(chi.URLParam(r, "character_id"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("character_id is not a valid uuid"))
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("failed to parse form"))
+		return
+	}
+
+	if err := api.db.SetCardDisabled(r.Context(), user.ID, characterID, r.Form.Get("enabled") == ""); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (api *API) updateShortCharName(w http.ResponseWriter, r *http.Request) {
@@ -921,7 +962,7 @@ type TryHandler interface {
 	Handle(ctx context.Context, input processor.InteractionInput, writer conns.EventWriter) error
 }
 
-func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state *processor.ProcessorState, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, card *db.Card, dbUser *db.User, userSettings *db.UserSettings) <-chan tryJob {
+func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state *processor.ProcessorState, eventWriter conns.EventWriter, audioWriter conns.AudioWriter, card *db.Card, dbUser *db.User) <-chan tryJob {
 	jobCh := make(chan tryJob)
 
 	go func() {
@@ -965,6 +1006,12 @@ func (api *API) readTryCommands(ctx context.Context, wsClient *ws.Client, state 
 			api.logger.Info("processing try action", "action", action.Action, "text", action.Text)
 
 			msgID := uuid.New()
+
+			userSettings, err := api.db.GetUserSettings(ctx, dbUser.ID)
+			if err != nil {
+				api.logger.Warn("failed to get user settings, using defaults", "err", err)
+				userSettings = &db.UserSettings{}
+			}
 
 			// the toggles override the account settings in both directions, and
 			// handlers consult the settings, so the copy carries their values
@@ -1017,12 +1064,6 @@ func (api *API) serveTryWS(w http.ResponseWriter, r *http.Request, card *db.Card
 	}()
 
 	logger.Info("websocket connection established")
-
-	userSettings, err := api.db.GetUserSettings(r.Context(), user.ID)
-	if err != nil {
-		logger.Warn("failed to get user settings, using defaults", "err", err)
-		userSettings = &db.UserSettings{}
-	}
 
 	eventCh := make(chan *conns.DataEvent, 100)
 	var wg sync.WaitGroup
@@ -1087,7 +1128,7 @@ func (api *API) serveTryWS(w http.ResponseWriter, r *http.Request, card *db.Card
 		}
 	}()
 
-	jobCh := api.readTryCommands(ctx, wsClient, state, eventWriter, audioWriter, card, user, userSettings)
+	jobCh := api.readTryCommands(ctx, wsClient, state, eventWriter, audioWriter, card, user)
 
 	for job := range jobCh {
 		if msgID, err := uuid.Parse(job.Input.MsgID); err == nil {

@@ -29,8 +29,8 @@ const (
 
 	FilterTargetRequest = "request"
 	FilterTargetReply   = "reply"
-	// FilterTargetRequester: hits on the requester's name in the spoken
-	// "<name> asked me:" lead-in, as spans over the name.
+	// FilterTargetRequester: spans over the requester's login as spoken in the
+	// "<login> asked me:" lead-in.
 	FilterTargetRequester = "requester"
 
 	CutSkip     = "skip"
@@ -97,7 +97,6 @@ type FilterRun struct {
 	Skipped   bool              `json:"skipped,omitempty"`
 }
 
-// Spans is everything the run flagged, merged for censoring.
 func (r FilterRun) Spans() []textfilter.Span {
 	return textfilter.Merge(r.Regex, r.LLM)
 }

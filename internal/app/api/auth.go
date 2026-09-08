@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 const (
@@ -152,6 +151,12 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(cookieSessionID); err == nil {
+		if err := api.db.DeleteSession(r.Context(), cookie.Value); err != nil {
+			api.logger.Error("failed to delete session", "err", err)
+		}
+	}
+
 	http.SetCookie(w, sessionCookie("", -1))
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -172,14 +177,12 @@ func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := api.twitchClient.CodeHandler(code, r.Host)
+	user, tokens, err := api.twitchClient.CodeHandler(code, r.Host)
 	if err != nil {
 		submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
 
 		return
 	}
-
-	user.Session = uuid.NewString()
 
 	id, err := api.db.UpsertUser(r.Context(), user)
 	if err != nil {
@@ -188,9 +191,22 @@ func (api *API) twitchRedirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, sessionCookie(user.Session, int((time.Hour*24*365).Seconds())))
-
 	user.ID = id
+
+	if err := api.db.SetTwitchTokens(r.Context(), id, tokens); err != nil {
+		submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
+
+		return
+	}
+
+	session, err := api.db.CreateSession(r.Context(), id)
+	if err != nil {
+		submitPage(w, errPage(r, http.StatusInternalServerError, err.Error()))
+
+		return
+	}
+
+	http.SetCookie(w, sessionCookie(session, int(db.SessionTTL.Seconds())))
 
 	if api.cfg.AutoApproveUsers {
 		if _, err := api.db.AutoGrantAccess(r.Context(), user, db.PermissionStreamer); err != nil {

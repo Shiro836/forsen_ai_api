@@ -15,7 +15,6 @@ func TestSpokenRequestPrefixAndImages(t *testing.T) {
 		t.Fatalf("spoken = %q", spoken)
 	}
 
-	// spans over the spoken text, as the filter returns them
 	name := textfilter.Span{Start: 0, End: 4}
 	slur := textfilter.Span{Start: 26, End: 30}
 
@@ -23,7 +22,6 @@ func TestSpokenRequestPrefixAndImages(t *testing.T) {
 		t.Errorf("censored speech = %q", got)
 	}
 
-	// the panel sees the slur on the raw message and nothing for the name
 	back := m.MapBack([]textfilter.Span{name, slur})
 	want := []textfilter.Span{{Start: 15, End: 19}}
 	if !reflect.DeepEqual(back, want) {
@@ -33,7 +31,6 @@ func TestSpokenRequestPrefixAndImages(t *testing.T) {
 		t.Errorf("raw censor = %q", got)
 	}
 
-	// the name's own spans, for the requested-by cell
 	if got := textfilter.Window([]textfilter.Span{name, slur}, 0, 4); !reflect.DeepEqual(got, []textfilter.Span{{Start: 0, End: 4}}) {
 		t.Errorf("requester spans = %v", got)
 	}
@@ -52,7 +49,6 @@ func TestSpokenUniversalLeavesTagsOut(t *testing.T) {
 		t.Fatalf("spoken = %q", spoken)
 	}
 
-	// filter flags "bad word" in the spoken text
 	spans := []textfilter.Span{{Start: 2, End: 10}}
 
 	back := m.MapBack(spans)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"app/db"
@@ -52,6 +53,7 @@ func (h *AgenticHandler) Handle(ctx context.Context, input InteractionInput, eve
 	if err != nil {
 		return fmt.Errorf("failed to get all characters: %w", err)
 	}
+	allChars = slices.DeleteFunc(allChars, func(c db.CharacterBasicInfo) bool { return input.UserSettings.CardDisabled(c.ID) })
 
 	detectedChars, err := h.detector.DetectCharacters(archive.WithLLMKind(ctx, "detect"), input.Message, allChars)
 	if err != nil {

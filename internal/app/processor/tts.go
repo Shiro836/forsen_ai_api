@@ -345,19 +345,16 @@ func timingTextPrefixes(msg string, timings []whisperx.Timiing) []string {
 	return prefixes
 }
 
-// lexUniversal splits a universal TTS message into text and the tags this
-// deployment recognizes: public voice short names, ffmpeg filter numbers and
-// emotions, embedded sound effects.
-func (s *Service) lexUniversal(ctx context.Context, msg string) []ttsprocessor.Token {
+func (s *Service) lexUniversal(ctx context.Context, userSettings *db.UserSettings, msg string) []ttsprocessor.Token {
 	checkVoice := func(voice string) bool {
 		name := strings.TrimSpace(voice)
 		if len(name) == 0 {
 			return false
 		}
 
-		_, _, err := s.db.GetVoiceReferenceByShortName(ctx, name)
+		id, _, err := s.db.GetVoiceReferenceByShortName(ctx, name)
 
-		return err == nil
+		return err == nil && !userSettings.CardDisabled(id)
 	}
 
 	checkFilter := func(filter string) bool {
@@ -401,7 +398,6 @@ func (s *Service) lexUniversal(ctx context.Context, msg string) []ttsprocessor.T
 	return ttsprocessor.Lex(msg, checkVoice, checkFilter, checkSfx)
 }
 
-// limitSfx drops sound effects past the streamer's per-message cap.
 func limitSfx(actions []ttsprocessor.Action, userSettings *db.UserSettings) []ttsprocessor.Action {
 	maxSfxCount := db.DefaultMaxSfxCount
 	if userSettings.MaxSfxCount != nil {

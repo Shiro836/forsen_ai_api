@@ -23,10 +23,8 @@ func TestRobustnessMarkup(t *testing.T) {
 	})
 }
 
-// TestRobustnessSpokenLeadIn: the filter judges text as TTS will voice it. A
-// character request is spoken as "<login> asked me: ..." and an unrecognized
-// `name:` in a universal message is read out as written, so a name in either
-// position is judged like any other word.
+// TestRobustnessSpokenLeadIn: a login in the "<login> asked me:" lead-in and
+// an unrecognized `name:` are spoken, so they are judged like any other word.
 func TestRobustnessSpokenLeadIn(t *testing.T) {
 	runSpanCases(t, []spanCase{
 		{name: "requester login in the lead-in", input: "neega_gamer asked me: who is best ruler in 1940s", flagged: []string{"neega"}, clean: []string{"asked me", "ruler"}, maxMasked: 12},

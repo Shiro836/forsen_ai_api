@@ -6,7 +6,6 @@ import (
 )
 
 func TestBuilderInsertHasNoSource(t *testing.T) {
-	// derived: "user asked me: hi SLUR"   source: "hi SLUR"
 	derived, m := func() (string, *Mapping) {
 		b := NewBuilder("hi SLUR")
 		b.Insert("user asked me: ")
@@ -16,22 +15,18 @@ func TestBuilderInsertHasNoSource(t *testing.T) {
 		t.Fatalf("derived = %q", derived)
 	}
 
-	// a span over the insert alone maps to nothing
 	if back := m.MapBack([]Span{{0, 4}}); back != nil {
 		t.Errorf("insert-only span = %v, want none", back)
 	}
-	// a span over the body lands on the body
 	if back := m.MapBack([]Span{{18, 22}}); !reflect.DeepEqual(back, []Span{{3, 7}}) {
 		t.Errorf("body span = %v, want [{3 7}]", back)
 	}
-	// a span reaching from the insert into the body keeps the body part
 	if back := m.MapBack([]Span{{0, 17}}); !reflect.DeepEqual(back, []Span{{0, 2}}) {
 		t.Errorf("straddling span = %v, want [{0 2}]", back)
 	}
 }
 
 func TestBuilderSkipIsNeverCovered(t *testing.T) {
-	// source: "bad cancer: words"  derived: "bad  words" (tag skipped)
 	src := "bad cancer: words"
 	b := NewBuilder(src)
 	b.Copy(4)
@@ -41,7 +36,6 @@ func TestBuilderSkipIsNeverCovered(t *testing.T) {
 		t.Fatalf("derived = %q", derived)
 	}
 
-	// a span across the gap is cut around the skipped tag
 	back := m.MapBack([]Span{{0, 10}})
 	want := []Span{{0, 4}, {11, 17}}
 	if !reflect.DeepEqual(back, want) {

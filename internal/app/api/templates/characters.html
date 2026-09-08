@@ -1,5 +1,12 @@
 <div>
-    <div>If you get error when adding char, try to relogin(logout and login)</div>
+    <p class="mb-4 flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
+        <svg class="w-4 h-4 text-green-500 dark:text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+            <line x1="12" y1="2" x2="12" y2="12" />
+        </svg>
+        removes voice from universal tts
+    </p>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto">
         <div class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col justify-center items-center bg-gradient-to-br from-slate-100 to-slate-50 dark:from-zinc-900 dark:to-zinc-800 text-slate-800 dark:text-slate-100 gap-2">
             <svg class="w-16 h-16 mb-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -9,7 +16,7 @@
             </svg>
             <span class="text-sm font-medium">Universal TTS<br>(forsen dono like)</span>
             <div class="flex gap-2 mt-2">
-                <button hx-get="/universal-tts/reward" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Add Reward</button>
+                <button hx-get="/universal-tts/reward" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Add</button>
                 <button hx-get="/universal-tts/try" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Try</button>
             </div>
         </div>
@@ -22,7 +29,7 @@
             </svg>
             <span class="text-sm font-medium">Agent Baj</span>
             <div class="flex gap-2 mt-2">
-                <button hx-get="/agentic/reward" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Add Reward</button>
+                <button hx-get="/agentic/reward" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Add</button>
                 <button hx-get="/agentic/try" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" class="px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Try</button>
             </div>
         </div>

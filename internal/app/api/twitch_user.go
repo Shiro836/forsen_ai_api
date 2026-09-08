@@ -3,6 +3,7 @@ package api
 import (
 	"app/db"
 	"context"
+	"fmt"
 
 	"github.com/nicklaw5/helix/v2"
 )
@@ -11,7 +12,12 @@ import (
 // live about four hours, so helix refreshes mid-request often; the new pair is
 // written back so the next request doesn't start from an expired token again.
 func (api *API) helixForUser(ctx context.Context, user *db.User) (*helix.Client, error) {
-	client, err := api.twitchClient.NewHelixClient(user.TwitchAccessToken, user.TwitchRefreshToken)
+	tokens, err := api.db.GetTwitchTokens(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("twitch tokens for %s: %w", user.TwitchLogin, err)
+	}
+
+	client, err := api.twitchClient.NewHelixClient(tokens.AccessToken, tokens.RefreshToken)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +27,7 @@ func (api *API) helixForUser(ctx context.Context, user *db.User) (*helix.Client,
 	ctx = context.WithoutCancel(ctx)
 	client.OnUserAccessTokenRefreshed(func(access, refresh string) {
 		api.logger.Info("twitch token refreshed", "user", user.TwitchLogin)
-		if err := api.db.UpdateUserTokens(ctx, user.ID, access, refresh); err != nil {
+		if err := api.db.RefreshTwitchTokens(ctx, user.ID, access, refresh); err != nil {
 			api.logger.Error("failed to store refreshed twitch tokens", "user", user.TwitchLogin, "err", err)
 		}
 	})

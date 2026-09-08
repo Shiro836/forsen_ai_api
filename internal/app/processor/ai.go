@@ -30,12 +30,11 @@ func (s *Service) FilterText(ctx context.Context, userSettings *db.UserSettings,
 // braille wall is a feature, showing the wall on stream is not.
 const artPlaceholder = "(ascii art)"
 
-// filterSpans marks a message as it will be spoken: regex patterns plus the
+// filterSpans marks text as it will be spoken: regex patterns plus the
 // context-aware LLM filter. Character art is collapsed out of the LLM's input
 // — a braille wall is ~10k tokens and breaks the echo protocol (measured:
-// context overflow or a 60-100s retry stall) — and the returned spans are
-// mapped back to text. The run is not archived here: the caller records it
-// once the spans are mapped onto the raw message (recordFilter).
+// context overflow or a 60-100s retry stall). The caller archives the run
+// (recordFilter) once the spans are mapped onto the raw message.
 func (s *Service) filterSpans(ctx context.Context, userSettings *db.UserSettings, text string, skipLLM bool) (archive.FilterRun, error) {
 	run := archive.FilterRun{Target: archive.FilterTargetRequest, Regex: s.regexSpans(userSettings, text), Skipped: skipLLM}
 	if skipLLM {
@@ -73,17 +72,12 @@ func (s *Service) filterReplySpans(ctx context.Context, userSettings *db.UserSet
 	return run, nil
 }
 
-// recordFilter archives run with its spans mapped through m onto the text the
-// archive stores (nil m: the run's text is that text).
 func recordFilter(ctx context.Context, run archive.FilterRun, m *textfilter.Mapping) {
 	run.Regex = m.MapBack(run.Regex)
 	run.LLM = m.MapBack(run.LLM)
 	archive.RecordFilter(ctx, run)
 }
 
-// spokenRequest derives what TTS gets from a raw request: a lead-in with no
-// counterpart in the message, then the message with image references
-// replaced by their placeholders.
 func spokenRequest(prefix, message string) (string, *textfilter.Mapping) {
 	b := textfilter.NewBuilder(message)
 	b.Insert(prefix)
@@ -94,9 +88,8 @@ func spokenRequest(prefix, message string) (string, *textfilter.Mapping) {
 	return b.Build()
 }
 
-// spokenUniversal derives what the universal handler voices: the text tokens
-// with image placeholders, every tag left out. ranges[i] is token i's place
-// in the result (empty for a tag), so each token can be censored on its own.
+// spokenUniversal leaves every tag out of the spoken text; ranges[i] is token
+// i's place in it (empty for a tag).
 func spokenUniversal(message string, tokens []ttsprocessor.Token) (spoken string, m *textfilter.Mapping, ranges []textfilter.Span) {
 	b := textfilter.NewBuilder(message)
 	tags := imagetag.Tags(message)

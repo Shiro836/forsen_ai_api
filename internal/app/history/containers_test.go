@@ -77,7 +77,7 @@ func startStores(t *testing.T) (*db.DB, driver.Conn) {
 func newUser(t *testing.T, database *db.DB, login string, twitchID int) uuid.UUID {
 	t.Helper()
 	id, err := database.UpsertUser(context.Background(), &db.User{
-		TwitchLogin: login, TwitchUserID: twitchID, TwitchRefreshToken: "r", TwitchAccessToken: "a", Session: login + "-session",
+		TwitchLogin: login, TwitchUserID: twitchID,
 	})
 	if err != nil {
 		t.Fatal(err)

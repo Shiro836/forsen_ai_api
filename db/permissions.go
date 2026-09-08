@@ -72,9 +72,7 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 		SELECT
 			u.id,
 			u.twitch_login,
-			u.twitch_user_id,
-			u.twitch_refresh_token,
-			u.twitch_access_token
+			u.twitch_user_id
 		FROM permissions as p
 		join users as u ON p.twitch_user_id = u.twitch_user_id
 		WHERE
@@ -91,7 +89,7 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 	var users []*User
 	for rows.Next() {
 		var user User
-		err := rows.Scan(&user.ID, &user.TwitchLogin, &user.TwitchUserID, &user.TwitchRefreshToken, &user.TwitchAccessToken)
+		err := rows.Scan(&user.ID, &user.TwitchLogin, &user.TwitchUserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan permitted users: %w", err)
 		}
@@ -351,9 +349,7 @@ func (db *DB) GetUsersWithDeniedPermission(ctx context.Context, permission Permi
 		SELECT
 			u.id,
 			u.twitch_login,
-			u.twitch_user_id,
-			u.twitch_refresh_token,
-			u.twitch_access_token
+			u.twitch_user_id
 		FROM users u
 		JOIN permissions p ON p.twitch_user_id = u.twitch_user_id
 		WHERE p.permission = $1
@@ -368,7 +364,7 @@ func (db *DB) GetUsersWithDeniedPermission(ctx context.Context, permission Permi
 	var users []*User
 	for rows.Next() {
 		var user User
-		err := rows.Scan(&user.ID, &user.TwitchLogin, &user.TwitchUserID, &user.TwitchRefreshToken, &user.TwitchAccessToken)
+		err := rows.Scan(&user.ID, &user.TwitchLogin, &user.TwitchUserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan users with denied permission: %w", err)
 		}

@@ -45,7 +45,7 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 
 	skipLLMFilter := input.SkipLLMFilterFully || input.UserSettings.DisableLLMFilter
 
-	tokens := h.service.lexUniversal(ctx, input.Message)
+	tokens := h.service.lexUniversal(ctx, input.UserSettings, input.Message)
 	spoken, requestMap, ranges := spokenUniversal(input.Message, tokens)
 	requestRun, err := h.service.filterSpans(ctx, input.UserSettings, spoken, skipLLMFilter)
 	if err != nil {
@@ -79,7 +79,7 @@ func (h *UniversalHandler) Handle(ctx context.Context, input InteractionInput, e
 		}
 		voice := action.Voice
 		if voice == "" {
-			voice = "obiwan"
+			voice = DefaultUniversalVoice
 		}
 		if voiceID, _, vErr := h.service.getVoiceReference(ctx, logger, voice); vErr == nil {
 			uniqueVoiceIDs[voiceID] = struct{}{}
