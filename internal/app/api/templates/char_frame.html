@@ -44,17 +44,24 @@
         </span>
     </div>
     {{ if .CanEdit }}
-    <button class="row-start-11 row-end-12 col-start-2 col-end-4 mx-0.5 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+    <button class="row-start-11 row-end-13 col-start-2 col-end-5 my-1.5 mx-1 text-sm {{template "button-2"}}"
         hx-get="/characters/{{ .Card.ID }}"
         hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
         hx-sync="#tabs:abort">Edit</button>
-    {{ end }}
-    <button class="row-start-11 row-end-12 col-start-4 col-end-6 mx-0.5 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+    <button class="row-start-11 row-end-13 col-start-5 col-end-8 my-1.5 mx-1 text-sm {{template "button-2"}}"
         hx-get="/characters/{{ .Card.ID }}/try"
         hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
         hx-sync="#tabs:abort">Try</button>
-    {{ if or (not .TTSRewardCreated) (not .AIRewardCreated) }}
-    <button class="row-start-11 row-end-12 col-start-6 col-end-8 mx-0.5 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+    <button class="row-start-11 row-end-13 col-start-8 col-end-11 my-1.5 mx-1 text-sm {{template "button-2"}}"
+        hx-get="/characters/{{ .Card.ID }}/reward"
+        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
+        hx-sync="#tabs:abort">Add</button>
+    {{ else }}
+    <button class="row-start-11 row-end-13 col-start-3 col-end-7 my-1.5 mx-1 text-sm {{template "button-2"}}"
+        hx-get="/characters/{{ .Card.ID }}/try"
+        hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
+        hx-sync="#tabs:abort">Try</button>
+    <button class="row-start-11 row-end-13 col-start-7 col-end-11 my-1.5 mx-1 text-sm {{template "button-2"}}"
         hx-get="/characters/{{ .Card.ID }}/reward"
         hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true"
         hx-sync="#tabs:abort">Add</button>
@@ -66,7 +73,7 @@
             value="{{ if .Card.ShortCharName.Valid }}{{ .Card.ShortCharName.String }}{{ end }}"
             class="w-full min-w-0 text-sm px-2 py-1.5 {{template "input-class"}}" />
         <button type="submit"
-            class="self-end text-xs px-3 py-1 border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700">Save</button>
+            class="self-end text-xs px-3 py-1 {{template "button-2"}}">Save</button>
     </form>
     {{ end }}
 </div>
