@@ -171,7 +171,7 @@ func (e *IndexTTSEngine) TTSStream(ctx context.Context, text string, voiceRefere
 
 	text, emotions := ExtractEmotions(text)
 
-	refPath, err := e.referencePath(ctx, voiceReference)
+	refPath, err := e.ReferencePath(ctx, voiceReference)
 	if err != nil {
 		return err
 	}
@@ -192,11 +192,11 @@ func (e *IndexTTSEngine) TTSStream(ctx context.Context, text string, voiceRefere
 	return e.client.SynthesizeStream(ctx, req, fn)
 }
 
-// referencePath writes the processed voice reference to a content-addressed
+// ReferencePath writes the processed voice reference to a content-addressed
 // file and returns its path. The fork's reference cache is keyed on
 // (path, mtime, size), so a stable path per content makes it actually hit;
 // files are left in place deliberately — they are the cache.
-func (e *IndexTTSEngine) referencePath(ctx context.Context, voiceReference []byte) (string, error) {
+func (e *IndexTTSEngine) ReferencePath(ctx context.Context, voiceReference []byte) (string, error) {
 	processed, err := e.trimVoiceReference(ctx, voiceReference)
 	if err != nil {
 		return "", err

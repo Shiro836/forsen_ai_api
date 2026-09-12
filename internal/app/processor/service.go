@@ -20,13 +20,14 @@ type Service struct {
 	ffmpeg        *ffmpeg.Client
 	ttsEngine     ai.TTSEngine
 	chatTTSEngine ai.TTSEngine
+	singer        Singer
 	whisper       *whisperx.Client
 	imageLlmRaw   *llm.Client
 	llmFilter     *llmfilter.Filter
 	connManager   *conns.Manager
 }
 
-func NewService(logger *slog.Logger, db *db.DB, s3 *s3client.Client, ffmpeg *ffmpeg.Client, ttsEngine ai.TTSEngine, chatTTSEngine ai.TTSEngine, whisper *whisperx.Client, imageLlm *llm.Client, llmFilter *llmfilter.Filter, connManager *conns.Manager) *Service {
+func NewService(logger *slog.Logger, db *db.DB, s3 *s3client.Client, ffmpeg *ffmpeg.Client, ttsEngine ai.TTSEngine, chatTTSEngine ai.TTSEngine, singer Singer, whisper *whisperx.Client, imageLlm *llm.Client, llmFilter *llmfilter.Filter, connManager *conns.Manager) *Service {
 	return &Service{
 		logger:        logger,
 		db:            db,
@@ -34,6 +35,7 @@ func NewService(logger *slog.Logger, db *db.DB, s3 *s3client.Client, ffmpeg *ffm
 		ffmpeg:        ffmpeg,
 		ttsEngine:     ttsEngine,
 		chatTTSEngine: chatTTSEngine,
+		singer:        singer,
 		whisper:       whisper,
 		imageLlmRaw:   imageLlm,
 		llmFilter:     llmFilter,

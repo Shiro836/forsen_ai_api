@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"app/db"
@@ -78,40 +79,71 @@ func recordFilter(ctx context.Context, run archive.FilterRun, m *textfilter.Mapp
 	archive.RecordFilter(ctx, run)
 }
 
+// trimBounds is strings.TrimSpace over r[start:end], as offsets.
+func trimBounds(r []rune, start, end int) (int, int) {
+	for start < end && unicode.IsSpace(r[start]) {
+		start++
+	}
+	for end > start && unicode.IsSpace(r[end-1]) {
+		end--
+	}
+	return start, end
+}
+
 func spokenRequest(prefix, message string) (string, *textfilter.Mapping) {
+	r := []rune(message)
+	lo, hi := trimBounds(r, 0, len(r))
+
 	b := textfilter.NewBuilder(message)
 	b.Insert(prefix)
+	b.Skip(lo)
 	for _, tag := range imagetag.Tags(message) {
 		b.Copy(tag.Start)
 		b.Replace(tag.End, tag.Placeholder)
 	}
+	b.Copy(hi)
+	b.Skip(len(r))
 	return b.Build()
 }
 
-// spokenUniversal leaves every tag out of the spoken text; ranges[i] is token
-// i's place in it (empty for a tag).
+// spokenUniversal leaves every tag out of the spoken text and trims it;
+// ranges[i] is token i's place in it (empty for a tag).
 func spokenUniversal(message string, tokens []ttsprocessor.Token) (spoken string, m *textfilter.Mapping, ranges []textfilter.Span) {
+	r := []rune(message)
+	lo, hi := 0, 0
+	for _, tok := range tokens {
+		if s, e := trimBounds(r, tok.Start, tok.End); tok.Kind == ttsprocessor.Text && s < e {
+			if hi == 0 {
+				lo = s
+			}
+			hi = e
+		}
+	}
+
 	b := textfilter.NewBuilder(message)
 	tags := imagetag.Tags(message)
 	ranges = make([]textfilter.Span, len(tokens))
 	for i, tok := range tokens {
 		b.Skip(tok.Start)
 		ranges[i].Start = b.Len()
-		if tok.Kind != ttsprocessor.Text {
+		start, end := max(tok.Start, lo), min(tok.End, hi)
+		if tok.Kind != ttsprocessor.Text || start >= end {
 			b.Skip(tok.End)
 			ranges[i].End = b.Len()
 			continue
 		}
+		b.Skip(start)
 		for _, tag := range tags {
-			if tag.Start >= tok.Start && tag.End <= tok.End {
+			if tag.Start >= start && tag.End <= end {
 				b.Copy(tag.Start)
 				b.Replace(tag.End, tag.Placeholder)
 			}
 		}
-		b.Copy(tok.End)
+		b.Copy(end)
+		b.Skip(tok.End)
 		ranges[i].End = b.Len()
 	}
-	b.Skip(utf8.RuneCountInString(message))
+	b.Skip(len(r))
 	spoken, m = b.Build()
 	return spoken, m, ranges
 }

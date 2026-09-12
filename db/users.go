@@ -15,6 +15,7 @@ const (
 	DefaultTtsLimitSeconds = 80
 	DefaultMaxSfxCount     = 10
 	DefaultSfxTotalLimit   = 20 // seconds; total SFX duration per universal TTS message (0 = unlimited)
+	DefaultMaxSingCount    = 2
 )
 
 type User struct {
@@ -102,6 +103,7 @@ type UserSettings struct {
 	TtsLimit       *int          `json:"tts_limit,omitempty"`       // Maximum TTS audio length in seconds (nil = not set, 0 = use default 80s)
 	MaxSfxCount    *int          `json:"max_sfx_count,omitempty"`   // Maximum number of SFX that can be used in a single TTS message (nil = not set, 0 = unlimited)
 	SfxTotalLimit  *int          `json:"sfx_total_limit,omitempty"` // Maximum cumulative SFX duration in seconds per universal TTS message (nil = not set, 0 = unlimited; default 20s)
+	MaxSingCount   *int          `json:"max_sing_count,omitempty"`  // Maximum number of sung spans per universal TTS message (nil = not set, 0 = unlimited; default 2)
 	Token          string        `json:"token,omitempty"`
 
 	IngestAllMessages bool `json:"ingest_all_messages,omitempty"` // When true, ingest all chat messages, not just reward redemptions
@@ -228,6 +230,11 @@ func (db *DB) GetUserSettings(ctx context.Context, userID uuid.UUID) (*UserSetti
 	if settings.SfxTotalLimit == nil {
 		defaultSfxTotal := DefaultSfxTotalLimit
 		settings.SfxTotalLimit = &defaultSfxTotal // Default to 20 seconds total SFX
+	}
+
+	if settings.MaxSingCount == nil {
+		defaultMaxSing := DefaultMaxSingCount
+		settings.MaxSingCount = &defaultMaxSing
 	}
 
 	return &settings, nil

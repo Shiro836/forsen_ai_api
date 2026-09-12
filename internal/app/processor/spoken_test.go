@@ -45,11 +45,11 @@ func TestSpokenUniversalLeavesTagsOut(t *testing.T) {
 		func(s string) bool { return s == "166" })
 
 	spoken, m, ranges := spokenUniversal(raw, tokens)
-	if spoken != "  bad word image_1  tail" {
+	if spoken != "bad word image_1  tail" {
 		t.Fatalf("spoken = %q", spoken)
 	}
 
-	spans := []textfilter.Span{{Start: 2, End: 10}}
+	spans := []textfilter.Span{{Start: 0, End: 8}}
 
 	back := m.MapBack(spans)
 	if !reflect.DeepEqual(back, []textfilter.Span{{Start: 12, End: 20}}) {
@@ -62,13 +62,39 @@ func TestSpokenUniversalLeavesTagsOut(t *testing.T) {
 		return textfilter.Censor(string(spokenRunes[r.Start:r.End]), textfilter.Window(spans, r.Start, r.End), "(f)")
 	})
 	want := []ttsprocessor.Action{
-		{Filters: []string{"9"}, Text: " "},
-		{Filters: []string{"9"}, Voice: "cancer", Text: " (f) image_1 "},
+		{Filters: []string{"9"}},
+		{Filters: []string{"9"}, Voice: "cancer", Text: "(f) image_1 "},
 		{Filters: []string{"9"}, Sfx: "166"},
 		{Filters: []string{"9"}, Voice: "cancer", Text: " tail"},
 	}
 	if !reflect.DeepEqual(actions, want) {
 		t.Errorf("actions = %+v, want %+v", actions, want)
+	}
+}
+
+func TestSpokenTrimsPadding(t *testing.T) {
+	spoken, m := spokenRequest("", "  hi SLUR \n")
+	if spoken != "hi SLUR" {
+		t.Fatalf("spoken = %q", spoken)
+	}
+	if back := m.MapBack([]textfilter.Span{{Start: 3, End: 7}}); !reflect.DeepEqual(back, []textfilter.Span{{Start: 5, End: 9}}) {
+		t.Errorf("MapBack = %v", back)
+	}
+
+	raw := "{sing:1}goatis: I eat raw meat {.}"
+	tokens := ttsprocessor.Lex(raw,
+		func(v string) bool { return v == "goatis" },
+		func(f string) bool { return f == "sing:1" || f == "." },
+		func(string) bool { return false })
+	spoken, m, ranges := spokenUniversal(raw, tokens)
+	if spoken != "I eat raw meat" {
+		t.Fatalf("spoken = %q", spoken)
+	}
+	if back := m.MapBack([]textfilter.Span{{Start: 10, End: 14}}); !reflect.DeepEqual(back, []textfilter.Span{{Start: 26, End: 30}}) {
+		t.Errorf("MapBack = %v", back)
+	}
+	if got := ranges[2]; got != (textfilter.Span{Start: 0, End: 14}) {
+		t.Errorf("text range = %v", got)
 	}
 }
 

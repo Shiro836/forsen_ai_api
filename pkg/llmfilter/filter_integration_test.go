@@ -100,6 +100,17 @@ func newFilter() *llmfilter.Filter {
 	if os.Getenv("FILTER_CANDIDATE") != "" {
 		c = testCfg.OAICandidate
 	}
+	// FILTER_URL/FILTER_TOKEN/FILTER_MODEL score a provider that has no cfg
+	// block, so a candidate never has to be wired into the live config.
+	if v := os.Getenv("FILTER_URL"); v != "" {
+		c.URL = v
+	}
+	if v := os.Getenv("FILTER_TOKEN"); v != "" {
+		c.AccessToken = v
+	}
+	if v := os.Getenv("FILTER_MODEL"); v != "" {
+		c.Model = v
+	}
 	return llmfilter.New(oai.New(&c))
 }
 

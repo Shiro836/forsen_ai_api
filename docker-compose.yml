@@ -95,6 +95,10 @@ services:
       CLICKHOUSE_USER: app
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 0
+      # host THP is "always" for the model servers; khugepaged fills jemalloc's
+      # sparse retained ranges until RSS crosses the RSS-based server memory cap
+      # and every query fails. abort_conf makes an ignored option fatal.
+      MALLOC_CONF: thp:never,abort_conf:true
     env_file:
       - .env
     volumes:
@@ -124,6 +128,14 @@ services:
       PGDATA: /data/postgres
     volumes:
        - pg-data:/data/postgres
+    restart: unless-stopped
+    networks:
+      - forsen
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable
     restart: unless-stopped
     networks:
       - forsen

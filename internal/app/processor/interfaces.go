@@ -49,3 +49,10 @@ type CharacterLLM interface {
 type TTSClient interface {
 	TTS(ctx context.Context, text string, refAudio []byte) ([]byte, []whisperx.Timiing, error)
 }
+
+// Singer renders a universal TTS span as song. ResolveMelody validates the
+// {sing:...} tag argument; a nil Singer leaves the tag as literal text.
+type Singer interface {
+	Sing(ctx context.Context, text, melody string, refAudio []byte) ([]byte, []whisperx.Timiing, error)
+	ResolveMelody(ctx context.Context, spec string) (string, error)
+}

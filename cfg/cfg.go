@@ -48,7 +48,9 @@ type Config struct {
 	OAICandidate llm.Config        `yaml:"oai_candidate"`
 	StyleTTS     ai.StyleTTSConfig `yaml:"tts"`
 	IndexTTS     ai.IndexTTSConfig `yaml:"index_tts"`
-	Whisper      whisperx.Config   `yaml:"whisper"`
+	// Singer serves the universal {sing} tag; empty URL disables it.
+	Singer  ai.SingerConfig `yaml:"singer"`
+	Whisper whisperx.Config `yaml:"whisper"`
 
 	Twitch twitch.Config `yaml:"twitch"`
 

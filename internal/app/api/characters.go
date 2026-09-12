@@ -676,6 +676,7 @@ type voicesListPage struct {
 	Sounds   []soundItem
 	Filters  []filterItem
 	Emotions []string
+	Melodies []ai.Melody
 }
 
 type voiceItem struct {
@@ -698,7 +699,15 @@ func (api *API) voicesPublic(r *http.Request) template.HTML {
 		list = append(list, voiceItem{ID: it.ID, Name: it.ShortCharName})
 	}
 
-	return getHtml("voices.html", &voicesListPage{Items: list, Sounds: soundItems, Filters: filterItems, Emotions: ai.EmotionNames})
+	var melodies []ai.Melody
+	if api.singer != nil {
+		melodies, err = api.singer.Melodies(r.Context())
+		if err != nil {
+			api.logger.Warn("failed to list melodies", "err", err)
+		}
+	}
+
+	return getHtml("voices.html", &voicesListPage{Items: list, Sounds: soundItems, Filters: filterItems, Emotions: ai.EmotionNames, Melodies: melodies})
 }
 
 func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {

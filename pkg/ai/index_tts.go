@@ -297,7 +297,7 @@ func (e *IndexTTSEngine) TTS(ctx context.Context, text string, voiceReference []
 
 	text, emotions := ExtractEmotions(text)
 
-	refPath, err := e.referencePath(ctx, voiceReference)
+	refPath, err := e.ReferencePath(ctx, voiceReference)
 	if err != nil {
 		return nil, nil, err
 	}

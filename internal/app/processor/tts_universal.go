@@ -43,6 +43,8 @@ type universalJob struct {
 	voice   string
 	ttsText string
 	oldTTS  bool
+	sing    bool
+	melody  string
 
 	audio   []byte
 	timings []whisperx.Timiing
@@ -50,9 +52,59 @@ type universalJob struct {
 	ok      bool
 }
 
+// universalJobs turns actions into one job per text span and per SFX. Sung
+// spans past the streamer's limit are spoken instead of dropped.
+func (s *Service) universalJobs(actions []ttsprocessor.Action, userSettings *db.UserSettings) []*universalJob {
+	maxSingCount := db.DefaultMaxSingCount
+	if userSettings.MaxSingCount != nil {
+		maxSingCount = *userSettings.MaxSingCount
+	}
+	singCount := 0
+
+	var jobs []*universalJob
+
+	for _, action := range actions {
+		filters := parseFilters(action.Filters)
+		audioFilters := s.limitFilters(filters.audioFilters)
+
+		if action.Text != "" && action.Text != " " {
+			voice := action.Voice
+			if voice == "" {
+				voice = DefaultUniversalVoice
+			}
+
+			job := &universalJob{
+				displayText: action.Text,
+				filters:     audioFilters,
+				voice:       voice,
+				ttsText:     ai.InsertEmotions(action.Text, filters.emotions),
+				oldTTS:      filters.oldTTS,
+			}
+			// the singer takes text verbatim: an emotion marker would be sung
+			if filters.sing && (maxSingCount == 0 || singCount < maxSingCount) {
+				job.ttsText = action.Text
+				job.sing = true
+				job.melody = filters.melody
+				singCount++
+			}
+			jobs = append(jobs, job)
+		}
+
+		if action.Sfx != "" {
+			jobs = append(jobs, &universalJob{
+				displayText: fmt.Sprintf("[%s]", action.Sfx),
+				filters:     audioFilters,
+				isSfx:       true,
+				sfxName:     action.Sfx,
+			})
+		}
+	}
+
+	return jobs
+}
+
 func (s *Service) craftUniversalTTSAudio(ctx context.Context, logger *slog.Logger, actions []ttsprocessor.Action, userSettings *db.UserSettings) ([]byte, string, []whisperx.Timiing, error) {
 	concatPadding := 500 * time.Millisecond
-	defaultVoice := DefaultUniversalVoice
 
 	ttsLimit := db.DefaultTtsLimitSeconds
 	if userSettings.TtsLimit != nil {
@@ -66,36 +118,7 @@ func (s *Service) craftUniversalTTSAudio(ctx context.Context, logger *slog.Logge
 	}
 	maxSfxDuration := time.Duration(sfxTotalLimit) * time.Second
 
-	var jobs []*universalJob
-
-	for _, action := range actions {
-		filters := parseFilters(action.Filters)
-		audioFilters := s.limitFilters(filters.audioFilters)
-
-		if action.Text != "" && action.Text != " " {
-			voice := action.Voice
-			if voice == "" {
-				voice = defaultVoice
-			}
-
-			jobs = append(jobs, &universalJob{
-				displayText: action.Text,
-				filters:     audioFilters,
-				voice:       voice,
-				ttsText:     ai.InsertEmotions(action.Text, filters.emotions),
-				oldTTS:      filters.oldTTS,
-			})
-		}
-
-		if action.Sfx != "" {
-			jobs = append(jobs, &universalJob{
-				displayText: fmt.Sprintf("[%s]", action.Sfx),
-				filters:     audioFilters,
-				isSfx:       true,
-				sfxName:     action.Sfx,
-			})
-		}
-	}
+	jobs := s.universalJobs(actions, userSettings)
 
 	var wg sync.WaitGroup
 	for _, job := range jobs {
@@ -220,13 +243,16 @@ func (s *Service) generateUniversalJob(ctx context.Context, logger *slog.Logger,
 
 		var audio []byte
 		var timings []whisperx.Timiing
-		if job.oldTTS {
+		switch {
+		case job.sing:
+			audio, timings, err = s.singUniversalJob(ctx, job, voiceRef)
+		case job.oldTTS:
 			audio, timings, err = s.ChatTTSWithTimings(ctx, job.ttsText, voiceRef)
-		} else {
+		default:
 			audio, timings, err = s.TTSWithTimings(ctx, job.ttsText, voiceRef)
 		}
 		if err != nil {
-			logger.Error("error generating TTS for universal action", "err", err, "text", job.displayText)
+			logger.Error("error generating TTS for universal action", "err", err, "text", job.displayText, "sing", job.sing)
 			return
 		}
 
@@ -242,4 +268,17 @@ func (s *Service) generateUniversalJob(ctx context.Context, logger *slog.Logger,
 
 	job.dur = probe.Duration
 	job.ok = true
+}
+
+func (s *Service) singUniversalJob(ctx context.Context, job *universalJob, voiceRef []byte) ([]byte, []whisperx.Timiing, error) {
+	if s.singer == nil {
+		return nil, nil, fmt.Errorf("singer is not configured")
+	}
+
+	melody, err := s.singer.ResolveMelody(ctx, job.melody)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to resolve melody: %w", err)
+	}
+
+	return s.singer.Sing(ctx, stripForTTS(job.ttsText), melody, voiceRef)
 }

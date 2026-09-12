@@ -42,3 +42,9 @@ scrape_configs:
       - targets: ['clickhouse:9363']
         labels:
           service: 'clickhouse'
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'

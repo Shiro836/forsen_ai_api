@@ -1,6 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ["./internal/app/api/**/*.{html,js}"],
+  // .go is scanned too: history_view.go emits the filter highlight markup, and
+  // a class only written there is otherwise never compiled.
+  content: ["./internal/app/api/**/*.{html,js,go}"],
   darkMode: 'class',
   theme: {
     extend: {

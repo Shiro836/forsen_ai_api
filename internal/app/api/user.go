@@ -15,6 +15,7 @@ type filters struct {
 	TtsLimit                  int
 	MaxSfxCount               int
 	SfxTotalLimit             int
+	MaxSingCount              int
 	Token                     string
 	IngestAllMessages         bool
 	DisableAudioNormalization bool
@@ -54,12 +55,18 @@ func (api *API) filters(r *http.Request) template.HTML {
 		sfxTotalLimit = *settings.SfxTotalLimit
 	}
 
+	maxSingCount := db.DefaultMaxSingCount
+	if settings.MaxSingCount != nil {
+		maxSingCount = *settings.MaxSingCount
+	}
+
 	return getHtml("filters.html", &filters{
 		Filters:                   settings.Filters,
 		CustomFilterPrompt:        settings.CustomFilterPrompt,
 		TtsLimit:                  ttsLimit,
 		MaxSfxCount:               maxSfxCount,
 		SfxTotalLimit:             sfxTotalLimit,
+		MaxSingCount:              maxSingCount,
 		Token:                     settings.Token,
 		IngestAllMessages:         settings.IngestAllMessages,
 		DisableAudioNormalization: settings.DisableAudioNormalization,
@@ -151,6 +158,17 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		settings.SfxTotalLimit = &sfxTotalLimit
+	}
+
+	maxSingCountStr := r.Form.Get("max_sing_count")
+	if maxSingCountStr != "" {
+		maxSingCount, err := strconv.Atoi(maxSingCountStr)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("invalid max_sing_count value: " + err.Error()))
+			return
+		}
+		settings.MaxSingCount = &maxSingCount
 	}
 
 	err = api.db.UpdateUserData(r.Context(), user.ID, settings)

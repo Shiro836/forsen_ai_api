@@ -4,6 +4,7 @@ import (
 	"app/pkg/tools"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -374,6 +375,19 @@ func (s *Service) lexUniversal(ctx context.Context, userSettings *db.UserSetting
 			return true
 		}
 
+		if spec, ok := singSpec(filter); ok {
+			if s.singer == nil {
+				return false
+			}
+			if _, err := s.singer.ResolveMelody(ctx, spec); err != nil {
+				if !errors.Is(err, ai.ErrUnknownMelody) {
+					s.logger.Warn("melody lookup failed, tag stays literal", "err", err, "spec", spec)
+				}
+				return false
+			}
+			return true
+		}
+
 		v, err := strconv.Atoi(filter)
 		if err != nil {
 			return false
@@ -438,16 +452,35 @@ func (s *Service) playUniversalTTS(ctx context.Context, logger *slog.Logger, eve
 // oldTTSFilter routes a segment through StyleTTS2 instead of IndexTTS.
 const oldTTSFilter = "old"
 
+// singFilter sings a segment: `{sing}` on a random melody, `{sing:NAME}` or
+// `{sing:NUMBER}` on that one.
+const singFilter = "sing"
+
 type actionFilters struct {
 	emotions     []string
 	audioFilters []string
 	oldTTS       bool
+	sing         bool
+	melody       string
+}
+
+func singSpec(filter string) (spec string, ok bool) {
+	name, spec, _ := strings.Cut(filter, ":")
+	if !strings.EqualFold(name, singFilter) {
+		return "", false
+	}
+
+	return spec, true
 }
 
 func parseFilters(filters []string) actionFilters {
 	var r actionFilters
 	for _, f := range filters {
+		spec, isSing := singSpec(f)
 		switch {
+		case isSing:
+			r.sing = true
+			r.melody = spec
 		case strings.EqualFold(f, oldTTSFilter):
 			r.oldTTS = true
 		case ai.IsEmotion(f):

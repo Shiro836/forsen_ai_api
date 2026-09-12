@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -200,6 +201,7 @@ func (h *AIHandler) Handle(ctx context.Context, input InteractionInput, eventWri
 		if llmResultErr != nil {
 			return llmResultErr
 		}
+		llmResult = strings.TrimSpace(llmResult)
 		if len(llmResult) == 0 {
 			llmResult = "empty response"
 		}

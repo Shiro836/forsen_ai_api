@@ -58,6 +58,22 @@
 				data-src="/extra/old/sample" data-loading="1" title="Use old TTS engine">{{"{old}"}} use old tts engine</button>
 		</div>
 	</details>
+	<details class="pt-2 pb-2">
+		<summary class="cursor-pointer text-xl font-medium select-none">
+			TTS Singing 🔥 <span class="ml-1 inline-block px-2.5 py-0.5 text-xs font-black uppercase tracking-widest rounded text-white bg-gradient-to-r from-fuchsia-600 via-red-500 to-amber-400 ring-2 ring-amber-300 shadow-lg shadow-red-500/60 animate-pulse align-middle">NEW</span>
+		</summary>
+		<div class="pt-4 text-base">
+			<code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">{{"{sing:1}"}}goatis: I eat raw meat everyday, morning evening and whole day {{"{.}"}}</code>
+			<br />
+			<code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">{{"{sing:20}"}}</code> by number, <code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">{{"{sing}"}}</code> random.
+		</div>
+		<div class="flex flex-wrap gap-2 pt-4">
+			{{ range .Melodies }}
+			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+				data-src="/melodies/{{ .ID }}/sample" data-loading="1" title="Play melody {{ .Name }}">{{"{sing:"}}{{ .Number }}{{"}"}} {{ .Name }}</button>
+			{{ end }}
+		</div>
+	</details>
 	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-6">
 		{{ range .Items }}
 		<div class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col items-center justify-center">

@@ -86,6 +86,18 @@ func main() {
 	ttsEngine := ai.NewIndexTTSEngine(indexClient, ffmpegClient)
 	whisper := whisperx.New(httpClient, &cfg.Whisper)
 
+	var singerClient *ai.SingerClient
+	var singer processor.Singer
+	if cfg.Singer.URL == "" {
+		logger.Warn("singer.url is not configured, {sing} tags stay literal")
+	} else {
+		if cfg.Singer.Timeout <= 0 {
+			log.Fatal("singer.timeout is not configured")
+		}
+		singerClient = ai.NewSingerClient(nil, &cfg.Singer)
+		singer = ai.NewSingerEngine(singerClient, ttsEngine)
+	}
+
 	s3, err := s3client.New(ctx, &cfg.S3)
 	if err != nil {
 		log.Fatal("failed to init s3 client: ", err)
@@ -117,7 +129,7 @@ func main() {
 
 	connManager := conns.NewConnectionManager(ctx, logger.WithGroup("conns"), nil)
 
-	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, chatTTSEngine, whisper, imageLlm, textFilter, connManager)
+	procService := processor.NewService(logger.WithGroup("service"), db, s3, ffmpegClient, ttsEngine, chatTTSEngine, singer, whisper, imageLlm, textFilter, connManager)
 
 	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), characterLlm, imageLlm, cfg.NativeImages, db, s3, procService)
 	ttsHandler := processor.NewTTSHandler(logger.WithGroup("tts_handler"), db, procService)
@@ -134,7 +146,7 @@ func main() {
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, agenticHandler, procService, historyReader)
+	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, agenticHandler, procService, singerClient, historyReader)
 
 	router := api.NewRouter()
 

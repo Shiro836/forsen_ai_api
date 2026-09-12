@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -242,6 +243,31 @@ func (api *API) oldSample(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "audio/wav")
+	_, _ = w.Write(audio)
+}
+
+func (api *API) melodySample(w http.ResponseWriter, r *http.Request) {
+	if api.singer == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("singing is not available"))
+		return
+	}
+
+	audio, err := api.singer.MelodyAudio(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		if errors.Is(err, ai.ErrUnknownMelody) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte("unknown melody"))
+			return
+		}
+		api.logger.Error("failed to get melody sample", "melody", chi.URLParam(r, "id"), "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("failed to get melody"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	_, _ = w.Write(audio)
 }
 

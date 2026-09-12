@@ -18,6 +18,7 @@ import (
 	"app/internal/app/history"
 	"app/internal/app/processor"
 	"app/internal/emoteservice"
+	"app/pkg/ai"
 	"app/pkg/ffmpeg"
 	"app/pkg/s3client"
 	"app/pkg/twitch"
@@ -71,13 +72,17 @@ type API struct {
 	// renders an "unavailable" notice instead of failing.
 	emotes *emoteClient
 
+	// singer is nil when the singing service is not configured; the voices
+	// page then lists no melodies.
+	singer *ai.SingerClient
+
 	history *history.Reader
 }
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservice.Config, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client, ffmpegClient *ffmpeg.Client,
 	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
-	voiceSampler VoiceSampler, historyReader *history.Reader) *API {
+	voiceSampler VoiceSampler, singer *ai.SingerClient, historyReader *history.Reader) *API {
 	api := &API{
 		cfg: cfg,
 
@@ -97,6 +102,7 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservi
 		agenticHandler:   agenticHandler,
 
 		voiceSamples: NewVoiceSampleCache(voiceSampler, db),
+		singer:       singer,
 
 		bitsDetector: newBitsDetector(logger),
 
@@ -170,6 +176,7 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/filters/{id}/sample", http.HandlerFunc(api.filterSample))
 		router.Get("/emotions/{name}/sample", http.HandlerFunc(api.emotionSample))
 		router.Get("/extra/old/sample", http.HandlerFunc(api.oldSample))
+		router.Get("/melodies/{id}/sample", http.HandlerFunc(api.melodySample))
 
 		// START No perms routes
 

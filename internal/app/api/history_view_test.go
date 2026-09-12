@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,19 @@ func TestHighlightSpans(t *testing.T) {
 	}
 	if got := string(highlightSpans("<x>", nil)); got != "&lt;x&gt;" {
 		t.Fatalf("unhighlighted text not escaped: %q", got)
+	}
+}
+
+// The highlight class is written in a Go string literal, so it reaches the
+// stylesheet only while tailwind.config.js scans .go and the css is rebuilt;
+// otherwise the spans render colorless.
+func TestHighlightClassIsCompiled(t *testing.T) {
+	css, err := os.ReadFile("static/tailwind.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), `bg-red-500\/30`) {
+		t.Fatal(`bg-red-500\/30 missing from static/tailwind.css; run scripts/tailwind.sh`)
 	}
 }
 

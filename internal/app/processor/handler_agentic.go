@@ -308,5 +308,5 @@ func stripLeadingSpeakerPrefix(speaker, msg string) string {
 	msg = stripCI(speaker+":", msg)
 	msg = stripCI(speaker+" :", msg)
 
-	return msg
+	return strings.TrimSpace(msg)
 }

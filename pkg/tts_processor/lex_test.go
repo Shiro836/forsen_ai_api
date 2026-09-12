@@ -66,6 +66,22 @@ func TestLexOffsets(t *testing.T) {
 	}
 }
 
+func TestLexColonInsideFilterTag(t *testing.T) {
+	checkVoice, _, checkSfx := createMockValidators()
+	checkFilter := func(f string) bool { return f == "." || f == "sing:jingle_bells" }
+
+	got := Lex("forsen: la {sing:jingle_bells} la la {.} {sing:nope} x", checkVoice, checkFilter, checkSfx)
+
+	assert.Equal(t, []Token{
+		{Kind: Voice, Start: 0, End: 7, Value: "forsen"},
+		{Kind: Text, Start: 7, End: 11, Value: " la "},
+		{Kind: Filter, Start: 11, End: 30, Value: "sing:jingle_bells"},
+		{Kind: Text, Start: 30, End: 37, Value: " la la "},
+		{Kind: Filter, Start: 37, End: 40, Value: "."},
+		{Kind: Text, Start: 40, End: 54, Value: " {sing:nope} x"},
+	}, got)
+}
+
 func TestActionsRender(t *testing.T) {
 	checkVoice, checkFilter, checkSfx := createMockValidators()
 	tokens := Lex("forsen: bad [1] fine", checkVoice, checkFilter, checkSfx)

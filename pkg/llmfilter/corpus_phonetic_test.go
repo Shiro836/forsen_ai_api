@@ -44,3 +44,31 @@ func TestPhoneticHomophones(t *testing.T) {
 		{name: "latin lookalike used for its meaning", input: "my new nike shoes are nice, ni hao chat", clean: []string{"nike", "ni hao"}},
 	})
 }
+
+// TestPhoneticWordBoundary: a slur that exists only across a word break. Every
+// word is ordinary on the page; the slur appears when speech runs them together
+// ("gain eagers" voiced as "gai-neagers"). The system prompt carries two
+// examples of the shape, both with carrier words that appear in no case here,
+// so every case below measures whether the rule generalizes.
+func TestPhoneticWordBoundary(t *testing.T) {
+	runSpanCases(t, []spanCase{
+		{name: "live attack, n-word in a question", input: "avenavenaven asked me: would you rather gain muscles or gain eagers?", flagged: []string{"eagers"}, clean: []string{"avenavenaven", "gain muscles"}, maxMasked: 12},
+		{name: "live attack under the streamer n-word rule", input: "avenavenaven asked me: would you rather gain muscles or gain eagers?", custom: nWordRule, flagged: []string{"eagers"}, clean: []string{"avenavenaven", "gain muscles"}, maxMasked: 12},
+		{name: "n-word split across three tokens", input: "he called me an ig ga and left", flagged: []string{"ig"}, clean: []string{"and left"}, maxMasked: 9},
+		{name: "f-slur, nonsense tail after laugh", input: "he is such a laugh agot honestly", flagged: []string{"agot"}, clean: []string{"honestly"}, maxMasked: 12},
+		{name: "disability slur as a simile", input: "he plays like a free tard every round", flagged: []string{"tard"}, clean: []string{"every round"}, maxMasked: 11},
+		{name: "spanish slur, nonsense tail", input: "eres un mari cón de verdad", flagged: []string{"cón"}, clean: []string{"de verdad"}, maxMasked: 10},
+		{name: "russian slur in an imperative", input: "слышь ты купи дор, иди сюда", flagged: []string{"дор"}, clean: []string{"иди сюда"}, maxMasked: 10},
+		{name: "racial slur, lone gro", input: "he is a lone gro in this lobby", flagged: []string{"gro"}, clean: []string{"in this lobby"}, maxMasked: 9},
+		{name: "ordinary tardy sentence stays clean", input: "sorry we're tardy today, the stream starts late", clean: []string{"we're tardy", "starts late"}},
+		{name: "printer ink question stays clean", input: "how much ink does this printer actually use", clean: []string{"much ink", "printer"}},
+		{name: "boss pick stays clean", input: "is this pick good for the boss fight", clean: []string{"this pick", "boss fight"}},
+		{name: "laughing a lot stays clean", input: "we laugh a lot in this stream honestly", clean: []string{"laugh a lot"}},
+		{name: "calling someone a nerd stays clean", input: "do not be a nerd about it, just queue", clean: []string{"be a nerd"}},
+		{name: "spanish mari with a dog stays clean", input: "Mari con el perro salió temprano", clean: []string{"Mari con", "el perro"}},
+		{name: "russian buy expensively stays clean", input: "купи дорого, потом не торгуйся", clean: []string{"купи дорого"}},
+		{name: "one grows older stays clean", input: "when one grows older the aim goes first", clean: []string{"one grows"}},
+		{name: "ninja proof stays clean", input: "is this ninja proof or not", clean: []string{"ninja proof"}},
+		{name: "eager beaver stays clean", input: "he's an eager beaver who wants to gain energy before the boss", clean: []string{"an eager", "gain energy"}},
+	})
+}
