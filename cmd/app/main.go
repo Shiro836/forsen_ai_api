@@ -22,6 +22,7 @@ import (
 	"app/internal/app/history"
 	"app/internal/app/monitoring"
 	"app/internal/app/processor"
+	"app/internal/app/queue"
 	"app/pkg/agentic"
 	"app/pkg/ai"
 	"app/pkg/clickhouse"
@@ -140,7 +141,7 @@ func main() {
 	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, characterLlm, procService)
 	chatTTSHandler := processor.NewChatTTSHandler(logger.WithGroup("chat_tts_handler"), db, procService)
 
-	proc := processor.NewProcessor(logger.WithGroup("processor"), db, connManager, aiHandler, ttsHandler, universalHandler, agenticHandler, chatTTSHandler)
+	proc := processor.NewProcessor(logger.WithGroup("processor"), db, queue.New(db), connManager, aiHandler, ttsHandler, universalHandler, agenticHandler, chatTTSHandler)
 
 	conns.SetProcessor(connManager, proc)
 

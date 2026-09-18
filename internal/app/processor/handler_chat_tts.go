@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"app/pkg/tools"
 	"context"
 	"fmt"
 	"log/slog"
@@ -59,31 +58,6 @@ func (h *ChatTTSHandler) Handle(ctx context.Context, input InteractionInput, eve
 	if len(filteredRequest) == 0 {
 		return nil
 	}
-
-	// Poll for incoming reward messages — if one arrives, skip this chat TTS
-	pollCtx, pollCancel := context.WithCancel(ctx)
-	defer pollCancel()
-	go func() {
-		defer tools.LogPanic(logger, "reward poll")
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-pollCtx.Done():
-				return
-			case <-ticker.C:
-				has, err := h.db.HasWaitingKnownRewardMessage(pollCtx, input.Broadcaster.ID)
-				if err != nil {
-					continue
-				}
-				if has {
-					input.State.AddSkipped(msgID)
-					eventWriter(skipEvent(msgID, true))
-					return
-				}
-			}
-		}
-	}()
 
 	voice := defaultChatVoice
 	if input.TwitchUserID != 0 {
