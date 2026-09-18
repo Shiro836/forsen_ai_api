@@ -141,8 +141,12 @@ func (s *UserSettings) PlayOrder() []MsgClass {
 	return slices.Clone(s.QueueOrder)
 }
 
+func (a EventAction) Complete() bool {
+	return a.RewardType == TwitchRewardUniversalTTS || a.CardID != nil
+}
+
 func (s *UserSettings) EventAction(class MsgClass) EventAction {
-	if action := s.EventActions[class]; action != nil {
+	if action := s.EventActions[class]; action != nil && action.Complete() {
 		return *action
 	}
 	return EventAction{RewardType: TwitchRewardUniversalTTS}

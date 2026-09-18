@@ -58,7 +58,7 @@
 <div id="bd-{{ .Class }}-grid" class="grid max-h-72 grid-cols-4 gap-2 overflow-y-auto pr-1 pt-1">
     {{ range .Characters }}
     <button type="button" class="hover-lift {{template "button-2"}} flex flex-col items-center gap-1 p-2"
-        hx-post="/bits-donations/{{ $.Class }}/character" hx-vals='{"card_id": "{{ .ID }}"}'
+        hx-post="/bits-donations/{{ $.Class }}/character" hx-vals='{"card_id": "{{ .ID }}", "reward_type": "{{ $.RewardType }}"}'
         hx-target="#bd-{{ $.Class }}" hx-swap="outerHTML">
         <img class="h-14 w-14 object-contain" src="/characters/{{ .ID }}/image?w=200" loading="lazy" alt="">
         <span class="w-full truncate text-center text-xs">{{ .Name }}</span>
@@ -92,14 +92,17 @@
 
     {{ if .NeedsCharacter }}
     <div class="flex flex-col gap-2">
-        <span class="text-sm text-gray-600 dark:text-gray-300">Character</span>
+        <div class="flex items-baseline justify-between text-sm text-gray-600 dark:text-gray-300">
+            <span>Character</span>
+            {{ if not .Character }}<span class="text-amber-600 dark:text-amber-400">pick one to save</span>{{ end }}
+        </div>
         {{ if .Character }}
         <div class="flex items-center gap-3">
             <img class="h-12 w-12 object-contain" src="/characters/{{ .Character.ID }}/image?w=200" alt="">
             <span class="flex-grow truncate font-medium">{{ .Character.Name }}</span>
             {{ if not .Picker }}
             <button type="button" class="{{template "button-2"}} px-4 py-1.5 text-sm"
-                hx-get="/bits-donations/{{ .Class }}/characters"
+                hx-get="/bits-donations/{{ .Class }}/characters" hx-vals='{"reward_type": "{{ .RewardType }}"}'
                 hx-target="#bd-{{ .Class }}" hx-swap="outerHTML">Change</button>
             {{ end }}
         </div>
@@ -107,7 +110,8 @@
         {{ with .Picker }}
         <input type="search" name="q" value="{{ .Query }}" placeholder="search" autocomplete="off"
             class="w-full {{template "input-class"}} px-4 py-2"
-            hx-get="/bits-donations/{{ .Class }}/characters" hx-trigger="input changed delay:300ms, search"
+            hx-get="/bits-donations/{{ .Class }}/characters" hx-vals='{"reward_type": "{{ .RewardType }}"}'
+            hx-trigger="input changed delay:300ms, search"
             hx-target="#bd-{{ .Class }}-grid" hx-swap="outerHTML">
         {{ template "bd-picker-grid" . }}
         {{ end }}

@@ -47,6 +47,7 @@ type bdCharacter struct {
 
 type bdPicker struct {
 	Class      db.MsgClass
+	RewardType int
 	Query      string
 	Characters []bdCharacter
 }
@@ -54,6 +55,7 @@ type bdPicker struct {
 type bdEvent struct {
 	Class          db.MsgClass
 	Name           string
+	RewardType     int
 	Actions        []bdActionOption
 	NeedsCharacter bool
 	Character      *bdCharacter
@@ -80,12 +82,11 @@ func newBDOrder(settings *db.UserSettings) bdOrder {
 	return bdOrder{Lanes: lanes}
 }
 
-func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, openPicker bool) (*bdEvent, error) {
-	action := settings.EventAction(class)
-
+func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, action db.EventAction, openPicker bool) (*bdEvent, error) {
 	event := &bdEvent{
 		Class:          class,
 		Name:           laneNames[class],
+		RewardType:     int(action.RewardType),
 		NeedsCharacter: action.RewardType != db.TwitchRewardUniversalTTS,
 	}
 	for _, rewardType := range eventActions {
@@ -108,7 +109,7 @@ func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSett
 	}
 
 	if openPicker || event.Character == nil {
-		picker, err := api.newBDPicker(r, user, settings, class, "")
+		picker, err := api.newBDPicker(r, user, settings, class, action.RewardType, "")
 		if err != nil {
 			return nil, err
 		}
@@ -118,7 +119,7 @@ func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSett
 	return event, nil
 }
 
-func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, query string) (*bdPicker, error) {
+func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, rewardType db.TwitchRewardType, query string) (*bdPicker, error) {
 	cards, err := api.db.GetCharCards(r.Context(), user.ID, db.GetChatCardsParams{
 		ShowPublic: true,
 		SortBy:     db.SortByNewest,
@@ -130,7 +131,7 @@ func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSet
 	query = strings.TrimSpace(query)
 	needle := strings.ToLower(query)
 
-	picker := &bdPicker{Class: class, Query: query}
+	picker := &bdPicker{Class: class, RewardType: int(rewardType), Query: query}
 	for _, card := range cards {
 		if settings.CardDisabled(card.ID) {
 			continue
@@ -157,7 +158,7 @@ func (api *API) bitsDonations(r *http.Request) template.HTML {
 
 	page := &bdPage{Order: newBDOrder(settings)}
 	for _, class := range []db.MsgClass{db.MsgClassBits, db.MsgClassDonation} {
-		event, err := api.newBDEvent(r, user, settings, class, false)
+		event, err := api.newBDEvent(r, user, settings, class, settings.EventAction(class), false)
 		if err != nil {
 			return getHtml("error.html", &htmlErr{ErrorCode: http.StatusInternalServerError, ErrorMessage: "failed to load characters: " + err.Error()})
 		}
@@ -195,13 +196,34 @@ func bdEventClass(w http.ResponseWriter, r *http.Request) (db.MsgClass, bool) {
 	return class, true
 }
 
-func (api *API) bdRenderEvent(w http.ResponseWriter, r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, openPicker bool) {
-	event, err := api.newBDEvent(r, user, settings, class, openPicker)
+func bdRewardType(w http.ResponseWriter, r *http.Request) (db.TwitchRewardType, bool) {
+	value, err := strconv.Atoi(r.Form.Get("reward_type"))
+	if err != nil || !slices.Contains(eventActions, db.TwitchRewardType(value)) {
+		http.Error(w, "invalid action", http.StatusBadRequest)
+		return 0, false
+	}
+	return db.TwitchRewardType(value), true
+}
+
+func (api *API) bdRenderEvent(w http.ResponseWriter, r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, action db.EventAction, openPicker bool) {
+	event, err := api.newBDEvent(r, user, settings, class, action, openPicker)
 	if err != nil {
 		http.Error(w, "failed to load characters: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	_ = html.ExecuteTemplate(w, "bd-event", event)
+}
+
+func (api *API) bdSaveAction(w http.ResponseWriter, r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, action db.EventAction) bool {
+	if settings.EventActions == nil {
+		settings.EventActions = make(map[db.MsgClass]*db.EventAction)
+	}
+	settings.EventActions[class] = &action
+	if err := api.db.UpdateUserData(r.Context(), user.ID, settings); err != nil {
+		http.Error(w, "failed to save: "+err.Error(), http.StatusInternalServerError)
+		return false
+	}
+	return true
 }
 
 func (api *API) bitsDonationsMove(w http.ResponseWriter, r *http.Request) {
@@ -241,24 +263,20 @@ func (api *API) bitsDonationsAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	value, err := strconv.Atoi(r.Form.Get("reward_type"))
-	if err != nil || !slices.Contains(eventActions, db.TwitchRewardType(value)) {
-		http.Error(w, "invalid action", http.StatusBadRequest)
+	rewardType, ok := bdRewardType(w, r)
+	if !ok {
 		return
 	}
 
 	action := settings.EventAction(class)
-	action.RewardType = db.TwitchRewardType(value)
-	if settings.EventActions == nil {
-		settings.EventActions = make(map[db.MsgClass]*db.EventAction)
-	}
-	settings.EventActions[class] = &action
-	if err := api.db.UpdateUserData(r.Context(), user.ID, settings); err != nil {
-		http.Error(w, "failed to save: "+err.Error(), http.StatusInternalServerError)
+	action.RewardType = rewardType
+
+	// a character action is stored only once its character is picked
+	if action.Complete() && !api.bdSaveAction(w, r, user, settings, class, action) {
 		return
 	}
 
-	api.bdRenderEvent(w, r, user, settings, class, false)
+	api.bdRenderEvent(w, r, user, settings, class, action, false)
 }
 
 func (api *API) bitsDonationsCharacter(w http.ResponseWriter, r *http.Request) {
@@ -281,18 +299,17 @@ func (api *API) bitsDonationsCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	action := settings.EventAction(class)
-	action.CardID = &cardID
-	if settings.EventActions == nil {
-		settings.EventActions = make(map[db.MsgClass]*db.EventAction)
-	}
-	settings.EventActions[class] = &action
-	if err := api.db.UpdateUserData(r.Context(), user.ID, settings); err != nil {
-		http.Error(w, "failed to save: "+err.Error(), http.StatusInternalServerError)
+	rewardType, ok := bdRewardType(w, r)
+	if !ok {
 		return
 	}
 
-	api.bdRenderEvent(w, r, user, settings, class, false)
+	action := db.EventAction{RewardType: rewardType, CardID: &cardID}
+	if !api.bdSaveAction(w, r, user, settings, class, action) {
+		return
+	}
+
+	api.bdRenderEvent(w, r, user, settings, class, action, false)
 }
 
 func (api *API) bitsDonationsPicker(w http.ResponseWriter, r *http.Request) {
@@ -305,12 +322,19 @@ func (api *API) bitsDonationsPicker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !r.Form.Has("q") {
-		api.bdRenderEvent(w, r, user, settings, class, true)
+	rewardType, ok := bdRewardType(w, r)
+	if !ok {
 		return
 	}
 
-	picker, err := api.newBDPicker(r, user, settings, class, r.Form.Get("q"))
+	if !r.Form.Has("q") {
+		action := settings.EventAction(class)
+		action.RewardType = rewardType
+		api.bdRenderEvent(w, r, user, settings, class, action, true)
+		return
+	}
+
+	picker, err := api.newBDPicker(r, user, settings, class, rewardType, r.Form.Get("q"))
 	if err != nil {
 		http.Error(w, "failed to load characters: "+err.Error(), http.StatusInternalServerError)
 		return
