@@ -50,7 +50,6 @@ type TwitchMessage struct {
 	RewardID     string `json:"reward_id"`
 }
 
-// MsgClass groups queue rows for scheduling; only MsgClassReward outranks the rest.
 type MsgClass string
 
 const (
@@ -59,15 +58,19 @@ const (
 	MsgClassUnrouted MsgClass = "unrouted"
 )
 
-// Both expressions expect the msg_queue row aliased as mq.
-const (
-	msgClassExpr = `case
-		when coalesce(mq.msg->>'reward_id', '') = '' then 'chat'
-		when exists (select 1 from reward_buttons rb where rb.twitch_reward_id = mq.msg->>'reward_id') then 'reward'
-		else 'unrouted'
-	end`
-	msgRankExpr = `case (` + msgClassExpr + `) when 'reward' then 1 else 0 end`
-)
+const msgClassExpr = `(case
+	when coalesce(msg_queue.msg->>'reward_id', '') = '' then 'chat'
+	when exists (select 1 from reward_buttons rb where rb.twitch_reward_id = msg_queue.msg->>'reward_id') then 'reward'
+	else 'unrouted'
+end)`
+
+func classNames(classes []MsgClass) []string {
+	names := make([]string, len(classes))
+	for i, class := range classes {
+		names[i] = string(class)
+	}
+	return names
+}
 
 type Message struct {
 	ID uuid.UUID
@@ -81,10 +84,6 @@ type Message struct {
 	Updated int
 
 	Data []byte
-
-	// Class and Rank are set only by ClaimNextMsg.
-	Class MsgClass
-	Rank  int
 }
 
 func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage, data *MessageData) (uuid.UUID, error) {
@@ -137,31 +136,35 @@ func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMes
 	return id, nil
 }
 
-// ClaimNextMsg marks the best waiting row current and returns it: highest rank
-// first, then arrival order (ids are uuid v7). ErrNoRows when nothing waits.
-func (db *DB) ClaimNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error) {
-	pick := sq.Select("mq.id").
-		From("msg_queue mq").
-		Where(sq.Eq{"mq.user_id": userID, "mq.status": MsgStatusWait}).
-		OrderBy(msgRankExpr+" desc", "mq.id asc").
+// Classes play in the given order; classes missing from it play last.
+func (db *DB) ClaimNextMsg(ctx context.Context, userID uuid.UUID, order []MsgClass) (*Message, MsgClass, error) {
+	pick := sq.Select("msg_queue.id").
+		From("msg_queue").
+		Where(sq.Eq{"msg_queue.user_id": userID, "msg_queue.status": MsgStatusWait}).
+		OrderByClause("array_position(?::text[], "+msgClassExpr+") nulls last", classNames(order)).
+		// ids are uuid v7, so id order is arrival order
+		OrderBy("msg_queue.id").
 		Limit(1)
 
-	query, args, err := psql.Update("msg_queue mq").
+	query, args, err := psql.Update("msg_queue").
 		Set("status", MsgStatusCurrent).
 		Set("updated", bumpUpdated).
-		Where(sq.Expr("mq.id = (?)", pick)).
-		Suffix("returning mq.id, mq.user_id, mq.msg, mq.data, " + msgClassExpr + ", " + msgRankExpr).
+		Where(sq.Expr("msg_queue.id = (?)", pick)).
+		Suffix("returning msg_queue.id, msg_queue.user_id, msg_queue.msg, msg_queue.data, " + msgClassExpr).
 		ToSql()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build claim query: %w", err)
+		return nil, "", fmt.Errorf("failed to build claim query: %w", err)
 	}
 
-	msg := Message{}
-	if err := db.QueryRow(ctx, query, args...).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage, &msg.Data, &msg.Class, &msg.Rank); err != nil {
-		return nil, fmt.Errorf("failed to claim next message: %w", parseErr(err))
+	var (
+		msg   Message
+		class MsgClass
+	)
+	if err := db.QueryRow(ctx, query, args...).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage, &msg.Data, &class); err != nil {
+		return nil, "", fmt.Errorf("failed to claim next message: %w", parseErr(err))
 	}
 
-	return &msg, nil
+	return &msg, class, nil
 }
 
 func (db *DB) GetMessageByID(ctx context.Context, msgID uuid.UUID) (*Message, error) {
@@ -293,12 +296,11 @@ func ParseMessageData(data []byte) (*MessageData, error) {
 	return &msgData, nil
 }
 
-// CompleteMsg marks a current row processed. A row the skip path already
-// deleted is left alone.
 func (db *DB) CompleteMsg(ctx context.Context, msgID uuid.UUID) error {
 	query, args, err := psql.Update("msg_queue").
 		Set("status", MsgStatusProcessed).
 		Set("updated", bumpUpdated).
+		// a skipped row is already Deleted and must stay that way
 		Where(sq.Eq{"id": msgID, "status": MsgStatusCurrent}).
 		ToSql()
 	if err != nil {
@@ -312,8 +314,6 @@ func (db *DB) CompleteMsg(ctx context.Context, msgID uuid.UUID) error {
 	return nil
 }
 
-// RecoverCurrentMessages marks every current row of the user processed; the
-// processor calls it once on start to close rows a previous run left behind.
 func (db *DB) RecoverCurrentMessages(ctx context.Context, userID uuid.UUID) (int, error) {
 	query, args, err := psql.Update("msg_queue").
 		Set("status", MsgStatusProcessed).
@@ -332,31 +332,31 @@ func (db *DB) RecoverCurrentMessages(ctx context.Context, userID uuid.UUID) (int
 	return int(tag.RowsAffected()), nil
 }
 
-func (db *DB) HasWaitingOutranking(ctx context.Context, userID uuid.UUID, rank int) (bool, error) {
+func (db *DB) HasWaitingOfClasses(ctx context.Context, userID uuid.UUID, classes []MsgClass) (bool, error) {
 	waiting := sq.Select("1").
-		From("msg_queue mq").
-		Where(sq.Eq{"mq.user_id": userID, "mq.status": MsgStatusWait}).
-		Where(sq.Expr(msgRankExpr+" > ?", rank))
+		From("msg_queue").
+		Where(sq.Eq{"msg_queue.user_id": userID, "msg_queue.status": MsgStatusWait}).
+		Where(sq.Expr(msgClassExpr+" = any(?::text[])", classNames(classes)))
 
 	query, args, err := psql.Select().Column(sq.Expr("exists(?)", waiting)).ToSql()
 	if err != nil {
-		return false, fmt.Errorf("failed to build outranking query: %w", err)
+		return false, fmt.Errorf("failed to build waiting classes query: %w", err)
 	}
 
 	var exists bool
 	if err := db.QueryRow(ctx, query, args...).Scan(&exists); err != nil {
-		return false, fmt.Errorf("failed to check for outranking message: %w", err)
+		return false, fmt.Errorf("failed to check for waiting classes: %w", err)
 	}
 
 	return exists, nil
 }
 
 func (db *DB) PurgeWaitingClass(ctx context.Context, userID uuid.UUID, class MsgClass) (int, error) {
-	query, args, err := psql.Update("msg_queue mq").
+	query, args, err := psql.Update("msg_queue").
 		Set("status", MsgStatusDeleted).
 		Set("updated", bumpUpdated).
-		Where(sq.Eq{"mq.user_id": userID, "mq.status": MsgStatusWait}).
-		Where(sq.Expr("("+msgClassExpr+") = ?", string(class))).
+		Where(sq.Eq{"msg_queue.user_id": userID, "msg_queue.status": MsgStatusWait}).
+		Where(sq.Expr(msgClassExpr+" = ?", string(class))).
 		ToSql()
 	if err != nil {
 		return 0, fmt.Errorf("failed to build purge query: %w", err)

@@ -83,9 +83,16 @@ func (f *fixture) status(id uuid.UUID) db.MsgStatus {
 	return msg.Status
 }
 
-func (f *fixture) claim() (*db.Message, int) {
+var rewardFirst = Order{db.MsgClassReward}
+
+func (f *fixture) claim() (*Claimed, int) {
 	f.t.Helper()
-	msg, purged, err := f.q.Claim(context.Background(), f.user)
+	return f.claimWith(rewardFirst)
+}
+
+func (f *fixture) claimWith(order Order) (*Claimed, int) {
+	f.t.Helper()
+	msg, purged, err := f.q.Claim(context.Background(), f.user, order)
 	if err != nil {
 		f.t.Fatalf("claim: %v", err)
 	}
@@ -94,8 +101,36 @@ func (f *fixture) claim() (*db.Message, int) {
 
 func (f *fixture) claimEmpty() {
 	f.t.Helper()
-	if _, _, err := f.q.Claim(context.Background(), f.user); !errors.Is(err, ErrEmpty) {
+	if _, _, err := f.q.Claim(context.Background(), f.user, rewardFirst); !errors.Is(err, ErrEmpty) {
 		f.t.Fatalf("expected empty queue, got %v", err)
+	}
+}
+
+func TestContainersOrderDecidesThePick(t *testing.T) {
+	f := newFixture(t)
+	reward := f.push("a", "redeem", f.reward)
+	unbound := f.push("b", "other reward", "rw-unknown")
+
+	msg, _ := f.claimWith(Order{db.MsgClassUnrouted, db.MsgClassReward})
+	if msg.ID != unbound {
+		t.Fatalf("claimed %v, want the later row whose class the order ranks first", msg.ID)
+	}
+	if err := f.q.Complete(context.Background(), unbound); err != nil {
+		t.Fatal(err)
+	}
+	if msg, _ := f.claimWith(Order{db.MsgClassUnrouted, db.MsgClassReward}); msg.ID != reward {
+		t.Fatalf("claimed %v, want the reward row", msg.ID)
+	}
+}
+
+func TestContainersEmptyOrderIsArrivalOrder(t *testing.T) {
+	f := newFixture(t)
+	chat := f.push("a", "hi", "")
+	f.push("b", "redeem", f.reward)
+
+	msg, purged := f.claimWith(nil)
+	if msg.ID != chat || purged != 0 {
+		t.Fatalf("claimed %v purged=%d, want the first-arrived chat row and nothing purged", msg.ID, purged)
 	}
 }
 
@@ -106,8 +141,8 @@ func TestContainersRewardOutranksChat(t *testing.T) {
 	reward := f.push("c", "redeem", f.reward)
 
 	msg, purged := f.claim()
-	if msg.ID != reward || msg.Class != db.MsgClassReward || msg.Rank != 1 {
-		t.Fatalf("claimed %v class=%s rank=%d, want reward row", msg.ID, msg.Class, msg.Rank)
+	if msg.ID != reward || msg.Class != db.MsgClassReward {
+		t.Fatalf("claimed %v class=%s, want reward row", msg.ID, msg.Class)
 	}
 	if purged != 2 {
 		t.Fatalf("purged %d chat rows, want 2", purged)
@@ -204,7 +239,7 @@ func TestContainersPreempt(t *testing.T) {
 
 	f.push("a", "chat plays", "")
 	chat, _ := f.claim()
-	preempt := f.q.WatchPreempt(ctx, chat)
+	preempt := f.q.WatchPreempt(ctx, chat, rewardFirst)
 
 	select {
 	case <-preempt:
@@ -227,7 +262,7 @@ func TestContainersRewardNeverPreempted(t *testing.T) {
 
 	f.push("a", "redeem plays", f.reward)
 	reward, _ := f.claim()
-	preempt := f.q.WatchPreempt(ctx, reward)
+	preempt := f.q.WatchPreempt(ctx, reward, rewardFirst)
 	f.push("b", "another redeem", f.reward)
 
 	select {

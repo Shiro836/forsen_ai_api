@@ -27,6 +27,8 @@ func GetSFX(name string) ([]byte, error) {
 	return embeddedSFX.ReadFile("sfx/" + name + ".mp3")
 }
 
+var defaultOrder = queue.Order{db.MsgClassReward}
+
 type Processor struct {
 	logger *slog.Logger
 
@@ -198,7 +200,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 	}
 
 	for {
-		msg, purged, err := p.queue.Claim(ctx, broadcaster.ID)
+		msg, purged, err := p.queue.Claim(ctx, broadcaster.ID, defaultOrder)
 		if err != nil {
 			if errors.Is(err, queue.ErrEmpty) {
 				select {
@@ -231,7 +233,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 	}
 }
 
-func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, msg *db.Message) (err error) {
+func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, msg *queue.Claimed) (err error) {
 	logger := p.logger.With("user", broadcaster.TwitchLogin, "msg_id", msg.ID)
 
 	userSettings, err := p.db.GetUserSettings(ctx, broadcaster.ID)
@@ -270,7 +272,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 
 		watchCtx, stopWatch := context.WithCancel(ctx)
 		defer stopWatch()
-		preempt := p.queue.WatchPreempt(watchCtx, msg)
+		preempt := p.queue.WatchPreempt(watchCtx, msg, defaultOrder)
 		go func() {
 			select {
 			case <-preempt:

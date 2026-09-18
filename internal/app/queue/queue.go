@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"app/db"
@@ -14,10 +15,18 @@ import (
 	"github.com/google/uuid"
 )
 
-// ErrEmpty is returned by Claim when the user has no waiting row.
 var ErrEmpty = errors.New("queue empty")
 
 const watchInterval = time.Second
+
+// Order is highest first. Chat is never ranked: anything ranked drops it
+// while queued and cuts it while playing.
+type Order []db.MsgClass
+
+type Claimed struct {
+	*db.Message
+	Class db.MsgClass
+}
 
 type Queue struct {
 	db *db.DB
@@ -27,59 +36,46 @@ func New(database *db.DB) *Queue {
 	return &Queue{db: database}
 }
 
-// yields reports whether rows of the class are dropped (queued) or cut
-// (playing) as soon as anything outranking them arrives.
-func yields(class db.MsgClass) bool {
-	return class == db.MsgClassChat
-}
-
-// Claim marks the best waiting row current and returns it, along with how
-// many yielding rows were purged because the claimed row outranks them.
-func (q *Queue) Claim(ctx context.Context, userID uuid.UUID) (msg *db.Message, purged int, err error) {
-	msg, err = q.db.ClaimNextMsg(ctx, userID)
+func (q *Queue) Claim(ctx context.Context, userID uuid.UUID, order Order) (claimed *Claimed, purged int, err error) {
+	msg, class, err := q.db.ClaimNextMsg(ctx, userID, order)
 	if err != nil {
 		if errors.Is(err, db.ErrNoRows) {
 			return nil, 0, ErrEmpty
 		}
 		return nil, 0, fmt.Errorf("claim: %w", err)
 	}
+	claimed = &Claimed{Message: msg, Class: class}
 
-	if msg.Rank > 0 {
+	if slices.Contains(order, class) {
 		purged, err = q.db.PurgeWaitingClass(ctx, userID, db.MsgClassChat)
 		if err != nil {
-			return msg, 0, fmt.Errorf("purge yielding rows: %w", err)
+			return claimed, 0, fmt.Errorf("purge chat: %w", err)
 		}
 	}
 
-	return msg, purged, nil
+	return claimed, purged, nil
 }
 
-// Purge deletes every waiting row of the class.
 func (q *Queue) Purge(ctx context.Context, userID uuid.UUID, class db.MsgClass) (int, error) {
 	return q.db.PurgeWaitingClass(ctx, userID, class)
 }
 
-// Complete closes a claimed row; a row the skip path already deleted stays deleted.
 func (q *Queue) Complete(ctx context.Context, msgID uuid.UUID) error {
 	return q.db.CompleteMsg(ctx, msgID)
 }
 
-// Skip deletes a row whether it waits or plays.
 func (q *Queue) Skip(ctx context.Context, msgID uuid.UUID) error {
 	return q.db.UpdateMessageStatus(ctx, msgID, db.MsgStatusDeleted)
 }
 
-// Recover closes rows a previous processor run left current.
 func (q *Queue) Recover(ctx context.Context, userID uuid.UUID) (int, error) {
 	return q.db.RecoverCurrentMessages(ctx, userID)
 }
 
-// WatchPreempt delivers one value when a row outranking msg arrives while msg
-// plays; for classes that do not yield it never delivers. Producers run in
-// another process, so this polls the queue until ctx ends.
-func (q *Queue) WatchPreempt(ctx context.Context, msg *db.Message) <-chan struct{} {
+// Producers run in another process, so this polls.
+func (q *Queue) WatchPreempt(ctx context.Context, claimed *Claimed, order Order) <-chan struct{} {
 	fired := make(chan struct{}, 1)
-	if !yields(msg.Class) {
+	if claimed.Class != db.MsgClassChat {
 		return fired
 	}
 
@@ -91,8 +87,8 @@ func (q *Queue) WatchPreempt(ctx context.Context, msg *db.Message) <-chan struct
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				outranked, err := q.db.HasWaitingOutranking(ctx, msg.UserID, msg.Rank)
-				if err != nil || !outranked {
+				ranked, err := q.db.HasWaitingOfClasses(ctx, claimed.UserID, order)
+				if err != nil || !ranked {
 					continue
 				}
 				fired <- struct{}{}
