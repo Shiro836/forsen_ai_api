@@ -55,6 +55,8 @@ type MsgClass string
 const (
 	MsgClassChat     MsgClass = "chat"
 	MsgClassReward   MsgClass = "reward"
+	MsgClassBits     MsgClass = "bits"
+	MsgClassDonation MsgClass = "donation"
 	MsgClassUnrouted MsgClass = "unrouted"
 )
 

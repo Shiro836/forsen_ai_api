@@ -27,8 +27,6 @@ func GetSFX(name string) ([]byte, error) {
 	return embeddedSFX.ReadFile("sfx/" + name + ".mp3")
 }
 
-var defaultOrder = queue.Order{db.MsgClassReward}
-
 type Processor struct {
 	logger *slog.Logger
 
@@ -200,7 +198,14 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 	}
 
 	for {
-		msg, purged, err := p.queue.Claim(ctx, broadcaster.ID, defaultOrder)
+		userSettings, err := p.db.GetUserSettings(ctx, broadcaster.ID)
+		if err != nil {
+			logger.Warn("failed to get user settings, using defaults", "err", err)
+			userSettings = &db.UserSettings{}
+		}
+		order := queue.Order(userSettings.PlayOrder())
+
+		msg, purged, err := p.queue.Claim(ctx, broadcaster.ID, order)
 		if err != nil {
 			if errors.Is(err, queue.ErrEmpty) {
 				select {
@@ -220,7 +225,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 		}
 		p.connManager.NotifyControlPanel(broadcaster.ID)
 
-		if err := p.processNextMessage(ctx, eventWriter, broadcaster, state, msg); err != nil {
+		if err := p.processNextMessage(ctx, eventWriter, broadcaster, state, userSettings, order, msg); err != nil {
 			logger.Error("error processing message", "msg_id", msg.ID, "err", err)
 		}
 
@@ -233,14 +238,8 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 	}
 }
 
-func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, msg *queue.Claimed) (err error) {
+func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, userSettings *db.UserSettings, order queue.Order, msg *queue.Claimed) (err error) {
 	logger := p.logger.With("user", broadcaster.TwitchLogin, "msg_id", msg.ID)
-
-	userSettings, err := p.db.GetUserSettings(ctx, broadcaster.ID)
-	if err != nil {
-		logger.Warn("failed to get user settings, using defaults", "err", err)
-		userSettings = &db.UserSettings{}
-	}
 
 	state.SetCurrent(msg.ID)
 	defer state.SetCurrent(uuid.Nil)
@@ -272,7 +271,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 
 		watchCtx, stopWatch := context.WithCancel(ctx)
 		defer stopWatch()
-		preempt := p.queue.WatchPreempt(watchCtx, msg, defaultOrder)
+		preempt := p.queue.WatchPreempt(watchCtx, msg, order)
 		go func() {
 			select {
 			case <-preempt:

@@ -117,6 +117,35 @@ type UserSettings struct {
 	CustomFilterPrompt string `json:"custom_filter_prompt,omitempty"` // Streamer-written instructions appended to the LLM filter system prompt
 
 	DisabledCardIDs []uuid.UUID `json:"disabled_card_ids,omitempty"` // Characters the streamer has switched off: not a voice, not a dialogue participant
+
+	QueueOrder   []MsgClass                `json:"queue_order,omitempty"`
+	EventActions map[MsgClass]*EventAction `json:"event_actions,omitempty"`
+}
+
+type EventAction struct {
+	RewardType TwitchRewardType `json:"reward_type"`
+	CardID     *uuid.UUID       `json:"card_id,omitempty"`
+}
+
+var DefaultQueueOrder = []MsgClass{MsgClassDonation, MsgClassBits, MsgClassReward}
+
+func (s *UserSettings) PlayOrder() []MsgClass {
+	if len(s.QueueOrder) != len(DefaultQueueOrder) {
+		return slices.Clone(DefaultQueueOrder)
+	}
+	for _, class := range DefaultQueueOrder {
+		if !slices.Contains(s.QueueOrder, class) {
+			return slices.Clone(DefaultQueueOrder)
+		}
+	}
+	return slices.Clone(s.QueueOrder)
+}
+
+func (s *UserSettings) EventAction(class MsgClass) EventAction {
+	if action := s.EventActions[class]; action != nil {
+		return *action
+	}
+	return EventAction{RewardType: TwitchRewardUniversalTTS}
 }
 
 func (s *UserSettings) CardDisabled(cardID uuid.UUID) bool {

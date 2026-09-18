@@ -757,6 +757,10 @@ video {
   z-index: 50;
 }
 
+.col-span-4 {
+  grid-column: span 4 / span 4;
+}
+
 .col-start-1 {
   grid-column-start: 1;
 }
@@ -1064,6 +1068,10 @@ video {
   height: 3rem;
 }
 
+.h-14 {
+  height: 3.5rem;
+}
+
 .h-16 {
   height: 4rem;
 }
@@ -1184,6 +1192,10 @@ video {
   max-height: 16rem;
 }
 
+.max-h-72 {
+  max-height: 18rem;
+}
+
 .max-h-full {
   max-height: 100%;
 }
@@ -1210,6 +1222,10 @@ video {
 
 .w-12 {
   width: 3rem;
+}
+
+.w-14 {
+  width: 3.5rem;
 }
 
 .w-16 {
@@ -1322,6 +1338,10 @@ video {
 
 .w-\[25rem\] {
   width: 25rem;
+}
+
+.w-\[26rem\] {
+  width: 26rem;
 }
 
 .w-\[28rem\] {
@@ -1649,6 +1669,10 @@ video {
 
 .gap-1\.5 {
   gap: 0.375rem;
+}
+
+.gap-10 {
+  gap: 2.5rem;
 }
 
 .gap-12 {
@@ -2029,6 +2053,11 @@ video {
 .bg-red-50 {
   --tw-bg-opacity: 1;
   background-color: rgb(254 242 242 / var(--tw-bg-opacity));
+}
+
+.bg-red-500 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(239 68 68 / var(--tw-bg-opacity));
 }
 
 .bg-red-500\/20 {
@@ -2685,6 +2714,11 @@ video {
   color: rgb(37 99 235 / var(--tw-text-opacity));
 }
 
+.text-emerald-600 {
+  --tw-text-opacity: 1;
+  color: rgb(5 150 105 / var(--tw-text-opacity));
+}
+
 .text-emerald-700 {
   --tw-text-opacity: 1;
   color: rgb(4 120 87 / var(--tw-text-opacity));
@@ -3058,8 +3092,22 @@ video {
   outline-offset: 2px;
 }
 
+.disabled\:opacity-25:disabled {
+  opacity: 0.25;
+}
+
 .disabled\:opacity-50:disabled {
   opacity: 0.5;
+}
+
+.disabled\:hover\:border-slate-300:hover:disabled {
+  --tw-border-opacity: 1;
+  border-color: rgb(203 213 225 / var(--tw-border-opacity));
+}
+
+.peer:checked ~ .peer-checked\:border-twitch-dark {
+  --tw-border-opacity: 1;
+  border-color: rgb(145 70 255 / var(--tw-border-opacity));
 }
 
 .peer:checked ~ .peer-checked\:bg-purple-600 {
@@ -3067,9 +3115,19 @@ video {
   background-color: rgb(147 51 234 / var(--tw-bg-opacity));
 }
 
+.peer:checked ~ .peer-checked\:bg-twitch-dark {
+  --tw-bg-opacity: 1;
+  background-color: rgb(145 70 255 / var(--tw-bg-opacity));
+}
+
 .peer:checked ~ .peer-checked\:text-green-500 {
   --tw-text-opacity: 1;
   color: rgb(34 197 94 / var(--tw-text-opacity));
+}
+
+.peer:checked ~ .peer-checked\:text-white {
+  --tw-text-opacity: 1;
+  color: rgb(255 255 255 / var(--tw-text-opacity));
 }
 
 .peer:checked ~ .peer-checked\:after\:translate-x-full::after {
@@ -3093,6 +3151,17 @@ video {
 .peer:focus ~ .peer-focus\:ring-purple-300 {
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(216 180 254 / var(--tw-ring-opacity));
+}
+
+.peer:focus-visible ~ .peer-focus-visible\:ring-2 {
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+}
+
+.peer:focus-visible ~ .peer-focus-visible\:ring-twitch-light {
+  --tw-ring-opacity: 1;
+  --tw-ring-color: rgb(169 112 255 / var(--tw-ring-opacity));
 }
 
 .dark\:block:is(.dark *) {
@@ -3327,6 +3396,11 @@ video {
   color: rgb(110 231 183 / var(--tw-text-opacity));
 }
 
+.dark\:text-emerald-400:is(.dark *) {
+  --tw-text-opacity: 1;
+  color: rgb(52 211 153 / var(--tw-text-opacity));
+}
+
 .dark\:text-gray-300:is(.dark *) {
   --tw-text-opacity: 1;
   color: rgb(209 213 219 / var(--tw-text-opacity));
@@ -3466,6 +3540,21 @@ video {
 .dark\:focus\:ring-twitch-light:focus:is(.dark *) {
   --tw-ring-opacity: 1;
   --tw-ring-color: rgb(169 112 255 / var(--tw-ring-opacity));
+}
+
+.dark\:disabled\:hover\:border-slate-700:hover:disabled:is(.dark *) {
+  --tw-border-opacity: 1;
+  border-color: rgb(51 65 85 / var(--tw-border-opacity));
+}
+
+.peer:checked ~ .dark\:peer-checked\:border-twitch-light:is(.dark *) {
+  --tw-border-opacity: 1;
+  border-color: rgb(169 112 255 / var(--tw-border-opacity));
+}
+
+.peer:checked ~ .dark\:peer-checked\:bg-twitch-dark:is(.dark *) {
+  --tw-bg-opacity: 1;
+  background-color: rgb(145 70 255 / var(--tw-bg-opacity));
 }
 
 .peer:checked ~ .dark\:peer-checked\:text-green-400:is(.dark *) {

@@ -19,8 +19,7 @@ var ErrEmpty = errors.New("queue empty")
 
 const watchInterval = time.Second
 
-// Order is highest first. Chat is never ranked: anything ranked drops it
-// while queued and cuts it while playing.
+// Order is highest first.
 type Order []db.MsgClass
 
 type Claimed struct {
