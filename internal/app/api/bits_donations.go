@@ -121,7 +121,7 @@ func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSett
 func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, query string) (*bdPicker, error) {
 	cards, err := api.db.GetCharCards(r.Context(), user.ID, db.GetChatCardsParams{
 		ShowPublic: true,
-		SortBy:     db.SortByRedeems,
+		SortBy:     db.SortByNewest,
 	})
 	if err != nil {
 		return nil, err
