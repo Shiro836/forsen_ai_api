@@ -20,10 +20,6 @@ var laneNames = map[db.MsgClass]string{
 	db.MsgClassReward:   "Channel points",
 }
 
-var eventHints = map[db.MsgClass]string{
-	db.MsgClassBits: "cheers only, not power-ups",
-}
-
 var eventActions =[]db.TwitchRewardType{db.TwitchRewardUniversalTTS, db.TwitchRewardTTS, db.TwitchRewardAI}
 
 type bdLane struct {
@@ -69,7 +65,6 @@ type bdPicker struct {
 type bdEvent struct {
 	Class          db.MsgClass
 	Name           string
-	Hint           string
 	RewardType     int
 	Actions        []bdActionOption
 	NeedsCharacter bool
@@ -105,7 +100,6 @@ func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSett
 	event := &bdEvent{
 		Class:          class,
 		Name:           laneNames[class],
-		Hint:           eventHints[class],
 		RewardType:     int(action.RewardType),
 		NeedsCharacter: action.RewardType != db.TwitchRewardUniversalTTS,
 	}

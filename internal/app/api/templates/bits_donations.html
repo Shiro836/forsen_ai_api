@@ -108,7 +108,9 @@
             {{ template "bd-lane-icon" .Class }}
             {{ .Name }}
         </div>
-        <span class="min-h-5 text-sm text-gray-600 dark:text-gray-300">{{ .Hint }}</span>
+        <span class="min-h-5 text-sm text-gray-600 dark:text-gray-300">
+            {{ if eq .Class "bits" }}cheers only, not <a class="underline" href="/guide/bits" hx-get="/guide/bits" hx-select="#tab-content" hx-target="#tab-content" hx-swap="outerHTML" hx-push-url="true">power-ups</a>{{ end }}
+        </span>
     </header>
 
     <div class="flex flex-col gap-2">
