@@ -126,6 +126,9 @@ type UserSettings struct {
 	EventActions map[MsgClass]*EventAction `json:"event_actions,omitempty"`
 	LanesEnabled map[MsgClass]bool         `json:"lanes_enabled,omitempty"`
 	EventLines   map[EventLine]string      `json:"event_lines,omitempty"`
+	// FollowsStay is the unticked "drop on higher tier events": follows are
+	// free and bot-able, so by default they yield like chat TTS does.
+	FollowsStay bool `json:"follows_stay,omitempty"`
 }
 
 type EventAction struct {
@@ -133,7 +136,7 @@ type EventAction struct {
 	CardID     *uuid.UUID       `json:"card_id,omitempty"`
 }
 
-var defaultPlayGroups = [][]MsgClass{{MsgClassDonation, MsgClassBits}, {MsgClassSub}, {MsgClassReward}, {MsgClassRaid}, {MsgClassStreak}}
+var defaultPlayGroups = [][]MsgClass{{MsgClassDonation, MsgClassBits}, {MsgClassSub}, {MsgClassReward}, {MsgClassRaid}, {MsgClassStreak}, {MsgClassFollow}}
 
 // Paid classes carry a money amount, so only they can share a play group.
 func (c MsgClass) Paid() bool {

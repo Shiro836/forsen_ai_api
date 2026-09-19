@@ -80,6 +80,7 @@ const (
 	MsgClassSub      MsgClass = "sub"
 	MsgClassRaid     MsgClass = "raid"
 	MsgClassStreak   MsgClass = "streak"
+	MsgClassFollow   MsgClass = "follow"
 	MsgClassUnrouted MsgClass = "unrouted"
 )
 

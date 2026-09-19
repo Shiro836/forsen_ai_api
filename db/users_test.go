@@ -8,7 +8,7 @@ import (
 )
 
 func TestPlayOrder(t *testing.T) {
-	full := [][]MsgClass{{MsgClassStreak}, {MsgClassReward}, {MsgClassBits, MsgClassDonation}, {MsgClassRaid}, {MsgClassSub}}
+	full := [][]MsgClass{{MsgClassFollow}, {MsgClassStreak}, {MsgClassReward}, {MsgClassBits, MsgClassDonation}, {MsgClassRaid}, {MsgClassSub}}
 
 	cases := []struct {
 		name   string
@@ -20,7 +20,7 @@ func TestPlayOrder(t *testing.T) {
 		{
 			"lanes added since it was stored go last",
 			[][]MsgClass{{MsgClassReward}, {MsgClassBits, MsgClassDonation}},
-			[][]MsgClass{{MsgClassReward}, {MsgClassBits, MsgClassDonation}, {MsgClassSub}, {MsgClassRaid}, {MsgClassStreak}},
+			[][]MsgClass{{MsgClassReward}, {MsgClassBits, MsgClassDonation}, {MsgClassSub}, {MsgClassRaid}, {MsgClassStreak}, {MsgClassFollow}},
 		},
 		{"unpaid lane in a group", [][]MsgClass{{MsgClassReward, MsgClassBits}, {MsgClassDonation}}, defaultPlayGroups},
 		{"lane repeated", [][]MsgClass{{MsgClassReward}, {MsgClassBits}, {MsgClassDonation}, {MsgClassBits}}, defaultPlayGroups},
@@ -49,7 +49,7 @@ func TestLaneEnabled(t *testing.T) {
 	settings := &UserSettings{}
 	for class, want := range map[MsgClass]bool{
 		MsgClassDonation: true, MsgClassBits: true, MsgClassReward: true,
-		MsgClassSub: false, MsgClassRaid: false, MsgClassStreak: false, MsgClassChat: false,
+		MsgClassSub: false, MsgClassRaid: false, MsgClassStreak: false, MsgClassFollow: false, MsgClassChat: false,
 	} {
 		if got := settings.LaneEnabled(class); got != want {
 			t.Errorf("LaneEnabled(%s) = %v by default, want %v", class, got, want)
@@ -76,7 +76,7 @@ func TestLaneEnabled(t *testing.T) {
 func TestSetPlayOrder(t *testing.T) {
 	settings := &UserSettings{}
 
-	reordered := [][]MsgClass{{MsgClassReward}, {MsgClassDonation, MsgClassBits}, {MsgClassSub}, {MsgClassRaid}, {MsgClassStreak}}
+	reordered := [][]MsgClass{{MsgClassReward}, {MsgClassDonation, MsgClassBits}, {MsgClassSub}, {MsgClassRaid}, {MsgClassStreak}, {MsgClassFollow}}
 	if err := settings.SetPlayOrder(reordered); err != nil {
 		t.Fatal(err)
 	}

@@ -85,6 +85,7 @@ const (
 	EventLineGift   EventLine = "gift"
 	EventLineRaid   EventLine = "raid"
 	EventLineStreak EventLine = "streak"
+	EventLineFollow EventLine = "follow"
 )
 
 type eventLineSpec struct {
@@ -98,6 +99,7 @@ var eventLineSpecs = map[EventLine]eventLineSpec{
 	EventLineGift:   {"{user} gifted {count} subs", []string{"user", "count", "tier"}},
 	EventLineRaid:   {"{user} is raiding with {viewers} viewers", []string{"user", "viewers"}},
 	EventLineStreak: {"{user} watched {streak} streams in a row", []string{"user", "streak"}},
+	EventLineFollow: {"{user} followed", []string{"user"}},
 }
 
 const EventLineMaxLen = 200

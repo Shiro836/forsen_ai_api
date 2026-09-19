@@ -15,6 +15,7 @@ var bdPresets = []bdPreset{
 		db.EventLineGift:   db.EventLineGift.Default(),
 		db.EventLineRaid:   db.EventLineRaid.Default(),
 		db.EventLineStreak: db.EventLineStreak.Default(),
+		db.EventLineFollow: db.EventLineFollow.Default(),
 	}},
 	{Name: "cute", Lines: map[db.EventLine]string{
 		db.EventLineSub:    "{user} chan subscribed! Arigato, nya",
@@ -22,6 +23,7 @@ var bdPresets = []bdPreset{
 		db.EventLineGift:   "{user} sama gifted {count} subs! Kawaii",
 		db.EventLineRaid:   "Ara ara, {user} san is raiding with {viewers} nakama",
 		db.EventLineStreak: "{user} kun came back {streak} streams in a row! Ganbatte",
+		db.EventLineFollow: "{user} chan followed! Yoroshiku",
 	}},
 	{Name: "gachi", Lines: map[db.EventLine]string{
 		db.EventLineSub:    "{user} joined the leather club. Welcome to the club, buddy",
@@ -29,6 +31,7 @@ var bdPresets = []bdPreset{
 		db.EventLineGift:   "{user} paid three hundred bucks for {count} new boys next door",
 		db.EventLineRaid:   "{user} and {viewers} leathermen are entering the dungeon",
 		db.EventLineStreak: "{user} came to the gym {streak} streams in a row. Deep dark fantasies",
+		db.EventLineFollow: "{user} wants to join the leather club",
 	}},
 	{Name: "forsen", Lines: map[db.EventLine]string{
 		db.EventLineSub:    "{user} is now a baj. I see",
@@ -36,6 +39,7 @@ var bdPresets = []bdPreset{
 		db.EventLineGift:   "{user} gifted {count} subs. Snus for the bajs",
 		db.EventLineRaid:   "{viewers} stream snipers from {user} are here",
 		db.EventLineStreak: "{user} has not missed {streak} streams. Go outside, baj",
+		db.EventLineFollow: "{user} followed. New baj spotted",
 	}},
 }
 

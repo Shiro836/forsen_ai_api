@@ -22,13 +22,14 @@ var laneNames = map[db.MsgClass]string{
 	db.MsgClassReward:   "Channel points",
 	db.MsgClassRaid:     "Raids",
 	db.MsgClassStreak:   "Streaks",
+	db.MsgClassFollow:   "Follows",
 	db.MsgClassChat:     "Chat TTS",
 }
 
 var eventActions = []db.TwitchRewardType{db.TwitchRewardUniversalTTS, db.TwitchRewardTTS, db.TwitchRewardAI}
 
 // Channel points and chat have nothing to choose, so they get no card.
-var eventCards = []db.MsgClass{db.MsgClassBits, db.MsgClassDonation, db.MsgClassSub, db.MsgClassRaid, db.MsgClassStreak}
+var eventCards = []db.MsgClass{db.MsgClassBits, db.MsgClassDonation, db.MsgClassSub, db.MsgClassRaid, db.MsgClassStreak, db.MsgClassFollow}
 
 type bdLineField struct {
 	Line  db.EventLine
@@ -39,23 +40,26 @@ var eventCardLines = map[db.MsgClass][]bdLineField{
 	db.MsgClassSub:    {{db.EventLineSub, "new sub"}, {db.EventLineResub, "resub"}, {db.EventLineGift, "gift subs"}},
 	db.MsgClassRaid:   {{db.EventLineRaid, ""}},
 	db.MsgClassStreak: {{db.EventLineStreak, ""}},
+	db.MsgClassFollow: {{db.EventLineFollow, ""}},
 }
 
 // bdState is everything the page edits. It travels in the form, so nothing
 // reaches the streamer's settings before Save.
 type bdState struct {
-	Order   [][]db.MsgClass
-	Enabled map[db.MsgClass]bool
-	Actions map[db.MsgClass]db.EventAction
-	Lines   map[db.EventLine]string
+	Order       [][]db.MsgClass
+	Enabled     map[db.MsgClass]bool
+	Actions     map[db.MsgClass]db.EventAction
+	Lines       map[db.EventLine]string
+	FollowsStay bool
 }
 
 func bdStateFromSettings(settings *db.UserSettings) *bdState {
 	state := &bdState{
-		Order:   settings.PlayOrder(),
-		Enabled: make(map[db.MsgClass]bool),
-		Actions: make(map[db.MsgClass]db.EventAction),
-		Lines:   make(map[db.EventLine]string),
+		Order:       settings.PlayOrder(),
+		Enabled:     make(map[db.MsgClass]bool),
+		Actions:     make(map[db.MsgClass]db.EventAction),
+		Lines:       make(map[db.EventLine]string),
+		FollowsStay: settings.FollowsStay,
 	}
 	for class := range laneNames {
 		state.Enabled[class] = settings.LaneEnabled(class)
@@ -95,10 +99,11 @@ func parseBDOrder(value string) [][]db.MsgClass {
 
 func bdStateFromForm(r *http.Request) (*bdState, error) {
 	state := &bdState{
-		Order:   parseBDOrder(r.Form.Get("order")),
-		Enabled: make(map[db.MsgClass]bool),
-		Actions: make(map[db.MsgClass]db.EventAction),
-		Lines:   make(map[db.EventLine]string),
+		Order:       parseBDOrder(r.Form.Get("order")),
+		Enabled:     make(map[db.MsgClass]bool),
+		Actions:     make(map[db.MsgClass]db.EventAction),
+		Lines:       make(map[db.EventLine]string),
+		FollowsStay: r.Form.Get("follows_yield") != "on",
 	}
 	if err := (&db.UserSettings{}).SetPlayOrder(state.Order); err != nil {
 		return nil, err
@@ -211,6 +216,7 @@ func (api *API) bdStore(r *http.Request, user *db.User, settings *db.UserSetting
 	errs := bdErrors{Actions: make(map[db.MsgClass]string), Lines: make(map[db.EventLine]string)}
 
 	_ = settings.SetPlayOrder(state.Order)
+	settings.FollowsStay = state.FollowsStay
 	for class, enabled := range state.Enabled {
 		settings.SetLaneEnabled(class, enabled)
 	}
@@ -291,6 +297,8 @@ type bdEvent struct {
 	Character      *bdCharacter
 	Picker         *bdPicker
 	ActionError    string
+	CanYield       bool
+	Yields         bool
 	Lines          []*bdLine
 	Presets        []string
 }
@@ -347,6 +355,10 @@ func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSett
 	}
 	if len(event.Lines) > 0 {
 		event.Presets = bdPresetNames()
+	}
+	if class == db.MsgClassFollow {
+		event.CanYield = true
+		event.Yields = !state.FollowsStay
 	}
 	for _, rewardType := range eventActions {
 		event.Actions = append(event.Actions, bdActionOption{

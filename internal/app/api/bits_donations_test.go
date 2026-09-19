@@ -41,6 +41,9 @@ func bdForm(state *bdState, extra url.Values) *http.Request {
 	for line, text := range state.Lines {
 		form.Set("line_"+string(line), text)
 	}
+	if !state.FollowsStay {
+		form.Set("follows_yield", "on")
+	}
 	for key, values := range extra {
 		form[key] = values
 	}
@@ -56,6 +59,27 @@ func TestBDStateSurvivesTheForm(t *testing.T) {
 
 	_, err = bdStateFromForm(bdForm(stored, url.Values{"order": {"reward,bits"}}))
 	assert.Error(t, err, "an order that drops lanes must be refused")
+}
+
+func TestBDFollowsYieldByDefault(t *testing.T) {
+	stored := bdStateFromSettings(&db.UserSettings{})
+	assert.False(t, stored.FollowsStay)
+
+	page := getString("bd-event", &bdEvent{Class: db.MsgClassFollow, CanYield: true, Yields: true})
+	assert.Contains(t, page, `name="follows_yield" class="h-4 w-4" checked`)
+	page = getString("bd-event", &bdEvent{Class: db.MsgClassFollow, CanYield: true})
+	assert.NotContains(t, page, "checked>", "an unticked box must render unticked")
+
+	form := bdForm(stored, nil)
+	form.Form.Del("follows_yield")
+	unticked, err := bdStateFromForm(form)
+	require.NoError(t, err)
+	assert.True(t, unticked.FollowsStay)
+
+	settings := &db.UserSettings{}
+	errs := (&API{}).bdStore(form, nil, settings, unticked)
+	assert.False(t, errs.any())
+	assert.True(t, settings.FollowsStay)
 }
 
 func TestBDEdit(t *testing.T) {
@@ -76,7 +100,7 @@ func TestBDEdit(t *testing.T) {
 	require.NoError(t, err)
 	_, err = state.edit(r)
 	require.NoError(t, err)
-	assert.Equal(t, "donation,bits,sub,reward,raid,streak", formatBDOrder(state.Order))
+	assert.Equal(t, "donation,bits,sub,reward,raid,streak,follow", formatBDOrder(state.Order))
 
 	r = bdForm(stored, url.Values{"op": {"merge"}, "group": {"1"}})
 	state, err = bdStateFromForm(r)
