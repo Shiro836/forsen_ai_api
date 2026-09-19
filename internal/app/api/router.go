@@ -166,6 +166,9 @@ func (api *API) NewRouter() *chi.Mux {
 
 		router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))
 
+		router.Post("/form/changes", http.HandlerFunc(api.formChanges))
+		router.Post("/form/file-hash", http.HandlerFunc(api.formFileHash))
+
 		// Images embed page (upload + serve routes are public, registered below)
 		router.Get("/images", api.navPublic(api.imagesPage))
 

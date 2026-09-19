@@ -1,5 +1,5 @@
 <div>
-    <form>
+    <form hx-post="/filters" hx-target="#settings_save_result" hx-swap="{{template "save-status-swap"}}">
         <div class="flex flex-col justify-start pt-6 pl-6">
             <div class="flex flex-col flex-grow justify-start w-[25rem]">
                 <div class="flex items-center pb-2">
@@ -87,12 +87,10 @@
                     {{ template "help-tip" "Skip the regex/word-list content filter (built-in and your custom filters above)." }}
                 </div>
 
-                <div class="flex pt-4 justify-end pt-4 font-bold">
-                    <button class='{{template "button-2"}} py-2 px-4 w-24' hx-post="/filters" hx-target="#filters_result">Update</button>
-                </div>
-                <div class="flex pt-2 justify-end">
-                    <div id="filters_result"></div>
-                </div>
+            </div>
+            <div class="mt-6 {{template "save-bar-pinned"}}">
+                {{ template "save-button" "Save" }}
+                {{ template "save-status" (newSaveStatus "settings_save_result") }}
             </div>
         </div>
     </form>
