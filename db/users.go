@@ -118,7 +118,7 @@ type UserSettings struct {
 
 	DisabledCardIDs []uuid.UUID `json:"disabled_card_ids,omitempty"` // Characters the streamer has switched off: not a voice, not a dialogue participant
 
-	QueueOrder   []MsgClass                `json:"queue_order,omitempty"`
+	PlayGroups   [][]MsgClass              `json:"play_order,omitempty"`
 	EventActions map[MsgClass]*EventAction `json:"event_actions,omitempty"`
 }
 
@@ -127,18 +127,45 @@ type EventAction struct {
 	CardID     *uuid.UUID       `json:"card_id,omitempty"`
 }
 
-var DefaultQueueOrder = []MsgClass{MsgClassDonation, MsgClassBits, MsgClassReward}
+var defaultPlayGroups = [][]MsgClass{{MsgClassDonation, MsgClassBits}, {MsgClassReward}}
 
-func (s *UserSettings) PlayOrder() []MsgClass {
-	if len(s.QueueOrder) != len(DefaultQueueOrder) {
-		return slices.Clone(DefaultQueueOrder)
-	}
-	for _, class := range DefaultQueueOrder {
-		if !slices.Contains(s.QueueOrder, class) {
-			return slices.Clone(DefaultQueueOrder)
+// Paid classes carry a money amount, so only they can share a play group.
+func (c MsgClass) Paid() bool {
+	return c == MsgClassDonation || c == MsgClassBits
+}
+
+func validPlayGroups(groups [][]MsgClass) bool {
+	var seen []MsgClass
+	for _, group := range groups {
+		if len(group) == 0 {
+			return false
+		}
+		for _, class := range group {
+			if slices.Contains(seen, class) || (len(group) > 1 && !class.Paid()) {
+				return false
+			}
+			seen = append(seen, class)
 		}
 	}
-	return slices.Clone(s.QueueOrder)
+	ranked := slices.Concat(defaultPlayGroups...)
+	for _, class := range ranked {
+		if !slices.Contains(seen, class) {
+			return false
+		}
+	}
+	return len(seen) == len(ranked)
+}
+
+func (s *UserSettings) PlayOrder() [][]MsgClass {
+	groups := s.PlayGroups
+	if !validPlayGroups(groups) {
+		groups = defaultPlayGroups
+	}
+	order := make([][]MsgClass, len(groups))
+	for i, group := range groups {
+		order[i] = slices.Clone(group)
+	}
+	return order
 }
 
 func (a EventAction) Complete() bool {

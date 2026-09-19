@@ -25,13 +25,23 @@ var eventActions = []db.TwitchRewardType{db.TwitchRewardUniversalTTS, db.TwitchR
 type bdLane struct {
 	Class db.MsgClass
 	Name  string
-	Rank  int
-	First bool
-	Last  bool
+}
+
+type bdGroup struct {
+	Index        int
+	Rank         int
+	Lanes        []bdLane
+	First        bool
+	Last         bool
+	CanMergeNext bool
 }
 
 type bdOrder struct {
-	Lanes []bdLane
+	Groups []bdGroup
+}
+
+func groupPaid(group []db.MsgClass) bool {
+	return !slices.ContainsFunc(group, func(class db.MsgClass) bool { return !class.Paid() })
 }
 
 type bdActionOption struct {
@@ -69,17 +79,21 @@ type bdPage struct {
 
 func newBDOrder(settings *db.UserSettings) bdOrder {
 	order := settings.PlayOrder()
-	lanes := make([]bdLane, 0, len(order))
-	for i, class := range order {
-		lanes = append(lanes, bdLane{
-			Class: class,
-			Name:  laneNames[class],
-			Rank:  i + 1,
-			First: i == 0,
-			Last:  i == len(order)-1,
-		})
+	groups := make([]bdGroup, 0, len(order))
+	for i, classes := range order {
+		group := bdGroup{
+			Index:        i,
+			Rank:         i + 1,
+			First:        i == 0,
+			Last:         i == len(order)-1,
+			CanMergeNext: i+1 < len(order) && groupPaid(classes) && groupPaid(order[i+1]),
+		}
+		for _, class := range classes {
+			group.Lanes = append(group.Lanes, bdLane{Class: class, Name: laneNames[class]})
+		}
+		groups = append(groups, group)
 	}
-	return bdOrder{Lanes: lanes}
+	return bdOrder{Groups: groups}
 }
 
 func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, action db.EventAction, openPicker bool) (*bdEvent, error) {
@@ -233,18 +247,32 @@ func (api *API) bitsDonationsMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	order := settings.PlayOrder()
-	from := slices.Index(order, db.MsgClass(r.Form.Get("lane")))
-	to := from + 1
-	if r.Form.Get("dir") == "up" {
-		to = from - 1
+	i, err := strconv.Atoi(r.Form.Get("group"))
+	if err != nil || i < 0 || i >= len(order) {
+		http.Error(w, "invalid group", http.StatusBadRequest)
+		return
 	}
-	if from < 0 || to < 0 || to >= len(order) {
+
+	switch op := r.Form.Get("op"); {
+	case op == "up" && i > 0:
+		order[i-1], order[i] = order[i], order[i-1]
+	case op == "down" && i+1 < len(order):
+		order[i], order[i+1] = order[i+1], order[i]
+	case op == "merge" && i+1 < len(order) && groupPaid(order[i]) && groupPaid(order[i+1]):
+		order[i] = append(order[i], order[i+1]...)
+		order = slices.Delete(order, i+1, i+2)
+	case op == "split" && len(order[i]) > 1:
+		singles := make([][]db.MsgClass, 0, len(order[i]))
+		for _, class := range order[i] {
+			singles = append(singles, []db.MsgClass{class})
+		}
+		order = slices.Replace(order, i, i+1, singles...)
+	default:
 		http.Error(w, "invalid move", http.StatusBadRequest)
 		return
 	}
-	order[from], order[to] = order[to], order[from]
 
-	settings.QueueOrder = order
+	settings.PlayGroups = order
 	if err := api.db.UpdateUserData(r.Context(), user.ID, settings); err != nil {
 		http.Error(w, "failed to save: "+err.Error(), http.StatusInternalServerError)
 		return

@@ -19,8 +19,12 @@ var ErrEmpty = errors.New("queue empty")
 
 const watchInterval = time.Second
 
-// Order is highest first.
-type Order []db.MsgClass
+// Order is groups of classes, highest first; a group's classes rank equally.
+type Order [][]db.MsgClass
+
+func (o Order) classes() []db.MsgClass {
+	return slices.Concat(o...)
+}
 
 type Claimed struct {
 	*db.Message
@@ -45,7 +49,7 @@ func (q *Queue) Claim(ctx context.Context, userID uuid.UUID, order Order) (claim
 	}
 	claimed = &Claimed{Message: msg, Class: class}
 
-	if slices.Contains(order, class) {
+	if slices.Contains(order.classes(), class) {
 		purged, err = q.db.PurgeWaitingClass(ctx, userID, db.MsgClassChat)
 		if err != nil {
 			return claimed, 0, fmt.Errorf("purge chat: %w", err)
@@ -86,7 +90,7 @@ func (q *Queue) WatchPreempt(ctx context.Context, claimed *Claimed, order Order)
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				ranked, err := q.db.HasWaitingOfClasses(ctx, claimed.UserID, order)
+				ranked, err := q.db.HasWaitingOfClasses(ctx, claimed.UserID, order.classes())
 				if err != nil || !ranked {
 					continue
 				}

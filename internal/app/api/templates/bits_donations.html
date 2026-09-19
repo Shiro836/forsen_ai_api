@@ -21,24 +21,56 @@
 
 {{ define "bd-order" }}
 <ol id="bd-order" class="flex flex-col gap-2">
-    {{ range .Lanes }}
+    {{ range .Groups }}
     <li class="flex items-center gap-3 rounded border-2 {{template "ui-border-clr"}} bg-gradient-to-br from-slate-100 to-slate-50 px-3 py-2 dark:from-zinc-900 dark:to-zinc-800">
         <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-twitch-dark text-sm font-bold text-white">{{ .Rank }}</span>
-        {{ template "bd-lane-icon" .Class }}
-        <span class="flex-grow font-medium">{{ .Name }}</span>
+        <div class="flex flex-grow flex-col">
+            <div class="flex flex-wrap items-center gap-x-2 font-medium">
+                {{ range $i, $lane := .Lanes }}
+                {{ if $i }}<span class="opacity-50">+</span>{{ end }}
+                <span class="flex items-center gap-2">{{ template "bd-lane-icon" $lane.Class }}{{ $lane.Name }}</span>
+                {{ end }}
+            </div>
+            {{ if gt (len .Lanes) 1 }}<span class="text-sm text-gray-600 dark:text-gray-300">bigger amount first</span>{{ end }}
+        </div>
+        {{ if gt (len .Lanes) 1 }}
+        <button type="button" class="{{template "button-2"}} flex h-8 w-8 items-center justify-center" aria-label="Split"
+            hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "split"}'
+            hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 17H7a5 5 0 0 1 0-10h2" />
+                <path d="M15 7h2a5 5 0 0 1 4 8" />
+                <path d="m3 3 18 18" />
+            </svg>
+        </button>
+        {{ end }}
         <button type="button" class="{{template "button-2"}} flex h-8 w-8 items-center justify-center disabled:opacity-25 disabled:hover:border-slate-300 dark:disabled:hover:border-slate-700"
-            aria-label="Move {{ .Name }} up" {{ if .First }}disabled{{ end }}
-            hx-post="/bits-donations/order" hx-vals='{"lane": "{{ .Class }}", "dir": "up"}'
+            aria-label="Move up" {{ if .First }}disabled{{ end }}
+            hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "up"}'
             hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
         </button>
         <button type="button" class="{{template "button-2"}} flex h-8 w-8 items-center justify-center disabled:opacity-25 disabled:hover:border-slate-300 dark:disabled:hover:border-slate-700"
-            aria-label="Move {{ .Name }} down" {{ if .Last }}disabled{{ end }}
-            hx-post="/bits-donations/order" hx-vals='{"lane": "{{ .Class }}", "dir": "down"}'
+            aria-label="Move down" {{ if .Last }}disabled{{ end }}
+            hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "down"}'
             hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
         </button>
     </li>
+    {{ if .CanMergeNext }}
+    <li class="-my-4 flex justify-center">
+        <button type="button" class="{{template "button-2"}} z-10 flex items-center gap-1.5 bg-white px-2.5 py-0.5 text-xs font-bold dark:bg-slate-900"
+            hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "merge"}'
+            hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 17H7a5 5 0 0 1 0-10h2" />
+                <path d="M15 7h2a5 5 0 0 1 0 10h-2" />
+                <path d="M8 12h8" />
+            </svg>
+            merge
+        </button>
+    </li>
+    {{ end }}
     {{ end }}
     <li class="flex items-center gap-3 rounded border-2 border-dashed {{template "ui-border-clr"}} px-3 py-2 opacity-60">
         <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 {{template "ui-border-clr"}}">

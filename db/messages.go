@@ -138,12 +138,24 @@ func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMes
 	return id, nil
 }
 
-// Classes play in the given order; classes missing from it play last.
-func (db *DB) ClaimNextMsg(ctx context.Context, userID uuid.UUID, order []MsgClass) (*Message, MsgClass, error) {
+// Groups play in the given order and classes sharing a group rank equally;
+// classes in no group play last.
+func (db *DB) ClaimNextMsg(ctx context.Context, userID uuid.UUID, order [][]MsgClass) (*Message, MsgClass, error) {
+	var (
+		classes []string
+		ranks   []int
+	)
+	for rank, group := range order {
+		for _, class := range group {
+			classes = append(classes, string(class))
+			ranks = append(ranks, rank)
+		}
+	}
+
 	pick := sq.Select("msg_queue.id").
 		From("msg_queue").
 		Where(sq.Eq{"msg_queue.user_id": userID, "msg_queue.status": MsgStatusWait}).
-		OrderByClause("array_position(?::text[], "+msgClassExpr+") nulls last", classNames(order)).
+		OrderByClause("(?::int[])[array_position(?::text[], "+msgClassExpr+")] nulls last", ranks, classes).
 		// ids are uuid v7, so id order is arrival order
 		OrderBy("msg_queue.id").
 		Limit(1)

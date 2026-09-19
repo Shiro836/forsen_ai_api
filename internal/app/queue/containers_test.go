@@ -83,7 +83,7 @@ func (f *fixture) status(id uuid.UUID) db.MsgStatus {
 	return msg.Status
 }
 
-var rewardFirst = Order{db.MsgClassReward}
+var rewardFirst = Order{{db.MsgClassReward}}
 
 func (f *fixture) claim() (*Claimed, int) {
 	f.t.Helper()
@@ -111,15 +111,27 @@ func TestContainersOrderDecidesThePick(t *testing.T) {
 	reward := f.push("a", "redeem", f.reward)
 	unbound := f.push("b", "other reward", "rw-unknown")
 
-	msg, _ := f.claimWith(Order{db.MsgClassUnrouted, db.MsgClassReward})
+	order := Order{{db.MsgClassUnrouted}, {db.MsgClassReward}}
+	msg, _ := f.claimWith(order)
 	if msg.ID != unbound {
 		t.Fatalf("claimed %v, want the later row whose class the order ranks first", msg.ID)
 	}
 	if err := f.q.Complete(context.Background(), unbound); err != nil {
 		t.Fatal(err)
 	}
-	if msg, _ := f.claimWith(Order{db.MsgClassUnrouted, db.MsgClassReward}); msg.ID != reward {
+	if msg, _ := f.claimWith(order); msg.ID != reward {
 		t.Fatalf("claimed %v, want the reward row", msg.ID)
+	}
+}
+
+func TestContainersGroupedClassesRankEqually(t *testing.T) {
+	f := newFixture(t)
+	reward := f.push("a", "redeem", f.reward)
+	f.push("b", "other reward", "rw-unknown")
+
+	msg, _ := f.claimWith(Order{{db.MsgClassUnrouted, db.MsgClassReward}})
+	if msg.ID != reward {
+		t.Fatalf("claimed %v, want the first-arrived row of the group", msg.ID)
 	}
 }
 
