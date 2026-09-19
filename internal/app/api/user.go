@@ -18,6 +18,7 @@ type filters struct {
 	MaxSingCount              int
 	Token                     string
 	IngestAllMessages         bool
+	CloseRedemptions          bool
 	DisableAudioNormalization bool
 	DisableLLMFilter          bool
 	DisableRegexFilter        bool
@@ -69,6 +70,7 @@ func (api *API) filters(r *http.Request) template.HTML {
 		MaxSingCount:              maxSingCount,
 		Token:                     settings.Token,
 		IngestAllMessages:         settings.IngestAllMessages,
+		CloseRedemptions:          settings.CloseRedemptions,
 		DisableAudioNormalization: settings.DisableAudioNormalization,
 		DisableLLMFilter:          settings.DisableLLMFilter,
 		DisableRegexFilter:        settings.DisableRegexFilter,
@@ -123,6 +125,7 @@ func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
 	settings.Filters = normalizeFilters(r.Form.Get("filters"))
 	settings.CustomFilterPrompt = strings.TrimSpace(r.Form.Get("custom_filter_prompt"))
 	settings.IngestAllMessages = r.Form.Get("ingest_all_messages") == "on"
+	settings.CloseRedemptions = r.Form.Get("close_redemptions") == "on"
 	settings.DisableAudioNormalization = r.Form.Get("disable_audio_normalization") == "on"
 	settings.DisableLLMFilter = r.Form.Get("disable_llm_filter") == "on"
 	settings.DisableRegexFilter = r.Form.Get("disable_regex_filter") == "on"

@@ -108,6 +108,10 @@ type UserSettings struct {
 
 	IngestAllMessages bool `json:"ingest_all_messages,omitempty"` // When true, ingest all chat messages, not just reward redemptions
 
+	// Off leaves redemptions open on Twitch, where mods can still refund them
+	// by hand; a completed redemption cannot be refunded.
+	CloseRedemptions bool `json:"close_redemptions,omitempty"`
+
 	DisableAudioNormalization bool `json:"disable_audio_normalization,omitempty"` // When true, skip loudnorm and alimiter on TTS audio
 
 	DisableLLMFilter bool `json:"disable_llm_filter,omitempty"` // When true, skip the LLM-based content filter

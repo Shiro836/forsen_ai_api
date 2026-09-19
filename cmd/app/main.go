@@ -141,11 +141,11 @@ func main() {
 	agenticHandler := processor.NewAgenticHandler(logger.WithGroup("agentic_handler"), db, agenticDetector, agenticPlanner, characterLlm, procService)
 	chatTTSHandler := processor.NewChatTTSHandler(logger.WithGroup("chat_tts_handler"), db, procService)
 
-	proc := processor.NewProcessor(logger.WithGroup("processor"), db, queue.New(db), connManager, aiHandler, ttsHandler, universalHandler, agenticHandler, chatTTSHandler)
+	twitchClient := twitch.New(httpClient, &cfg.Twitch)
+
+	proc := processor.NewProcessor(logger.WithGroup("processor"), db, queue.New(db), connManager, twitchClient, aiHandler, ttsHandler, universalHandler, agenticHandler, chatTTSHandler)
 
 	conns.SetProcessor(connManager, proc)
-
-	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
 	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, agenticHandler, procService, singerClient, historyReader)
 

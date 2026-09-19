@@ -15,6 +15,7 @@ import (
 	"app/internal/app/monitoring"
 	"app/internal/app/queue"
 	"app/pkg/archive"
+	"app/pkg/twitch"
 
 	"github.com/google/uuid"
 )
@@ -33,7 +34,8 @@ type Processor struct {
 	db    *db.DB
 	queue *queue.Queue
 
-	connManager *conns.Manager
+	connManager  *conns.Manager
+	twitchClient *twitch.Client
 
 	// Handlers
 	aiHandler        InteractionHandler
@@ -43,12 +45,13 @@ type Processor struct {
 	chatTTSHandler   InteractionHandler
 }
 
-func NewProcessor(logger *slog.Logger, db *db.DB, queue *queue.Queue, connManager *conns.Manager, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, agenticHandler InteractionHandler, chatTTSHandler InteractionHandler) *Processor {
+func NewProcessor(logger *slog.Logger, db *db.DB, queue *queue.Queue, connManager *conns.Manager, twitchClient *twitch.Client, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, agenticHandler InteractionHandler, chatTTSHandler InteractionHandler) *Processor {
 	return &Processor{
 		logger:           logger,
 		db:               db,
 		queue:            queue,
 		connManager:      connManager,
+		twitchClient:     twitchClient,
 		aiHandler:        aiHandler,
 		ttsHandler:       ttsHandler,
 		universalHandler: universalHandler,
@@ -225,8 +228,9 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 		}
 		p.connManager.NotifyControlPanel(broadcaster.ID)
 
-		if err := p.processNextMessage(ctx, eventWriter, broadcaster, state, userSettings, order, msg); err != nil {
-			logger.Error("error processing message", "msg_id", msg.ID, "err", err)
+		procErr := p.processNextMessage(ctx, eventWriter, broadcaster, state, userSettings, order, msg)
+		if procErr != nil {
+			logger.Error("error processing message", "msg_id", msg.ID, "err", procErr)
 		}
 
 		completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -234,6 +238,15 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 			logger.Error("error completing message", "msg_id", msg.ID, "err", err)
 		}
 		cancel()
+
+		// The skip already refunded a skipped one; one cut by a restart stays open.
+		if msg.Class == db.MsgClassReward && !state.IsSkipped(msg.ID) && ctx.Err() == nil {
+			status := redemptionFulfilled
+			if procErr != nil {
+				status = redemptionCanceled
+			}
+			p.closeRedemption(ctx, logger, broadcaster, msg.ID, status)
+		}
 		p.connManager.NotifyControlPanel(broadcaster.ID)
 	}
 }
@@ -412,6 +425,7 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 		if err := p.queue.Skip(ctx, msgID); err != nil {
 			logger.Error("error skipping message", "err", err)
 		}
+		p.closeRedemption(ctx, logger, broadcaster, msgID, redemptionCanceled)
 		p.connManager.NotifyControlPanel(broadcaster.ID)
 	}
 

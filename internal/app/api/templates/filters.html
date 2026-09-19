@@ -56,6 +56,14 @@
                 </div>
 
                 <div class="flex items-center pb-2 pt-4">
+                    <label for="close_redemptions" class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="close_redemptions" name="close_redemptions" class="mr-2 w-4 h-4" {{ if .CloseRedemptions }}checked{{ end }}>
+                        Complete redeems on Twitch
+                    </label>
+                    {{ template "help-tip" "Played redeems are marked completed, skipped ones refund the points.\nOff: redeems stay open, mods can refund them by hand." }}
+                </div>
+
+                <div class="flex items-center pb-2 pt-4">
                     <label for="disable_audio_normalization" class="flex items-center cursor-pointer">
                         <input type="checkbox" id="disable_audio_normalization" name="disable_audio_normalization" class="mr-2 w-4 h-4" {{ if .DisableAudioNormalization }}checked{{ end }}>
                         Disable audio normalization
