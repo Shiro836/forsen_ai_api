@@ -303,6 +303,8 @@ loop:
 			continue
 		}
 
+		var settings *db.UserSettings
+
 		updates := make([]Update, 0, len(dbMessages))
 		for _, dbMessage := range dbMessages {
 			lastUpdated = max(lastUpdated, dbMessage.Updated)
@@ -326,9 +328,27 @@ loop:
 				var (
 					charName      string
 					rewardTypeStr string = "unknown"
+					request              = dbMessage.TwitchMessage.Message
 				)
 
-				if len(dbMessage.TwitchMessage.RewardID) == 0 {
+				if lane, ok := dbMessage.TwitchMessage.EventLane(); ok {
+					if settings == nil {
+						settings, err = api.db.GetUserSettings(r.Context(), targetUser.ID)
+						if err != nil {
+							logger.Error("failed to get user settings", "err", err)
+							break loop
+						}
+					}
+
+					rewardTypeStr = laneNames[lane]
+					charName = "-"
+					if cardID := settings.EventAction(lane).CardID; cardID != nil {
+						if charCard, err := api.db.GetCharCardByID(r.Context(), targetUser.ID, *cardID); err == nil {
+							charName = charCard.Name
+						}
+					}
+					request = settings.SpokenText(&dbMessage.TwitchMessage)
+				} else if len(dbMessage.TwitchMessage.RewardID) == 0 {
 					rewardTypeStr = "Chat TTS"
 					charName = "-"
 				} else if charCard, rewardType, err := api.db.GetCharCardByTwitchRewardNoPerms(r.Context(), dbMessage.TwitchMessage.RewardID); err == nil {
@@ -396,7 +416,7 @@ loop:
 					Type:     rewardTypeStr,
 					CharName: charName,
 
-					Request:  dbMessage.TwitchMessage.Message,
+					Request:  request,
 					Response: msgData.AIResponse,
 
 					FilteredText:      msgData.FilteredText,

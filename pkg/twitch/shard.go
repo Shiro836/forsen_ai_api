@@ -27,6 +27,7 @@ func NewShard(
 	id int,
 	logger *slog.Logger,
 	onMessage func(gempir.PrivateMessage),
+	onUserNotice func(gempir.UserNoticeMessage),
 	onConnect func(),
 	onDisconnect func(),
 	onJoinFailure func(channel, reason string),
@@ -43,6 +44,7 @@ func NewShard(
 	}
 
 	client.OnPrivateMessage(onMessage)
+	client.OnUserNoticeMessage(onUserNotice)
 	client.OnConnect(func() {
 		if s.connected.CompareAndSwap(false, true) {
 			onConnect()

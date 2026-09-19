@@ -13,7 +13,9 @@ import (
 	"app/db"
 	"app/internal/app/conns"
 	"app/internal/app/monitoring"
+	"app/internal/app/queue"
 	"app/pkg/archive"
+	"app/pkg/twitch"
 
 	"github.com/google/uuid"
 )
@@ -29,9 +31,11 @@ func GetSFX(name string) ([]byte, error) {
 type Processor struct {
 	logger *slog.Logger
 
-	db *db.DB
+	db    *db.DB
+	queue *queue.Queue
 
-	connManager *conns.Manager
+	connManager  *conns.Manager
+	twitchClient *twitch.Client
 
 	// Handlers
 	aiHandler        InteractionHandler
@@ -41,11 +45,13 @@ type Processor struct {
 	chatTTSHandler   InteractionHandler
 }
 
-func NewProcessor(logger *slog.Logger, db *db.DB, connManager *conns.Manager, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, agenticHandler InteractionHandler, chatTTSHandler InteractionHandler) *Processor {
+func NewProcessor(logger *slog.Logger, db *db.DB, queue *queue.Queue, connManager *conns.Manager, twitchClient *twitch.Client, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, agenticHandler InteractionHandler, chatTTSHandler InteractionHandler) *Processor {
 	return &Processor{
 		logger:           logger,
 		db:               db,
+		queue:            queue,
 		connManager:      connManager,
+		twitchClient:     twitchClient,
 		aiHandler:        aiHandler,
 		ttsHandler:       ttsHandler,
 		universalHandler: universalHandler,
@@ -185,20 +191,26 @@ func recordHandlerError(ctx context.Context, flow string) {
 
 func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState) error {
 	logger := p.logger.With("user", broadcaster.TwitchLogin, "component", "process_loop")
+
+	recovered, err := p.queue.Recover(ctx, broadcaster.ID)
+	if err != nil {
+		return fmt.Errorf("error recovering current messages: %w", err)
+	}
+	if recovered > 0 {
+		p.connManager.NotifyControlPanel(broadcaster.ID)
+	}
+
 	for {
-		updated, err := p.db.UpdateCurrentMessages(ctx, broadcaster.ID)
+		userSettings, err := p.db.GetUserSettings(ctx, broadcaster.ID)
 		if err != nil {
-			logger.Error("error updating current message", "err", err)
-			return fmt.Errorf("error updating current message: %w", err)
+			logger.Warn("failed to get user settings, using defaults", "err", err)
+			userSettings = &db.UserSettings{}
 		}
+		order := queue.Order{Groups: userSettings.EnabledPlayOrder(), Yielding: userSettings.YieldingLanes()}
 
-		if updated > 0 {
-			p.connManager.NotifyControlPanel(broadcaster.ID)
-		}
-
-		msg, err := p.db.GetNextMsg(ctx, broadcaster.ID)
+		msg, purged, err := p.queue.Claim(ctx, broadcaster.ID, order)
 		if err != nil {
-			if errors.Is(err, db.ErrNoRows) {
+			if errors.Is(err, queue.ErrEmpty) {
 				select {
 				case <-ctx.Done():
 					return nil
@@ -206,34 +218,44 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 					continue
 				}
 			}
-			logger.Error("error getting next message from db", "err", err)
-			return fmt.Errorf("error getting next message from db: %w", err)
+			if msg == nil {
+				return fmt.Errorf("error claiming next message: %w", err)
+			}
+			logger.Error("error purging yielding messages", "msg_id", msg.ID, "err", err)
+		}
+		if purged > 0 {
+			logger.Info("purged yielding messages", "count", purged)
+		}
+		p.connManager.NotifyControlPanel(broadcaster.ID)
+
+		procErr := p.processNextMessage(ctx, eventWriter, broadcaster, state, userSettings, order, msg)
+		if procErr != nil {
+			logger.Error("error processing message", "msg_id", msg.ID, "err", procErr)
 		}
 
-		if err := p.processNextMessage(ctx, eventWriter, broadcaster, state, msg); err != nil {
-			logger.Error("error processing message", "msg_id", msg.ID, "err", err)
-			continue
+		completeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		if err := p.queue.Complete(completeCtx, msg.ID); err != nil {
+			logger.Error("error completing message", "msg_id", msg.ID, "err", err)
 		}
+		cancel()
+
+		// The skip already refunded a skipped one; one cut by a restart stays open.
+		if msg.Class == db.MsgClassReward && !state.IsSkipped(msg.ID) && ctx.Err() == nil {
+			status := redemptionFulfilled
+			if procErr != nil || !userSettings.LaneEnabled(msg.Class) {
+				status = redemptionCanceled
+			}
+			p.closeRedemption(ctx, logger, broadcaster, msg.ID, status)
+		}
+		p.connManager.NotifyControlPanel(broadcaster.ID)
 	}
 }
 
-func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, msg *db.Message) (err error) {
+func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.EventWriter, broadcaster *db.User, state *ProcessorState, userSettings *db.UserSettings, order queue.Order, msg *queue.Claimed) (err error) {
 	logger := p.logger.With("user", broadcaster.TwitchLogin, "msg_id", msg.ID)
-
-	userSettings, err := p.db.GetUserSettings(ctx, broadcaster.ID)
-	if err != nil {
-		logger.Warn("failed to get user settings, using defaults", "err", err)
-		userSettings = &db.UserSettings{}
-	}
-
-	if err := p.db.UpdateMessageStatus(ctx, msg.ID, db.MsgStatusCurrent); err != nil {
-		return fmt.Errorf("error updating message status: %w", err)
-	}
 
 	state.SetCurrent(msg.ID)
 	defer state.SetCurrent(uuid.Nil)
-
-	p.connManager.NotifyControlPanel(broadcaster.ID)
 
 	// foreign-reward redeems (not bound in reward_buttons) are not ours to
 	// archive; everything that reaches a handler is
@@ -247,28 +269,34 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		p.storeArchive(ctx, logger, state, msg.ID, col, outcome, err)
 	}()
 
-	if len(msg.TwitchMessage.RewardID) == 0 {
-		if !userSettings.IngestAllMessages {
-			if _, err := p.db.SkipWaitingNoRewardMessages(ctx, broadcaster.ID); err != nil {
-				logger.Error("error bulk-skipping chat messages", "err", err)
-			}
-			outcome = archive.OutcomeBulkSkipped
-			return nil
-		}
+	if msg.Class == db.MsgClassUnrouted {
+		return nil
+	}
 
-		// If a known reward message is already waiting, skip this and all other chat messages
-		hasReward, err := p.db.HasWaitingKnownRewardMessage(ctx, broadcaster.ID)
-		if err != nil {
-			logger.Error("error checking for waiting reward message", "err", err)
-		}
-		if hasReward {
-			if _, err := p.db.SkipWaitingNoRewardMessages(ctx, broadcaster.ID); err != nil {
-				logger.Error("error bulk-skipping chat messages", "err", err)
+	if !userSettings.LaneEnabled(msg.Class) {
+		// Paid-for rows are dropped one by one instead, so each gets its refund.
+		if msg.Class == db.MsgClassChat {
+			if _, err := p.queue.Purge(ctx, broadcaster.ID, db.MsgClassChat); err != nil {
+				logger.Error("error purging chat messages", "err", err)
 			}
-			outcome = archive.OutcomeBulkSkipped
-			return nil
 		}
+		outcome = archive.OutcomeBulkSkipped
+		return nil
+	}
 
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
+	preempt := p.queue.WatchPreempt(watchCtx, msg, order)
+	go func() {
+		select {
+		case <-preempt:
+			state.AddSkipped(msg.ID)
+			eventWriter(skipEvent(msg.ID, true))
+		case <-watchCtx.Done():
+		}
+	}()
+
+	if msg.Class == db.MsgClassChat {
 		col.SetHandler("chat_tts", nil, nil)
 		outcome = archive.OutcomePlayed
 		input := InteractionInput{
@@ -288,30 +316,28 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		return nil
 	}
 
-	cardID, rewardType, err := p.db.GetRewardByTwitchReward(ctx, msg.TwitchMessage.RewardID)
-	if err != nil {
-		if db.ErrCode(err) != db.ErrCodeNoRows {
-			logger.Error("error getting reward by twitch reward", "err", err)
+	var (
+		cardID     *uuid.UUID
+		rewardType db.TwitchRewardType
+	)
+	if _, ok := msg.TwitchMessage.EventLane(); ok {
+		action := userSettings.EventAction(msg.Class)
+		cardID, rewardType = action.CardID, action.RewardType
+	} else {
+		cardID, rewardType, err = p.db.GetRewardByTwitchReward(ctx, msg.TwitchMessage.RewardID)
+		if err != nil {
+			return fmt.Errorf("error getting reward by twitch reward: %w", err)
 		}
-		return nil
-	}
 
-	// Known reward — skip any queued non-reward chat messages
-	if skipped, err := p.db.SkipWaitingNoRewardMessages(ctx, broadcaster.ID); err != nil {
-		logger.Error("error skipping waiting chat messages", "err", err)
-	} else if skipped > 0 {
-		logger.Info("skipped queued chat messages for reward", "count", skipped)
-		p.connManager.NotifyControlPanel(broadcaster.ID)
-	}
-
-	// Track reward usage per chatter
-	if msg.TwitchMessage.TwitchUserID != 0 {
-		if err := p.db.IncrementChatUserRewardCount(ctx, msg.TwitchMessage.TwitchUserID, msg.TwitchMessage.TwitchLogin); err != nil {
-			logger.Warn("failed to increment reward count", "err", err)
+		// Track reward usage per chatter
+		if msg.TwitchMessage.TwitchUserID != 0 {
+			if err := p.db.IncrementChatUserRewardCount(ctx, msg.TwitchMessage.TwitchUserID, msg.TwitchMessage.TwitchLogin); err != nil {
+				logger.Warn("failed to increment reward count", "err", err)
+			}
 		}
-	}
 
-	monitoring.AppMetrics.RewardRedeems.WithLabelValues(broadcaster.TwitchLogin, rewardType.String()).Inc()
+		monitoring.AppMetrics.RewardRedeems.WithLabelValues(broadcaster.TwitchLogin, rewardType.String()).Inc()
+	}
 
 	var charCard *db.Card
 	if cardID != nil {
@@ -330,7 +356,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		Requester:    msg.TwitchMessage.TwitchLogin,
 		TwitchUserID: msg.TwitchMessage.TwitchUserID,
 		Broadcaster:  broadcaster,
-		Message:      msg.TwitchMessage.Message,
+		Message:      userSettings.SpokenText(&msg.TwitchMessage),
 		Character:    charCard,
 		UserSettings: userSettings,
 		MsgID:        msg.ID.String(),
@@ -408,9 +434,10 @@ func (p *Processor) handleControlSignals(ctx context.Context, updates chan *conn
 	skipMessage := func(msgID uuid.UUID) {
 		state.AddSkipped(msgID)
 		eventWriter(skipEvent(msgID, state.GetCurrent() == msgID))
-		if err := p.db.UpdateMessageStatus(ctx, msgID, db.MsgStatusDeleted); err != nil {
-			logger.Error("error updating message status", "err", err)
+		if err := p.queue.Skip(ctx, msgID); err != nil {
+			logger.Error("error skipping message", "err", err)
 		}
+		p.closeRedemption(ctx, logger, broadcaster, msgID, redemptionCanceled)
 		p.connManager.NotifyControlPanel(broadcaster.ID)
 	}
 

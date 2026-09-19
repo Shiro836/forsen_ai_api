@@ -17,7 +17,7 @@ type filters struct {
 	SfxTotalLimit             int
 	MaxSingCount              int
 	Token                     string
-	IngestAllMessages         bool
+	CloseRedemptions          bool
 	DisableAudioNormalization bool
 	DisableLLMFilter          bool
 	DisableRegexFilter        bool
@@ -68,7 +68,7 @@ func (api *API) filters(r *http.Request) template.HTML {
 		SfxTotalLimit:             sfxTotalLimit,
 		MaxSingCount:              maxSingCount,
 		Token:                     settings.Token,
-		IngestAllMessages:         settings.IngestAllMessages,
+		CloseRedemptions:          settings.CloseRedemptions,
 		DisableAudioNormalization: settings.DisableAudioNormalization,
 		DisableLLMFilter:          settings.DisableLLMFilter,
 		DisableRegexFilter:        settings.DisableRegexFilter,
@@ -95,92 +95,66 @@ func (api *API) regenerateToken(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(token))
 }
 
+const settingsSaveStatusID = "settings_save_result"
+
 func (api *API) updateFilters(w http.ResponseWriter, r *http.Request) {
+	fail := func(code int, message string) {
+		writeSaveError(w, r, settingsSaveStatusID, "", code, message)
+	}
+
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("unauthorized"))
-
+		fail(http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	err := r.ParseForm()
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte("failed to parse form: " + err.Error()))
-
+		fail(http.StatusBadRequest, "failed to parse form: "+err.Error())
 		return
 	}
 
 	settings, err := api.db.GetUserSettings(r.Context(), user.ID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("failed to get user settings: " + err.Error()))
-
+		fail(http.StatusInternalServerError, "failed to get user settings: "+err.Error())
 		return
 	}
 
 	settings.Filters = normalizeFilters(r.Form.Get("filters"))
 	settings.CustomFilterPrompt = strings.TrimSpace(r.Form.Get("custom_filter_prompt"))
-	settings.IngestAllMessages = r.Form.Get("ingest_all_messages") == "on"
+	settings.CloseRedemptions = r.Form.Get("close_redemptions") == "on"
 	settings.DisableAudioNormalization = r.Form.Get("disable_audio_normalization") == "on"
 	settings.DisableLLMFilter = r.Form.Get("disable_llm_filter") == "on"
 	settings.DisableRegexFilter = r.Form.Get("disable_regex_filter") == "on"
 
-	ttsLimitStr := r.Form.Get("tts_limit")
-	if ttsLimitStr != "" {
-		ttsLimit, err := strconv.Atoi(ttsLimitStr)
+	for _, limit := range []struct {
+		field, label string
+		dst          **int
+	}{
+		{"tts_limit", "TTS limit", &settings.TtsLimit},
+		{"max_sfx_count", "max SFX count", &settings.MaxSfxCount},
+		{"sfx_total_limit", "total SFX length", &settings.SfxTotalLimit},
+		{"max_sing_count", "max sing count", &settings.MaxSingCount},
+	} {
+		raw := r.Form.Get(limit.field)
+		if raw == "" {
+			continue
+		}
+		value, err := strconv.Atoi(raw)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("invalid tts_limit value: " + err.Error()))
+			fail(http.StatusBadRequest, limit.label+" must be a number")
 			return
 		}
-		settings.TtsLimit = &ttsLimit
-	}
-
-	maxSfxCountStr := r.Form.Get("max_sfx_count")
-	if maxSfxCountStr != "" {
-		maxSfxCount, err := strconv.Atoi(maxSfxCountStr)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("invalid max_sfx_count value: " + err.Error()))
-			return
-		}
-		settings.MaxSfxCount = &maxSfxCount
-	}
-
-	sfxTotalLimitStr := r.Form.Get("sfx_total_limit")
-	if sfxTotalLimitStr != "" {
-		sfxTotalLimit, err := strconv.Atoi(sfxTotalLimitStr)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("invalid sfx_total_limit value: " + err.Error()))
-			return
-		}
-		settings.SfxTotalLimit = &sfxTotalLimit
-	}
-
-	maxSingCountStr := r.Form.Get("max_sing_count")
-	if maxSingCountStr != "" {
-		maxSingCount, err := strconv.Atoi(maxSingCountStr)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("invalid max_sing_count value: " + err.Error()))
-			return
-		}
-		settings.MaxSingCount = &maxSingCount
+		*limit.dst = &value
 	}
 
 	err = api.db.UpdateUserData(r.Context(), user.ID, settings)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("failed to update user settings: " + err.Error()))
-
+		fail(http.StatusInternalServerError, "failed to update user settings: "+err.Error())
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("success"))
+	writeSaved(w, r, settingsSaveStatusID, "")
 }
 
 func normalizeFilters(raw string) string {
