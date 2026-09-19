@@ -40,6 +40,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./cfg/loki/local-config.yaml:/etc/loki/local-config.yaml
+      - loki-data:/loki
     restart: unless-stopped
     networks:
       - forsen
@@ -158,6 +159,7 @@ services:
 
 volumes:
   ch-data:
+  loki-data:
   pg-data:
   emote-pg-data:
   grafana-data-1:

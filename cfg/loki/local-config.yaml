@@ -3,12 +3,14 @@ auth_enabled: false
 server:
   http_listen_port: 3100
 
+# /loki is the loki-data volume; the image owns this path, and anything outside
+# it lives on the container layer and is lost the next time it is recreated.
 common:
-  path_prefix: /tmp/loki
+  path_prefix: /loki
   storage:
     filesystem:
-      chunks_directory: /tmp/loki/chunks
-      rules_directory: /tmp/loki/rules
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
   replication_factor: 1
   ring:
     kvstore:
@@ -23,6 +25,17 @@ schema_config:
       index:
         prefix: index_
         period: 24h
+
+limits_config:
+  retention_period: 180d
+
+# Nothing expires without the compactor, whatever retention_period says.
+compactor:
+  working_directory: /loki/compactor
+  shared_store: filesystem
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
 
 ruler:
   alertmanager_url: http://localhost:9093
