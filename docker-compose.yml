@@ -26,7 +26,12 @@ services:
       - ./cfg/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./cfg/minio_prometheus_token:/etc/prometheus/minio_token
     command:
+      # Overriding command drops the image's own flags, so the storage path
+      # stays the default data/ under the workdir — moving it strands the
+      # blocks already written there.
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=1y'
+      - '--storage.tsdb.retention.size=40GB'
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
