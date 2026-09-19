@@ -278,10 +278,9 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Post("/token/regenerate", http.HandlerFunc(api.regenerateToken))
 
 			router.Get("/bits-donations", api.nav(api.bitsDonations))
-			router.Post("/bits-donations/order", http.HandlerFunc(api.bitsDonationsMove))
-			router.Post("/bits-donations/{event}/action", http.HandlerFunc(api.bitsDonationsAction))
+			router.Post("/bits-donations", http.HandlerFunc(api.bitsDonationsSave))
+			router.Post("/bits-donations/edit", http.HandlerFunc(api.bitsDonationsEdit))
 			router.Get("/bits-donations/{event}/characters", http.HandlerFunc(api.bitsDonationsPicker))
-			router.Post("/bits-donations/{event}/character", http.HandlerFunc(api.bitsDonationsCharacter))
 		})
 
 		router.Group(func(router chi.Router) {

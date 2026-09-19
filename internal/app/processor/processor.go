@@ -206,7 +206,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 			logger.Warn("failed to get user settings, using defaults", "err", err)
 			userSettings = &db.UserSettings{}
 		}
-		order := queue.Order(userSettings.PlayOrder())
+		order := queue.Order(userSettings.EnabledPlayOrder())
 
 		msg, purged, err := p.queue.Claim(ctx, broadcaster.ID, order)
 		if err != nil {
@@ -242,7 +242,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 		// The skip already refunded a skipped one; one cut by a restart stays open.
 		if msg.Class == db.MsgClassReward && !state.IsSkipped(msg.ID) && ctx.Err() == nil {
 			status := redemptionFulfilled
-			if procErr != nil {
+			if procErr != nil || !userSettings.LaneEnabled(msg.Class) {
 				status = redemptionCanceled
 			}
 			p.closeRedemption(ctx, logger, broadcaster, msg.ID, status)
@@ -269,19 +269,22 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		p.storeArchive(ctx, logger, state, msg.ID, col, outcome, err)
 	}()
 
-	switch msg.Class {
-	case db.MsgClassUnrouted:
+	if msg.Class == db.MsgClassUnrouted {
 		return nil
+	}
 
-	case db.MsgClassChat:
-		if !userSettings.IngestAllMessages {
+	if !userSettings.LaneEnabled(msg.Class) {
+		// Paid-for rows are dropped one by one instead, so each gets its refund.
+		if msg.Class == db.MsgClassChat {
 			if _, err := p.queue.Purge(ctx, broadcaster.ID, db.MsgClassChat); err != nil {
 				logger.Error("error purging chat messages", "err", err)
 			}
-			outcome = archive.OutcomeBulkSkipped
-			return nil
 		}
+		outcome = archive.OutcomeBulkSkipped
+		return nil
+	}
 
+	if msg.Class == db.MsgClassChat {
 		watchCtx, stopWatch := context.WithCancel(ctx)
 		defer stopWatch()
 		preempt := p.queue.WatchPreempt(watchCtx, msg, order)

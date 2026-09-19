@@ -124,6 +124,8 @@ type UserSettings struct {
 
 	PlayGroups   [][]MsgClass              `json:"play_order,omitempty"`
 	EventActions map[MsgClass]*EventAction `json:"event_actions,omitempty"`
+	LanesEnabled map[MsgClass]bool         `json:"lanes_enabled,omitempty"`
+	EventLines   map[EventLine]string      `json:"event_lines,omitempty"`
 }
 
 type EventAction struct {
@@ -131,7 +133,7 @@ type EventAction struct {
 	CardID     *uuid.UUID       `json:"card_id,omitempty"`
 }
 
-var defaultPlayGroups = [][]MsgClass{{MsgClassDonation, MsgClassBits}, {MsgClassReward}}
+var defaultPlayGroups = [][]MsgClass{{MsgClassDonation, MsgClassBits}, {MsgClassSub}, {MsgClassReward}, {MsgClassRaid}, {MsgClassStreak}}
 
 // Paid classes carry a money amount, so only they can share a play group.
 func (c MsgClass) Paid() bool {
@@ -139,35 +141,41 @@ func (c MsgClass) Paid() bool {
 }
 
 func validPlayGroups(groups [][]MsgClass) bool {
+	ranked := slices.Concat(defaultPlayGroups...)
+
 	var seen []MsgClass
 	for _, group := range groups {
 		if len(group) == 0 {
 			return false
 		}
 		for _, class := range group {
-			if slices.Contains(seen, class) || (len(group) > 1 && !class.Paid()) {
+			if !slices.Contains(ranked, class) || slices.Contains(seen, class) || (len(group) > 1 && !class.Paid()) {
 				return false
 			}
 			seen = append(seen, class)
 		}
 	}
-	ranked := slices.Concat(defaultPlayGroups...)
-	for _, class := range ranked {
-		if !slices.Contains(seen, class) {
-			return false
-		}
-	}
-	return len(seen) == len(ranked)
+	return len(seen) > 0
 }
 
+// PlayOrder is the stored order with the lanes it does not rank yet appended
+// in their default order, so a lane added later shows up for everyone.
 func (s *UserSettings) PlayOrder() [][]MsgClass {
 	groups := s.PlayGroups
 	if !validPlayGroups(groups) {
 		groups = defaultPlayGroups
 	}
+
 	order := make([][]MsgClass, len(groups))
 	for i, group := range groups {
 		order[i] = slices.Clone(group)
+	}
+
+	stored := slices.Concat(groups...)
+	for _, class := range slices.Concat(defaultPlayGroups...) {
+		if !slices.Contains(stored, class) {
+			order = append(order, []MsgClass{class})
+		}
 	}
 	return order
 }

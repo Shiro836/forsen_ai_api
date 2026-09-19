@@ -12,11 +12,34 @@
     <circle cx="12" cy="12" r="9" />
     <circle cx="12" cy="12" r="4" />
 </svg>
+{{ else if eq . "sub" }}
+<svg class="h-5 w-5 shrink-0 text-amber-500 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+</svg>
+{{ else if eq . "raid" }}
+<svg class="h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+</svg>
+{{ else if eq . "streak" }}
+<svg class="h-5 w-5 shrink-0 text-orange-600 dark:text-orange-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+</svg>
 {{ else }}
 <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 </svg>
 {{ end }}
+{{ end }}
+
+{{ define "bd-switch" }}
+<label class="relative inline-flex shrink-0 cursor-pointer items-center" aria-label="{{ .Name }}">
+    <input type="checkbox" name="on" value="{{ .Class }}" class="peer sr-only" {{ if .Enabled }}checked{{ end }}
+        hx-post="/bits-donations/edit" hx-trigger="change">
+    <div class="relative h-5 w-9 rounded-full bg-gray-300 after:absolute after:start-[2px] after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-twitch-dark peer-checked:after:translate-x-full peer-focus-visible:ring-2 peer-focus-visible:ring-twitch-light dark:bg-gray-600"></div>
+</label>
 {{ end }}
 
 {{ define "bd-chain" }}<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />{{ end }}
@@ -25,20 +48,19 @@
 <ol id="bd-order" class="flex flex-col gap-2">
     {{ range .Groups }}
     <li class="flex items-center gap-3 rounded border-2 {{template "ui-border-clr"}} bg-gradient-to-br from-slate-100 to-slate-50 px-3 py-2 dark:from-zinc-900 dark:to-zinc-800">
-        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-twitch-dark text-sm font-bold text-white">{{ .Rank }}</span>
-        <div class="flex flex-grow flex-col">
-            <div class="flex flex-wrap items-center gap-x-2 font-medium">
-                {{ range $i, $lane := .Lanes }}
-                {{ if $i }}<span class="opacity-50">+</span>{{ end }}
-                <span class="flex items-center gap-2">{{ template "bd-lane-icon" $lane.Class }}{{ $lane.Name }}</span>
-                {{ end }}
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white {{ if .Enabled }}bg-twitch-dark{{ else }}bg-gray-400 dark:bg-gray-600{{ end }}">{{ .Rank }}</span>
+        <div class="flex flex-grow flex-col gap-1.5">
+            {{ range .Lanes }}
+            <div class="flex items-center gap-2 font-medium">
+                <span class="flex w-40 items-center gap-2 whitespace-nowrap {{ if not .Enabled }}opacity-40{{ end }}">{{ template "bd-lane-icon" .Class }}{{ .Name }}</span>
+                {{ template "bd-switch" . }}
             </div>
-            {{ if gt (len .Lanes) 1 }}<span class="text-sm text-gray-600 dark:text-gray-300">bigger amount first</span>{{ end }}
+            {{ end }}
+            {{ if gt (len .Lanes) 1 }}<span class="text-sm text-gray-600 dark:text-gray-300">merged, bigger amount first</span>{{ end }}
         </div>
         {{ if gt (len .Lanes) 1 }}
         <button type="button" class="{{template "button-2"}} flex h-8 w-8 shrink-0 items-center justify-center" aria-label="Unlink"
-            hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "split"}'
-            hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
+            hx-post="/bits-donations/edit" hx-vals='{"group": "{{ .Index }}", "op": "split"}'>
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 {{ template "bd-chain" }}
                 <path class="stroke-slate-100 dark:stroke-zinc-800" d="M4 4l16 16" stroke-width="6" />
@@ -48,22 +70,19 @@
         {{ end }}
         <button type="button" class="{{template "button-2"}} flex h-8 w-8 items-center justify-center disabled:opacity-25 disabled:hover:border-slate-300 dark:disabled:hover:border-slate-700"
             aria-label="Move up" {{ if .First }}disabled{{ end }}
-            hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "up"}'
-            hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
+            hx-post="/bits-donations/edit" hx-vals='{"group": "{{ .Index }}", "op": "up"}'>
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>
         </button>
         <button type="button" class="{{template "button-2"}} flex h-8 w-8 items-center justify-center disabled:opacity-25 disabled:hover:border-slate-300 dark:disabled:hover:border-slate-700"
             aria-label="Move down" {{ if .Last }}disabled{{ end }}
-            hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "down"}'
-            hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
+            hx-post="/bits-donations/edit" hx-vals='{"group": "{{ .Index }}", "op": "down"}'>
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
         </button>
     </li>
     {{ if .CanMergeNext }}
     <li class="-my-4 flex justify-center">
         <button type="button" class="{{template "button-2"}} z-10 flex items-center gap-1.5 bg-white px-2.5 py-0.5 text-xs font-bold dark:bg-slate-900"
-            hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "merge"}'
-            hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
+            hx-post="/bits-donations/edit" hx-vals='{"group": "{{ .Index }}", "op": "merge"}'>
             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 {{ template "bd-chain" }}
             </svg>
@@ -72,16 +91,21 @@
     </li>
     {{ end }}
     {{ end }}
-    <li class="flex items-center gap-3 rounded border-2 border-dashed {{template "ui-border-clr"}} px-3 py-2 opacity-60">
-        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 {{template "ui-border-clr"}}">
+    <li class="flex items-center gap-3 rounded border-2 border-dashed {{template "ui-border-clr"}} px-3 py-2">
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 opacity-60 {{template "ui-border-clr"}}">
             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="4" y="11" width="16" height="10" rx="2" />
                 <path d="M8 11V7a4 4 0 0 1 8 0v4" />
             </svg>
         </span>
-        {{ template "bd-lane-icon" "chat" }}
-        <span class="flex-grow font-medium">Chat TTS</span>
-        <span class="text-sm">always last</span>
+        <div class="flex flex-grow flex-col gap-1.5">
+            <div class="flex items-center gap-2 font-medium">
+                <span class="flex w-40 items-center gap-2 whitespace-nowrap {{ if not .Chat.Enabled }}opacity-40{{ end }}">{{ template "bd-lane-icon" "chat" }}{{ .Chat.Name }}</span>
+                {{ template "bd-switch" .Chat }}
+            </div>
+            <span class="text-sm text-gray-600 dark:text-gray-300">reads every chat message</span>
+        </div>
+        <span class="text-sm opacity-60">always last</span>
     </li>
 </ol>
 {{ end }}
@@ -90,8 +114,7 @@
 <div id="bd-{{ .Class }}-grid" class="grid max-h-72 grid-cols-4 gap-2 overflow-y-auto pr-1 pt-1">
     {{ range .Characters }}
     <button type="button" class="hover-lift {{template "button-2"}} flex flex-col items-center gap-1 p-2"
-        hx-post="/bits-donations/{{ $.Class }}/character" hx-vals='{"card_id": "{{ .ID }}", "reward_type": "{{ $.RewardType }}"}'
-        hx-target="#bd-{{ $.Class }}" hx-swap="outerHTML">
+        hx-post="/bits-donations/edit" hx-vals='{"op": "character", "class": "{{ $.Class }}", "card_id": "{{ .ID }}"}'>
         <img class="h-14 w-14 object-contain" src="/characters/{{ .ID }}/image?w=200" loading="lazy" alt="">
         <span class="w-full truncate text-center text-xs">{{ .Name }}</span>
     </button>
@@ -102,36 +125,65 @@
 {{ end }}
 
 {{ define "bd-event" }}
-<section id="bd-{{ .Class }}" class="flex w-[26rem] flex-col gap-5 rounded border-2 {{template "ui-border-clr"}} p-5">
+<section id="bd-{{ .Class }}" class="flex w-[26rem] flex-col gap-5 rounded border-2 {{template "ui-border-clr"}} p-5 {{ if not .Enabled }}opacity-50{{ end }}">
     <header class="flex flex-col gap-1">
         <div class="flex items-center gap-2 text-xl font-bold">
             {{ template "bd-lane-icon" .Class }}
             {{ .Name }}
+            {{ if not .Enabled }}<span class="ml-auto text-sm font-normal">off</span>{{ end }}
         </div>
         <span class="min-h-5 text-sm text-gray-600 dark:text-gray-300">
-            {{ if eq .Class "bits" }}cheers only, not <a class="underline" href="/guide/bits" hx-get="/guide/bits" hx-select="#tab-content" hx-target="#tab-content" hx-swap="outerHTML" hx-push-url="true">power-ups</a>{{ end }}
+            {{ if eq .Class "bits" }}cheers only, not <a class="underline" href="/guide/bits" hx-get="/guide/bits" hx-select="#tab-content" hx-target="#tab-content" hx-swap="outerHTML" hx-push-url="true">power-ups</a>
+            {{ else if eq .Class "sub" }}a resub message is read instead
+            {{ else if eq .Class "streak" }}the viewer's message is read instead{{ end }}
         </span>
     </header>
 
+    {{ if .Lines }}
+    <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between gap-2">
+            <span class="text-sm text-gray-600 dark:text-gray-300">Presets</span>
+            <div class="flex gap-1">
+                {{ range .Presets }}
+                <button type="button" class="{{template "button-2"}} px-2 py-0.5 text-xs"
+                    hx-post="/bits-donations/edit" hx-vals='{"op": "preset", "class": "{{ $.Class }}", "preset": "{{ . }}"}'>{{ . }}</button>
+                {{ end }}
+            </div>
+        </div>
+        {{ range .Lines }}
+        <div class="flex flex-col gap-1">
+            {{ if .Label }}<span class="text-xs text-gray-600 dark:text-gray-300">{{ .Label }}</span>{{ end }}
+            <input type="text" name="line_{{ .Line }}" value="{{ .Text }}" maxlength="200" autocomplete="off" aria-label="{{ $.Name }} {{ .Label }}"
+                class="w-full {{template "input-class"}} px-3 py-2 {{ if .Error }}border-amber-600 dark:border-amber-400{{ end }}">
+            <div class="flex items-baseline justify-between text-xs">
+                <span class="font-mono opacity-60">{{ range .Placeholders }}{{ "{" }}{{ . }}{{ "}" }} {{ end }}</span>
+                {{ if .Error }}<span class="text-amber-600 dark:text-amber-400">{{ .Error }}</span>{{ end }}
+            </div>
+        </div>
+        {{ end }}
+    </div>
+    {{ end }}
+
     <div class="flex flex-col gap-2">
         <span class="text-sm text-gray-600 dark:text-gray-300">Action</span>
-        <form class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-3 gap-2">
             {{ range .Actions }}
             <label class="cursor-pointer">
-                <input type="radio" name="reward_type" value="{{ .Value }}" class="peer sr-only" {{ if .Checked }}checked{{ end }}
-                    hx-post="/bits-donations/{{ $.Class }}/action" hx-trigger="change"
-                    hx-target="#bd-{{ $.Class }}" hx-swap="outerHTML">
+                <input type="radio" name="action_{{ $.Class }}" value="{{ .Value }}" class="peer sr-only" {{ if .Checked }}checked{{ end }}
+                    hx-post="/bits-donations/edit" hx-trigger="change">
                 <span class="{{template "button-2"}} flex justify-center px-3 py-2 font-bold peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-twitch-light dark:peer-checked:border-twitch-light dark:peer-checked:bg-twitch-dark">{{ .Label }}</span>
             </label>
             {{ end }}
-        </form>
+        </div>
+        <input type="hidden" name="card_{{ .Class }}" value="{{ .CardID }}">
     </div>
 
     {{ if .NeedsCharacter }}
     <div class="flex flex-col gap-2">
         <div class="flex items-baseline justify-between text-sm text-gray-600 dark:text-gray-300">
             <span>Character</span>
-            {{ if not .Character }}<span class="text-amber-600 dark:text-amber-400">pick one to save</span>{{ end }}
+            {{ if .ActionError }}<span class="text-amber-600 dark:text-amber-400">{{ .ActionError }}</span>
+            {{ else if not .Character }}<span class="text-amber-600 dark:text-amber-400">pick one to save</span>{{ end }}
         </div>
         {{ if .Character }}
         <div class="flex items-center gap-3">
@@ -139,17 +191,16 @@
             <span class="flex-grow truncate font-medium">{{ .Character.Name }}</span>
             {{ if not .Picker }}
             <button type="button" class="{{template "button-2"}} px-4 py-1.5 text-sm"
-                hx-get="/bits-donations/{{ .Class }}/characters" hx-vals='{"reward_type": "{{ .RewardType }}"}'
-                hx-target="#bd-{{ .Class }}" hx-swap="outerHTML">Change</button>
+                hx-post="/bits-donations/edit" hx-vals='{"op": "picker", "class": "{{ .Class }}"}'>Change</button>
             {{ end }}
         </div>
         {{ end }}
         {{ with .Picker }}
-        <input type="search" name="q" value="{{ .Query }}" placeholder="search" autocomplete="off"
+        <input type="search" name="q" form="bd-no-form" value="{{ .Query }}" placeholder="search" autocomplete="off"
             class="w-full {{template "input-class"}} px-4 py-2"
-            hx-get="/bits-donations/{{ .Class }}/characters" hx-vals='{"reward_type": "{{ .RewardType }}"}'
+            hx-get="/bits-donations/{{ .Class }}/characters"
             hx-trigger="input changed delay:300ms, search"
-            hx-target="#bd-{{ .Class }}-grid" hx-swap="outerHTML">
+            hx-target="#bd-{{ .Class }}-grid" hx-swap="outerHTML" hx-sync="this:replace">
         {{ template "bd-picker-grid" . }}
         {{ end }}
     </div>
@@ -157,7 +208,10 @@
 </section>
 {{ end }}
 
-<div class="flex flex-col gap-10 pb-10">
+{{ define "bd-page" }}
+<form id="bd-page" class="flex flex-col gap-10" hx-post="/bits-donations" hx-target="#bd-page" hx-swap="outerHTML" hx-sync="this:drop">
+    <input type="hidden" name="order" value="{{ .Order.Value }}">
+
     <div class="flex w-[26rem] flex-col gap-3">
         <div class="flex items-baseline justify-between">
             <h2 class="text-xl font-bold">Play order</h2>
@@ -171,4 +225,12 @@
         {{ template "bd-event" . }}
         {{ end }}
     </div>
-</div>
+
+    <div class="{{template "save-bar-pinned"}}">
+        {{ template "save-button" "Save" }}
+        {{ template "save-status" .Save }}
+    </div>
+</form>
+{{ end }}
+
+{{ template "bd-page" . }}

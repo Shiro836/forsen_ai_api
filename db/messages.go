@@ -77,6 +77,9 @@ const (
 	MsgClassReward   MsgClass = "reward"
 	MsgClassBits     MsgClass = "bits"
 	MsgClassDonation MsgClass = "donation"
+	MsgClassSub      MsgClass = "sub"
+	MsgClassRaid     MsgClass = "raid"
+	MsgClassStreak   MsgClass = "streak"
 	MsgClassUnrouted MsgClass = "unrouted"
 )
 

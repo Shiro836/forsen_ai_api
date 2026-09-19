@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 	"slices"
@@ -17,31 +18,242 @@ import (
 var laneNames = map[db.MsgClass]string{
 	db.MsgClassDonation: "Donations",
 	db.MsgClassBits:     "Bits",
+	db.MsgClassSub:      "Subs",
 	db.MsgClassReward:   "Channel points",
+	db.MsgClassRaid:     "Raids",
+	db.MsgClassStreak:   "Streaks",
+	db.MsgClassChat:     "Chat TTS",
 }
 
-var eventActions =[]db.TwitchRewardType{db.TwitchRewardUniversalTTS, db.TwitchRewardTTS, db.TwitchRewardAI}
+var eventActions = []db.TwitchRewardType{db.TwitchRewardUniversalTTS, db.TwitchRewardTTS, db.TwitchRewardAI}
+
+// Channel points and chat have nothing to choose, so they get no card.
+var eventCards = []db.MsgClass{db.MsgClassBits, db.MsgClassDonation, db.MsgClassSub, db.MsgClassRaid, db.MsgClassStreak}
+
+type bdLineField struct {
+	Line  db.EventLine
+	Label string
+}
+
+var eventCardLines = map[db.MsgClass][]bdLineField{
+	db.MsgClassSub:    {{db.EventLineSub, "new sub"}, {db.EventLineResub, "resub"}, {db.EventLineGift, "gift subs"}},
+	db.MsgClassRaid:   {{db.EventLineRaid, ""}},
+	db.MsgClassStreak: {{db.EventLineStreak, ""}},
+}
+
+// bdState is everything the page edits. It travels in the form, so nothing
+// reaches the streamer's settings before Save.
+type bdState struct {
+	Order   [][]db.MsgClass
+	Enabled map[db.MsgClass]bool
+	Actions map[db.MsgClass]db.EventAction
+	Lines   map[db.EventLine]string
+}
+
+func bdStateFromSettings(settings *db.UserSettings) *bdState {
+	state := &bdState{
+		Order:   settings.PlayOrder(),
+		Enabled: make(map[db.MsgClass]bool),
+		Actions: make(map[db.MsgClass]db.EventAction),
+		Lines:   make(map[db.EventLine]string),
+	}
+	for class := range laneNames {
+		state.Enabled[class] = settings.LaneEnabled(class)
+	}
+	for _, class := range eventCards {
+		state.Actions[class] = settings.EventAction(class)
+		for _, field := range eventCardLines[class] {
+			state.Lines[field.Line] = settings.EventLine(field.Line)
+		}
+	}
+	return state
+}
+
+func formatBDOrder(order [][]db.MsgClass) string {
+	groups := make([]string, len(order))
+	for i, group := range order {
+		classes := make([]string, len(group))
+		for j, class := range group {
+			classes[j] = string(class)
+		}
+		groups[i] = strings.Join(classes, "+")
+	}
+	return strings.Join(groups, ",")
+}
+
+func parseBDOrder(value string) [][]db.MsgClass {
+	var order [][]db.MsgClass
+	for _, group := range strings.Split(value, ",") {
+		var classes []db.MsgClass
+		for _, class := range strings.Split(group, "+") {
+			classes = append(classes, db.MsgClass(class))
+		}
+		order = append(order, classes)
+	}
+	return order
+}
+
+func bdStateFromForm(r *http.Request) (*bdState, error) {
+	state := &bdState{
+		Order:   parseBDOrder(r.Form.Get("order")),
+		Enabled: make(map[db.MsgClass]bool),
+		Actions: make(map[db.MsgClass]db.EventAction),
+		Lines:   make(map[db.EventLine]string),
+	}
+	if err := (&db.UserSettings{}).SetPlayOrder(state.Order); err != nil {
+		return nil, err
+	}
+
+	for class := range laneNames {
+		state.Enabled[class] = slices.Contains(r.Form["on"], string(class))
+	}
+
+	for _, class := range eventCards {
+		rewardType, err := strconv.Atoi(r.Form.Get("action_" + string(class)))
+		if err != nil || !slices.Contains(eventActions, db.TwitchRewardType(rewardType)) {
+			return nil, fmt.Errorf("invalid action for %s", class)
+		}
+		action := db.EventAction{RewardType: db.TwitchRewardType(rewardType)}
+		if value := r.Form.Get("card_" + string(class)); value != "" {
+			cardID, err := uuid.Parse(value)
+			if err != nil {
+				return nil, fmt.Errorf("invalid character for %s", class)
+			}
+			action.CardID = &cardID
+		}
+		state.Actions[class] = action
+
+		for _, field := range eventCardLines[class] {
+			text := strings.Join(strings.Fields(r.Form.Get("line_"+string(field.Line))), " ")
+			if text == "" {
+				text = field.Line.Default()
+			}
+			state.Lines[field.Line] = text
+		}
+	}
+
+	return state, nil
+}
+
+func groupPaid(group []db.MsgClass) bool {
+	return !slices.ContainsFunc(group, func(class db.MsgClass) bool { return !class.Paid() })
+}
+
+// edit applies one click to the state and reports which card's character
+// picker the click asked to open.
+func (s *bdState) edit(r *http.Request) (picker db.MsgClass, err error) {
+	class := db.MsgClass(r.Form.Get("class"))
+
+	switch op := r.Form.Get("op"); op {
+	case "up", "down", "merge", "split":
+		i, err := strconv.Atoi(r.Form.Get("group"))
+		if err != nil || i < 0 || i >= len(s.Order) {
+			return "", fmt.Errorf("invalid group")
+		}
+		switch {
+		case op == "up" && i > 0:
+			s.Order[i-1], s.Order[i] = s.Order[i], s.Order[i-1]
+		case op == "down" && i+1 < len(s.Order):
+			s.Order[i], s.Order[i+1] = s.Order[i+1], s.Order[i]
+		case op == "merge" && i+1 < len(s.Order) && groupPaid(s.Order[i]) && groupPaid(s.Order[i+1]):
+			s.Order[i] = append(s.Order[i], s.Order[i+1]...)
+			s.Order = slices.Delete(s.Order, i+1, i+2)
+		case op == "split" && len(s.Order[i]) > 1:
+			singles := make([][]db.MsgClass, 0, len(s.Order[i]))
+			for _, class := range s.Order[i] {
+				singles = append(singles, []db.MsgClass{class})
+			}
+			s.Order = slices.Replace(s.Order, i, i+1, singles...)
+		default:
+			return "", fmt.Errorf("invalid move")
+		}
+
+	case "preset":
+		preset := bdPresetByName(r.Form.Get("preset"))
+		if preset == nil || len(eventCardLines[class]) == 0 {
+			return "", fmt.Errorf("unknown preset")
+		}
+		for _, field := range eventCardLines[class] {
+			s.Lines[field.Line] = preset.Lines[field.Line]
+		}
+
+	case "picker":
+		if !slices.Contains(eventCards, class) {
+			return "", fmt.Errorf("unknown event")
+		}
+		return class, nil
+
+	case "character":
+		cardID, err := uuid.Parse(r.Form.Get("card_id"))
+		if err != nil || !slices.Contains(eventCards, class) {
+			return "", fmt.Errorf("invalid character")
+		}
+		action := s.Actions[class]
+		action.CardID = &cardID
+		s.Actions[class] = action
+	}
+
+	return "", nil
+}
+
+type bdErrors struct {
+	Actions map[db.MsgClass]string
+	Lines   map[db.EventLine]string
+}
+
+func (e bdErrors) any() bool {
+	return len(e.Actions) > 0 || len(e.Lines) > 0
+}
+
+// bdStore writes the state into settings, which the caller saves only when no
+// error came back.
+func (api *API) bdStore(r *http.Request, user *db.User, settings *db.UserSettings, state *bdState) bdErrors {
+	errs := bdErrors{Actions: make(map[db.MsgClass]string), Lines: make(map[db.EventLine]string)}
+
+	_ = settings.SetPlayOrder(state.Order)
+	for class, enabled := range state.Enabled {
+		settings.SetLaneEnabled(class, enabled)
+	}
+	for line, text := range state.Lines {
+		if err := settings.SetEventLine(line, text); err != nil {
+			errs.Lines[line] = err.Error()
+		}
+	}
+	for class, action := range state.Actions {
+		if err := settings.SetEventAction(class, action); err != nil {
+			errs.Actions[class] = err.Error()
+			continue
+		}
+		if action.RewardType != db.TwitchRewardUniversalTTS {
+			if _, err := api.db.GetCharCardByID(r.Context(), user.ID, *action.CardID); err != nil {
+				errs.Actions[class] = "character not found"
+			}
+		}
+	}
+
+	return errs
+}
 
 type bdLane struct {
-	Class db.MsgClass
-	Name  string
+	Class   db.MsgClass
+	Name    string
+	Enabled bool
 }
 
 type bdGroup struct {
 	Index        int
 	Rank         int
 	Lanes        []bdLane
+	Enabled      bool
 	First        bool
 	Last         bool
 	CanMergeNext bool
 }
 
 type bdOrder struct {
+	Value  string
 	Groups []bdGroup
-}
-
-func groupPaid(group []db.MsgClass) bool {
-	return !slices.ContainsFunc(group, func(class db.MsgClass) bool { return !class.Paid() })
+	Chat   bdLane
 }
 
 type bdActionOption struct {
@@ -57,51 +269,84 @@ type bdCharacter struct {
 
 type bdPicker struct {
 	Class      db.MsgClass
-	RewardType int
 	Query      string
 	Characters []bdCharacter
+}
+
+type bdLine struct {
+	Line         db.EventLine
+	Label        string
+	Text         string
+	Placeholders []string
+	Error        string
 }
 
 type bdEvent struct {
 	Class          db.MsgClass
 	Name           string
-	RewardType     int
+	Enabled        bool
 	Actions        []bdActionOption
 	NeedsCharacter bool
+	CardID         string
 	Character      *bdCharacter
 	Picker         *bdPicker
+	ActionError    string
+	Lines          []*bdLine
+	Presets        []string
 }
+
+const bdSaveStatusID = "bd_save_result"
 
 type bdPage struct {
 	Order  bdOrder
 	Events []*bdEvent
+	Save   saveStatus
 }
 
-func newBDOrder(settings *db.UserSettings) bdOrder {
-	order := settings.PlayOrder()
-	groups := make([]bdGroup, 0, len(order))
-	for i, classes := range order {
+func newBDOrder(state *bdState) bdOrder {
+	lane := func(class db.MsgClass) bdLane {
+		return bdLane{Class: class, Name: laneNames[class], Enabled: state.Enabled[class]}
+	}
+
+	order := bdOrder{Value: formatBDOrder(state.Order), Chat: lane(db.MsgClassChat)}
+	for i, classes := range state.Order {
 		group := bdGroup{
 			Index:        i,
 			Rank:         i + 1,
 			First:        i == 0,
-			Last:         i == len(order)-1,
-			CanMergeNext: i+1 < len(order) && groupPaid(classes) && groupPaid(order[i+1]),
+			Last:         i == len(state.Order)-1,
+			CanMergeNext: i+1 < len(state.Order) && groupPaid(classes) && groupPaid(state.Order[i+1]),
 		}
 		for _, class := range classes {
-			group.Lanes = append(group.Lanes, bdLane{Class: class, Name: laneNames[class]})
+			group.Lanes = append(group.Lanes, lane(class))
+			group.Enabled = group.Enabled || state.Enabled[class]
 		}
-		groups = append(groups, group)
+		order.Groups = append(order.Groups, group)
 	}
-	return bdOrder{Groups: groups}
+	return order
 }
 
-func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, action db.EventAction, openPicker bool) (*bdEvent, error) {
+func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSettings, state *bdState, class db.MsgClass, openPicker bool, errs bdErrors) (*bdEvent, error) {
+	action := state.Actions[class]
+
 	event := &bdEvent{
 		Class:          class,
 		Name:           laneNames[class],
-		RewardType:     int(action.RewardType),
+		Enabled:        state.Enabled[class],
 		NeedsCharacter: action.RewardType != db.TwitchRewardUniversalTTS,
+		ActionError:    errs.Actions[class],
+	}
+	for _, field := range eventCardLines[class] {
+		event.Lines = append(event.Lines, &bdLine{
+			Line:         field.Line,
+			Label:        field.Label,
+			Text:         state.Lines[field.Line],
+			Placeholders: field.Line.Placeholders(),
+			Error:        errs.Lines[field.Line],
+		})
+	}
+	if len(event.Lines) > 0 {
+		event.Presets = bdPresetNames()
 	}
 	for _, rewardType := range eventActions {
 		event.Actions = append(event.Actions, bdActionOption{
@@ -111,19 +356,15 @@ func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSett
 		})
 	}
 
-	if !event.NeedsCharacter {
-		return event, nil
-	}
-
 	if action.CardID != nil {
-		card, err := api.db.GetCharCardByID(r.Context(), user.ID, *action.CardID)
-		if err == nil {
+		event.CardID = action.CardID.String()
+		if card, err := api.db.GetCharCardByID(r.Context(), user.ID, *action.CardID); err == nil {
 			event.Character = &bdCharacter{ID: card.ID, Name: card.Name}
 		}
 	}
 
-	if openPicker || event.Character == nil {
-		picker, err := api.newBDPicker(r, user, settings, class, action.RewardType, "")
+	if event.NeedsCharacter && (openPicker || event.Character == nil) {
+		picker, err := api.newBDPicker(r, user, settings, class, "")
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +374,7 @@ func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSett
 	return event, nil
 }
 
-func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, rewardType db.TwitchRewardType, query string) (*bdPicker, error) {
+func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, query string) (*bdPicker, error) {
 	cards, err := api.db.GetCharCards(r.Context(), user.ID, db.GetChatCardsParams{
 		ShowPublic: true,
 		SortBy:     db.SortByNewest,
@@ -145,7 +386,7 @@ func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSet
 	query = strings.TrimSpace(query)
 	needle := strings.ToLower(query)
 
-	picker := &bdPicker{Class: class, RewardType: int(rewardType), Query: query}
+	picker := &bdPicker{Class: class, Query: query}
 	for _, card := range cards {
 		if settings.CardDisabled(card.ID) {
 			continue
@@ -159,6 +400,27 @@ func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSet
 	return picker, nil
 }
 
+// The page is re-rendered on every click, so its status always asks again
+// (Check) whether the new form still matches the baseline it carries along.
+func (api *API) newBDPage(r *http.Request, user *db.User, settings *db.UserSettings, state *bdState, picker db.MsgClass, errs bdErrors) (*bdPage, error) {
+	page := &bdPage{
+		Order: newBDOrder(state),
+		Save:  saveStatus{ID: bdSaveStatusID, Baseline: r.Form.Get("_baseline"), Check: true},
+	}
+	if errs.any() {
+		page.Save.Check = false
+		page.Save.Error = "not saved, fix the marked fields"
+	}
+	for _, class := range eventCards {
+		event, err := api.newBDEvent(r, user, settings, state, class, class == picker, errs)
+		if err != nil {
+			return nil, err
+		}
+		page.Events = append(page.Events, event)
+	}
+	return page, nil
+}
+
 func (api *API) bitsDonations(r *http.Request) template.HTML {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
@@ -170,13 +432,9 @@ func (api *API) bitsDonations(r *http.Request) template.HTML {
 		return getHtml("error.html", &htmlErr{ErrorCode: http.StatusInternalServerError, ErrorMessage: "failed to get user settings: " + err.Error()})
 	}
 
-	page := &bdPage{Order: newBDOrder(settings)}
-	for _, class := range []db.MsgClass{db.MsgClassBits, db.MsgClassDonation} {
-		event, err := api.newBDEvent(r, user, settings, class, settings.EventAction(class), false)
-		if err != nil {
-			return getHtml("error.html", &htmlErr{ErrorCode: http.StatusInternalServerError, ErrorMessage: "failed to load characters: " + err.Error()})
-		}
-		page.Events = append(page.Events, event)
+	page, err := api.newBDPage(r, user, settings, bdStateFromSettings(settings), "", bdErrors{})
+	if err != nil {
+		return getHtml("error.html", &htmlErr{ErrorCode: http.StatusInternalServerError, ErrorMessage: "failed to load characters: " + err.Error()})
 	}
 
 	return getHtml("bits_donations.html", page)
@@ -201,143 +459,64 @@ func (api *API) bdContext(w http.ResponseWriter, r *http.Request) (*db.User, *db
 	return user, settings, true
 }
 
-func bdEventClass(w http.ResponseWriter, r *http.Request) (db.MsgClass, bool) {
-	class := db.MsgClass(chi.URLParam(r, "event"))
-	if class != db.MsgClassBits && class != db.MsgClassDonation {
-		http.Error(w, "unknown event", http.StatusNotFound)
-		return "", false
-	}
-	return class, true
-}
-
-func bdRewardType(w http.ResponseWriter, r *http.Request) (db.TwitchRewardType, bool) {
-	value, err := strconv.Atoi(r.Form.Get("reward_type"))
-	if err != nil || !slices.Contains(eventActions, db.TwitchRewardType(value)) {
-		http.Error(w, "invalid action", http.StatusBadRequest)
-		return 0, false
-	}
-	return db.TwitchRewardType(value), true
-}
-
-func (api *API) bdRenderEvent(w http.ResponseWriter, r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, action db.EventAction, openPicker bool) {
-	event, err := api.newBDEvent(r, user, settings, class, action, openPicker)
+func (api *API) bdRender(w http.ResponseWriter, r *http.Request, user *db.User, settings *db.UserSettings, state *bdState, picker db.MsgClass, errs bdErrors, saved bool) {
+	page, err := api.newBDPage(r, user, settings, state, picker, errs)
 	if err != nil {
 		http.Error(w, "failed to load characters: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = html.ExecuteTemplate(w, "bd-event", event)
+	if saved {
+		// no baseline: the saved form becomes the new one on its first check
+		page.Save.Baseline = ""
+		page.Save.Saved = true
+	}
+	_ = html.ExecuteTemplate(w, "bd-page", page)
 }
 
-func (api *API) bdSaveAction(w http.ResponseWriter, r *http.Request, user *db.User, settings *db.UserSettings, class db.MsgClass, action db.EventAction) bool {
-	if settings.EventActions == nil {
-		settings.EventActions = make(map[db.MsgClass]*db.EventAction)
-	}
-	settings.EventActions[class] = &action
-	if err := api.db.UpdateUserData(r.Context(), user.ID, settings); err != nil {
-		http.Error(w, "failed to save: "+err.Error(), http.StatusInternalServerError)
-		return false
-	}
-	return true
-}
-
-func (api *API) bitsDonationsMove(w http.ResponseWriter, r *http.Request) {
+func (api *API) bitsDonationsEdit(w http.ResponseWriter, r *http.Request) {
 	user, settings, ok := api.bdContext(w, r)
 	if !ok {
 		return
 	}
 
-	order := settings.PlayOrder()
-	i, err := strconv.Atoi(r.Form.Get("group"))
-	if err != nil || i < 0 || i >= len(order) {
-		http.Error(w, "invalid group", http.StatusBadRequest)
-		return
-	}
-
-	switch op := r.Form.Get("op"); {
-	case op == "up" && i > 0:
-		order[i-1], order[i] = order[i], order[i-1]
-	case op == "down" && i+1 < len(order):
-		order[i], order[i+1] = order[i+1], order[i]
-	case op == "merge" && i+1 < len(order) && groupPaid(order[i]) && groupPaid(order[i+1]):
-		order[i] = append(order[i], order[i+1]...)
-		order = slices.Delete(order, i+1, i+2)
-	case op == "split" && len(order[i]) > 1:
-		singles := make([][]db.MsgClass, 0, len(order[i]))
-		for _, class := range order[i] {
-			singles = append(singles, []db.MsgClass{class})
-		}
-		order = slices.Replace(order, i, i+1, singles...)
-	default:
-		http.Error(w, "invalid move", http.StatusBadRequest)
-		return
-	}
-
-	settings.PlayGroups = order
-	if err := api.db.UpdateUserData(r.Context(), user.ID, settings); err != nil {
-		http.Error(w, "failed to save: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	_ = html.ExecuteTemplate(w, "bd-order", newBDOrder(settings))
-}
-
-func (api *API) bitsDonationsAction(w http.ResponseWriter, r *http.Request) {
-	user, settings, ok := api.bdContext(w, r)
-	if !ok {
-		return
-	}
-	class, ok := bdEventClass(w, r)
-	if !ok {
-		return
-	}
-
-	rewardType, ok := bdRewardType(w, r)
-	if !ok {
-		return
-	}
-
-	action := settings.EventAction(class)
-	action.RewardType = rewardType
-
-	// a character action is stored only once its character is picked
-	if action.Complete() && !api.bdSaveAction(w, r, user, settings, class, action) {
-		return
-	}
-
-	api.bdRenderEvent(w, r, user, settings, class, action, false)
-}
-
-func (api *API) bitsDonationsCharacter(w http.ResponseWriter, r *http.Request) {
-	user, settings, ok := api.bdContext(w, r)
-	if !ok {
-		return
-	}
-	class, ok := bdEventClass(w, r)
-	if !ok {
-		return
-	}
-
-	cardID, err := uuid.Parse(r.Form.Get("card_id"))
+	state, err := bdStateFromForm(r)
 	if err != nil {
-		http.Error(w, "invalid character", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if _, err := api.db.GetCharCardByID(r.Context(), user.ID, cardID); err != nil {
-		http.Error(w, "character not found", http.StatusNotFound)
+	picker, err := state.edit(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	rewardType, ok := bdRewardType(w, r)
+	api.bdRender(w, r, user, settings, state, picker, bdErrors{}, false)
+}
+
+func (api *API) bitsDonationsSave(w http.ResponseWriter, r *http.Request) {
+	user, settings, ok := api.bdContext(w, r)
 	if !ok {
 		return
 	}
 
-	action := db.EventAction{RewardType: rewardType, CardID: &cardID}
-	if !api.bdSaveAction(w, r, user, settings, class, action) {
+	state, err := bdStateFromForm(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	api.bdRenderEvent(w, r, user, settings, class, action, false)
+	errs := api.bdStore(r, user, settings, state)
+	if errs.any() {
+		api.bdRender(w, r, user, settings, state, "", errs, false)
+		return
+	}
+
+	if err := api.db.UpdateUserData(r.Context(), user.ID, settings); err != nil {
+		http.Error(w, "failed to save: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	api.bdRender(w, r, user, settings, bdStateFromSettings(settings), "", bdErrors{}, true)
 }
 
 func (api *API) bitsDonationsPicker(w http.ResponseWriter, r *http.Request) {
@@ -345,24 +524,14 @@ func (api *API) bitsDonationsPicker(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	class, ok := bdEventClass(w, r)
-	if !ok {
+
+	class := db.MsgClass(chi.URLParam(r, "event"))
+	if !slices.Contains(eventCards, class) {
+		http.Error(w, "unknown event", http.StatusNotFound)
 		return
 	}
 
-	rewardType, ok := bdRewardType(w, r)
-	if !ok {
-		return
-	}
-
-	if !r.Form.Has("q") {
-		action := settings.EventAction(class)
-		action.RewardType = rewardType
-		api.bdRenderEvent(w, r, user, settings, class, action, true)
-		return
-	}
-
-	picker, err := api.newBDPicker(r, user, settings, class, rewardType, r.Form.Get("q"))
+	picker, err := api.newBDPicker(r, user, settings, class, r.Form.Get("q"))
 	if err != nil {
 		http.Error(w, "failed to load characters: "+err.Error(), http.StatusInternalServerError)
 		return
