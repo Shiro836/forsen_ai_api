@@ -45,7 +45,7 @@ func main() {
 	}
 	defer database.Close()
 
-	svc := ingest.NewService(logger.WithGroup("ingest"), database, &cfg.Twitch)
+	svc := ingest.NewService(logger.WithGroup("ingest"), database, &cfg.Twitch, cfg.Ingest.EventSub)
 
 	reg := prometheus.NewRegistry()
 	ingest.RegisterMetrics(reg)
@@ -79,6 +79,9 @@ func main() {
 
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
+		if handler := svc.EventSubHandler(); handler != nil {
+			mux.Handle("/eventsub/webhook", handler)
+		}
 		mux.HandleFunc("/restart", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
 				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

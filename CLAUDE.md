@@ -52,6 +52,7 @@ Read these memory files from the auto-memory directory (`~/.claude/projects/-hom
 - `feedback_use_build_script.md` — every change ends with `scripts/build_prod.sh` before reporting done. The user restarts the service after you finish; `go build ./...` only typechecks and leaves the old binary running.
 - `feedback_sudo_commands.md`, `feedback_db_readonly.md`, `feedback_secrets_public_repo.md` — what you may not execute or write.
 - `feedback_verify_live_state_first.md` — verify the live stack before asserting anything about it.
+- `feedback_no_impl_details_in_ui.md` — no task-specific or implementation details in anything a cold reader sees: UI copy, code comments, ADR status lines, docs.
 - Any `project_*.md` that the index lists for the area you're touching.
 
 ## How to work

@@ -144,7 +144,7 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 	q.Set("response_type", "code")
 	q.Set("client_id", twitchClientID)
 	q.Set("redirect_uri", "https://"+r.Host+"/twitch_redirect_handler")
-	q.Set("scope", "channel:read:subscriptions channel:manage:redemptions moderator:read:followers")
+	q.Set("scope", "channel:read:subscriptions channel:manage:redemptions moderator:read:followers bits:read")
 	q.Set("state", state)
 
 	http.Redirect(w, r, "https://id.twitch.tv/oauth2/authorize?"+q.Encode(), http.StatusFound)

@@ -29,17 +29,24 @@ type Service struct {
 	cfg    *twitch.Config
 
 	chatClient *twitch.ShardedClient
+	eventSub   *eventSub
+	correlator *correlator
 
 	activeUsers     map[string]*ingestUserConfig
 	activeUsersLock sync.RWMutex
 }
 
-func NewService(logger *slog.Logger, database *db.DB, cfg *twitch.Config) *Service {
+func NewService(logger *slog.Logger, database *db.DB, cfg *twitch.Config, eventSubCfg EventSubConfig) *Service {
 	s := &Service{
 		logger:      logger,
 		db:          database,
 		cfg:         cfg,
+		correlator:  newCorrelator(),
 		activeUsers: make(map[string]*ingestUserConfig),
+	}
+
+	if eventSubCfg.Callback != "" {
+		s.eventSub = newEventSub(logger.WithGroup("eventsub"), eventSubCfg, cfg)
 	}
 
 	s.chatClient = twitch.NewShardedClient(
@@ -66,6 +73,16 @@ func (s *Service) Run(ctx context.Context) error {
 		defer wg.Done()
 		s.pollUsers(ctx)
 	}()
+
+	if s.eventSub != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.eventSub.run(ctx, s.handleEventSub)
+		}()
+	} else {
+		s.logger.Warn("eventsub is not configured, redemptions arrive from chat only")
+	}
 
 	<-ctx.Done()
 	s.logger.Info("stopping ingest service")
@@ -108,9 +125,16 @@ func (s *Service) syncUsers(ctx context.Context) error {
 	// without a reward button nothing can be redeemed, and without ingest-all nothing
 	// plain-chat is picked up either.
 	desiredUsers := make(map[string]*ingestUserConfig, len(users))
+	desiredSubs := make(map[subKey]struct{})
 	for _, u := range users {
 		if !u.HasRewardButton && !u.IngestAllMessages {
 			continue
+		}
+
+		if u.HasRewardButton {
+			for _, key := range desiredSubscriptions(u.TwitchUserID, u.TokenScopes) {
+				desiredSubs[key] = struct{}{}
+			}
 		}
 
 		desiredUsers[strings.ToLower(u.TwitchLogin)] = &ingestUserConfig{
@@ -118,6 +142,10 @@ func (s *Service) syncUsers(ctx context.Context) error {
 			twitchUserID:      u.TwitchUserID,
 			ingestAllMessages: u.IngestAllMessages,
 		}
+	}
+
+	if s.eventSub != nil {
+		s.eventSub.setDesired(desiredSubs)
 	}
 
 	s.activeUsersLock.Lock()
@@ -202,14 +230,6 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 		return
 	}
 
-	imageIDs := imagetag.ExtractIDs(msg.Message, 2)
-
-	showImages := false
-	data := &db.MessageData{
-		ImageIDs:   imageIDs,
-		ShowImages: &showImages,
-	}
-
 	twitchMsg := db.TwitchMessage{
 		TwitchLogin:  msg.User.Name,
 		TwitchUserID: twitchUserID,
@@ -220,12 +240,53 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := s.db.PushIngestMsg(ctx, userCfg.id, twitchMsg, data, msg.ID)
-	if err != nil {
+	if len(msg.CustomRewardID) != 0 {
+		s.pushRedeem(ctx, msg.Channel, userCfg, twitchMsg, msg.ID, feedChat)
+		return
+	}
+
+	if _, err := s.pushMsg(ctx, userCfg, twitchMsg, msg.ID); err != nil {
 		s.logger.Error("failed to push message", "err", err, "user", msg.Channel)
 	} else {
 		s.logger.Info("ingested message", "user", msg.Channel, "msg_id", msg.ID)
 	}
+}
+
+func (s *Service) pushMsg(ctx context.Context, userCfg *ingestUserConfig, msg db.TwitchMessage, uniqueID string) (uuid.UUID, error) {
+	showImages := false
+	data := &db.MessageData{
+		ImageIDs:   imagetag.ExtractIDs(msg.Message, 2),
+		ShowImages: &showImages,
+	}
+
+	return s.db.PushIngestMsg(ctx, userCfg.id, msg, data, uniqueID)
+}
+
+// pushRedeem takes one feed's arrival of a redemption: the first arrival
+// becomes the queue row, the second only adds what its feed alone knows.
+func (s *Service) pushRedeem(ctx context.Context, channel string, userCfg *ingestUserConfig, msg db.TwitchMessage, uniqueID string, from feed) {
+	key := newRedeemKey(userCfg.twitchUserID, msg.TwitchUserID, msg.RewardID, msg.Message)
+
+	twin, paired, err := s.correlator.pair(key, from, time.Now(), func() (uuid.UUID, error) {
+		return s.pushMsg(ctx, userCfg, msg, uniqueID)
+	})
+	if err != nil {
+		s.logger.Error("failed to push redemption", "err", err, "user", channel, "unique_id", uniqueID)
+		return
+	}
+
+	if !paired {
+		s.logger.Info("ingested message", "user", channel, "msg_id", uniqueID)
+		return
+	}
+
+	if msg.Event != nil {
+		if err := s.db.SetMsgEvent(ctx, twin, msg.Event); err != nil {
+			s.logger.Error("failed to add event to paired redemption", "err", err, "user", channel, "queue_id", twin)
+			return
+		}
+	}
+	s.logger.Info("paired redemption", "user", channel, "queue_id", twin, "unique_id", uniqueID)
 }
 
 func parseVoiceCommand(message string) (string, bool) {

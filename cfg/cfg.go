@@ -3,6 +3,7 @@ package cfg
 import (
 	"app/db"
 	"app/internal/app/api"
+	"app/internal/app/ingest"
 	"app/internal/emoteservice"
 	"app/pkg/ai"
 	"app/pkg/clickhouse"
@@ -71,6 +72,8 @@ type Config struct {
 type IngestConfig struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
+
+	EventSub ingest.EventSubConfig `yaml:"eventsub"`
 }
 
 type InfluxConfig struct {

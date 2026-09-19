@@ -10,9 +10,14 @@ import (
 	"app/pkg/textfilter"
 	"app/pkg/tools"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
+
+var psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+
+var bumpUpdated = sq.Expr("nextval('updated_seq')")
 
 type MsgStatus int
 
@@ -43,6 +48,51 @@ type TwitchMessage struct {
 	TwitchUserID int    `json:"twitch_user_id,omitempty"`
 	Message      string `json:"message"`
 	RewardID     string `json:"reward_id"`
+
+	Event *EventMeta `json:"event,omitempty"`
+}
+
+type EventKind string
+
+const (
+	EventKindPointsRedeem  EventKind = "points_redeem"
+	EventKindCustomPowerUp EventKind = "custom_power_up"
+)
+
+const BitsPerUSD = 100
+
+// EventMeta is what only Twitch's event feed knows about a message; chat
+// delivers the same redemption without any of it.
+type EventMeta struct {
+	Kind         EventKind `json:"kind"`
+	RedemptionID string    `json:"redemption_id,omitempty"`
+	Bits         int       `json:"bits,omitempty"`
+	USD          float64   `json:"usd,omitempty"`
+}
+
+type MsgClass string
+
+const (
+	MsgClassChat     MsgClass = "chat"
+	MsgClassReward   MsgClass = "reward"
+	MsgClassBits     MsgClass = "bits"
+	MsgClassDonation MsgClass = "donation"
+	MsgClassUnrouted MsgClass = "unrouted"
+)
+
+const msgClassExpr = `(case
+	when coalesce(msg_queue.msg->>'reward_id', '') = '' then 'chat'
+	when not exists (select 1 from reward_buttons rb where rb.twitch_reward_id = msg_queue.msg->>'reward_id') then 'unrouted'
+	when msg_queue.msg->'event'->>'kind' = 'custom_power_up' then 'bits'
+	else 'reward'
+end)`
+
+func classNames(classes []MsgClass) []string {
+	names := make([]string, len(classes))
+	for i, class := range classes {
+		names[i] = string(class)
+	}
+	return names
 }
 
 type Message struct {
@@ -109,31 +159,51 @@ func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMes
 	return id, nil
 }
 
-func (db *DB) GetNextMsg(ctx context.Context, userID uuid.UUID) (*Message, error) {
-	msg := Message{}
-
-	err := db.QueryRow(ctx, `
-		select
-			id,
-			user_id,
-			msg,
-			data
-		from
-			msg_queue
-		where
-			user_id = $1
-		and
-			status = $2
-        order by
-            updated asc,
-            id asc
-		limit 1
-	`, userID, MsgStatusWait).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage, &msg.Data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get next message: %w", parseErr(err))
+// Groups play in the given order and classes sharing a group rank equally;
+// classes in no group play last. A group of several classes plays its bigger
+// dollar amounts first, everything else plays in arrival order.
+func (db *DB) ClaimNextMsg(ctx context.Context, userID uuid.UUID, order [][]MsgClass) (*Message, MsgClass, error) {
+	var (
+		classes []string
+		ranks   []int
+		merged  []bool
+	)
+	for rank, group := range order {
+		for _, class := range group {
+			classes = append(classes, string(class))
+			ranks = append(ranks, rank)
+			merged = append(merged, len(group) > 1)
+		}
 	}
 
-	return &msg, nil
+	pick := sq.Select("msg_queue.id").
+		From("msg_queue").
+		Where(sq.Eq{"msg_queue.user_id": userID, "msg_queue.status": MsgStatusWait}).
+		OrderByClause("(?::int[])[array_position(?::text[], "+msgClassExpr+")] nulls last", ranks, classes).
+		OrderByClause("case when (?::bool[])[array_position(?::text[], "+msgClassExpr+")] then (msg_queue.msg->'event'->>'usd')::numeric end desc nulls last", merged, classes).
+		// ids are uuid v7, so id order is arrival order
+		OrderBy("msg_queue.id").
+		Limit(1)
+
+	query, args, err := psql.Update("msg_queue").
+		Set("status", MsgStatusCurrent).
+		Set("updated", bumpUpdated).
+		Where(sq.Expr("msg_queue.id = (?)", pick)).
+		Suffix("returning msg_queue.id, msg_queue.user_id, msg_queue.msg, msg_queue.data, " + msgClassExpr).
+		ToSql()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to build claim query: %w", err)
+	}
+
+	var (
+		msg   Message
+		class MsgClass
+	)
+	if err := db.QueryRow(ctx, query, args...).Scan(&msg.ID, &msg.UserID, &msg.TwitchMessage, &msg.Data, &class); err != nil {
+		return nil, "", fmt.Errorf("failed to claim next message: %w", parseErr(err))
+	}
+
+	return &msg, class, nil
 }
 
 func (db *DB) GetMessageByID(ctx context.Context, msgID uuid.UUID) (*Message, error) {
@@ -214,6 +284,28 @@ type MessageData struct {
 	ImageIDs   []string `json:"image_ids,omitempty"`
 }
 
+func (db *DB) SetMsgEvent(ctx context.Context, msgID uuid.UUID, event *EventMeta) error {
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to encode message event: %w", err)
+	}
+
+	query, args, err := psql.Update("msg_queue").
+		Set("msg", sq.Expr("jsonb_set(msg, '{event}', ?::jsonb)", string(encoded))).
+		Set("updated", bumpUpdated).
+		Where(sq.Eq{"id": msgID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build message event query: %w", err)
+	}
+
+	if _, err := db.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("failed to set message event: %w", err)
+	}
+
+	return nil
+}
+
 func (db *DB) UpdateMessageData(ctx context.Context, msgID uuid.UUID, data *MessageData) error {
 	_, err := db.Exec(ctx, `
 		update
@@ -265,56 +357,75 @@ func ParseMessageData(data []byte) (*MessageData, error) {
 	return &msgData, nil
 }
 
-func (db *DB) UpdateCurrentMessages(ctx context.Context, userID uuid.UUID) (cntUpdated int, err error) {
-	tag, err := db.Exec(ctx, `
-		update
-			msg_queue
-		set
-			status = $1,
-			updated = nextval('updated_seq')
-		where
-			user_id = $2
-		and
-			status = $3
-	`, MsgStatusProcessed, userID, MsgStatusCurrent)
+func (db *DB) CompleteMsg(ctx context.Context, msgID uuid.UUID) error {
+	query, args, err := psql.Update("msg_queue").
+		Set("status", MsgStatusProcessed).
+		Set("updated", bumpUpdated).
+		// a skipped row is already Deleted and must stay that way
+		Where(sq.Eq{"id": msgID, "status": MsgStatusCurrent}).
+		ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to update current message: %w", err)
+		return fmt.Errorf("failed to build complete query: %w", err)
+	}
+
+	if _, err := db.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("failed to complete message: %w", err)
+	}
+
+	return nil
+}
+
+func (db *DB) RecoverCurrentMessages(ctx context.Context, userID uuid.UUID) (int, error) {
+	query, args, err := psql.Update("msg_queue").
+		Set("status", MsgStatusProcessed).
+		Set("updated", bumpUpdated).
+		Where(sq.Eq{"user_id": userID, "status": MsgStatusCurrent}).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("failed to build recover query: %w", err)
+	}
+
+	tag, err := db.Exec(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to recover current messages: %w", err)
 	}
 
 	return int(tag.RowsAffected()), nil
 }
 
-func (db *DB) HasWaitingKnownRewardMessage(ctx context.Context, userID uuid.UUID) (bool, error) {
-	var exists bool
-	err := db.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM msg_queue mq
-			JOIN reward_buttons rb ON rb.twitch_reward_id = mq.msg->>'reward_id'
-			WHERE mq.user_id = $1
-			AND mq.status = $2
-			AND mq.msg->>'reward_id' IS NOT NULL
-			AND mq.msg->>'reward_id' != ''
-		)
-	`, userID, MsgStatusWait).Scan(&exists)
+func (db *DB) HasWaitingOfClasses(ctx context.Context, userID uuid.UUID, classes []MsgClass) (bool, error) {
+	waiting := sq.Select("1").
+		From("msg_queue").
+		Where(sq.Eq{"msg_queue.user_id": userID, "msg_queue.status": MsgStatusWait}).
+		Where(sq.Expr(msgClassExpr+" = any(?::text[])", classNames(classes)))
+
+	query, args, err := psql.Select().Column(sq.Expr("exists(?)", waiting)).ToSql()
 	if err != nil {
-		return false, fmt.Errorf("failed to check for waiting reward message: %w", err)
+		return false, fmt.Errorf("failed to build waiting classes query: %w", err)
 	}
+
+	var exists bool
+	if err := db.QueryRow(ctx, query, args...).Scan(&exists); err != nil {
+		return false, fmt.Errorf("failed to check for waiting classes: %w", err)
+	}
+
 	return exists, nil
 }
 
-func (db *DB) SkipWaitingNoRewardMessages(ctx context.Context, userID uuid.UUID) (int, error) {
-	tag, err := db.Exec(ctx, `
-		UPDATE msg_queue
-		SET
-			status = $1,
-			updated = nextval('updated_seq')
-		WHERE
-			user_id = $2
-		AND status = $3
-		AND (msg->>'reward_id' IS NULL OR msg->>'reward_id' = '')
-	`, MsgStatusDeleted, userID, MsgStatusWait)
+func (db *DB) PurgeWaitingClass(ctx context.Context, userID uuid.UUID, class MsgClass) (int, error) {
+	query, args, err := psql.Update("msg_queue").
+		Set("status", MsgStatusDeleted).
+		Set("updated", bumpUpdated).
+		Where(sq.Eq{"msg_queue.user_id": userID, "msg_queue.status": MsgStatusWait}).
+		Where(sq.Expr(msgClassExpr+" = ?", string(class))).
+		ToSql()
 	if err != nil {
-		return 0, fmt.Errorf("failed to skip waiting no-reward messages: %w", err)
+		return 0, fmt.Errorf("failed to build purge query: %w", err)
+	}
+
+	tag, err := db.Exec(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to purge waiting %s messages: %w", class, err)
 	}
 
 	return int(tag.RowsAffected()), nil

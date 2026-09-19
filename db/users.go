@@ -108,6 +108,10 @@ type UserSettings struct {
 
 	IngestAllMessages bool `json:"ingest_all_messages,omitempty"` // When true, ingest all chat messages, not just reward redemptions
 
+	// Off leaves redemptions open on Twitch, where mods can still refund them
+	// by hand; a completed redemption cannot be refunded.
+	CloseRedemptions bool `json:"close_redemptions,omitempty"`
+
 	DisableAudioNormalization bool `json:"disable_audio_normalization,omitempty"` // When true, skip loudnorm and alimiter on TTS audio
 
 	DisableLLMFilter bool `json:"disable_llm_filter,omitempty"` // When true, skip the LLM-based content filter
@@ -117,6 +121,66 @@ type UserSettings struct {
 	CustomFilterPrompt string `json:"custom_filter_prompt,omitempty"` // Streamer-written instructions appended to the LLM filter system prompt
 
 	DisabledCardIDs []uuid.UUID `json:"disabled_card_ids,omitempty"` // Characters the streamer has switched off: not a voice, not a dialogue participant
+
+	PlayGroups   [][]MsgClass              `json:"play_order,omitempty"`
+	EventActions map[MsgClass]*EventAction `json:"event_actions,omitempty"`
+}
+
+type EventAction struct {
+	RewardType TwitchRewardType `json:"reward_type"`
+	CardID     *uuid.UUID       `json:"card_id,omitempty"`
+}
+
+var defaultPlayGroups = [][]MsgClass{{MsgClassDonation, MsgClassBits}, {MsgClassReward}}
+
+// Paid classes carry a money amount, so only they can share a play group.
+func (c MsgClass) Paid() bool {
+	return c == MsgClassDonation || c == MsgClassBits
+}
+
+func validPlayGroups(groups [][]MsgClass) bool {
+	var seen []MsgClass
+	for _, group := range groups {
+		if len(group) == 0 {
+			return false
+		}
+		for _, class := range group {
+			if slices.Contains(seen, class) || (len(group) > 1 && !class.Paid()) {
+				return false
+			}
+			seen = append(seen, class)
+		}
+	}
+	ranked := slices.Concat(defaultPlayGroups...)
+	for _, class := range ranked {
+		if !slices.Contains(seen, class) {
+			return false
+		}
+	}
+	return len(seen) == len(ranked)
+}
+
+func (s *UserSettings) PlayOrder() [][]MsgClass {
+	groups := s.PlayGroups
+	if !validPlayGroups(groups) {
+		groups = defaultPlayGroups
+	}
+	order := make([][]MsgClass, len(groups))
+	for i, group := range groups {
+		order[i] = slices.Clone(group)
+	}
+	return order
+}
+
+func (a EventAction) Complete() bool {
+	return a.RewardType == TwitchRewardUniversalTTS || a.CardID != nil
+}
+
+func (s *UserSettings) EventAction(class MsgClass) EventAction {
+	if action := s.EventActions[class]; action != nil && action.Complete() {
+		return *action
+	}
+	return EventAction{RewardType: TwitchRewardUniversalTTS}
 }
 
 func (s *UserSettings) CardDisabled(cardID uuid.UUID) bool {
