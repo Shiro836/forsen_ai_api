@@ -1213,6 +1213,10 @@ video {
   min-height: 6rem;
 }
 
+.min-h-5 {
+  min-height: 1.25rem;
+}
+
 .min-h-screen {
   min-height: 100vh;
 }
