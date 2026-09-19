@@ -2270,6 +2270,10 @@ video {
   stroke: currentColor;
 }
 
+.stroke-slate-100 {
+  stroke: #f1f5f9;
+}
+
 .object-contain {
   -o-object-fit: contain;
      object-fit: contain;
@@ -3388,6 +3392,10 @@ video {
 
 .dark\:fill-twitch-light:is(.dark *) {
   fill: #A970FF;
+}
+
+.dark\:stroke-zinc-800:is(.dark *) {
+  stroke: #27272a;
 }
 
 .dark\:text-amber-300:is(.dark *) {

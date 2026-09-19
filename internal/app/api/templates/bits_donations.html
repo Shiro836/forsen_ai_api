@@ -19,6 +19,8 @@
 {{ end }}
 {{ end }}
 
+{{ define "bd-chain" }}<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />{{ end }}
+
 {{ define "bd-order" }}
 <ol id="bd-order" class="flex flex-col gap-2">
     {{ range .Groups }}
@@ -34,16 +36,14 @@
             {{ if gt (len .Lanes) 1 }}<span class="text-sm text-gray-600 dark:text-gray-300">bigger amount first</span>{{ end }}
         </div>
         {{ if gt (len .Lanes) 1 }}
-        <button type="button" class="{{template "button-2"}} flex h-8 items-center gap-1.5 px-2.5 text-xs font-bold"
+        <button type="button" class="{{template "button-2"}} flex h-8 w-8 shrink-0 items-center justify-center" aria-label="Unlink"
             hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "split"}'
             hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
-            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M16 3h5v5" />
-                <path d="M8 3H3v5" />
-                <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3" />
-                <path d="m15 9 6-6" />
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                {{ template "bd-chain" }}
+                <path class="stroke-slate-100 dark:stroke-zinc-800" d="M4 4l16 16" stroke-width="6" />
+                <path d="M4 4l16 16" stroke-width="2.5" />
             </svg>
-            split
         </button>
         {{ end }}
         <button type="button" class="{{template "button-2"}} flex h-8 w-8 items-center justify-center disabled:opacity-25 disabled:hover:border-slate-300 dark:disabled:hover:border-slate-700"
@@ -65,9 +65,7 @@
             hx-post="/bits-donations/order" hx-vals='{"group": "{{ .Index }}", "op": "merge"}'
             hx-target="#bd-order" hx-swap="outerHTML" hx-sync="#bd-order:drop">
             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M9 17H7a5 5 0 0 1 0-10h2" />
-                <path d="M15 7h2a5 5 0 0 1 0 10h-2" />
-                <path d="M8 12h8" />
+                {{ template "bd-chain" }}
             </svg>
             merge
         </button>
