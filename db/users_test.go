@@ -148,3 +148,40 @@ func TestEventLine(t *testing.T) {
 		}
 	}
 }
+
+func TestSpokenText(t *testing.T) {
+	settings := &UserSettings{}
+	if err := settings.SetEventLine(EventLineGift, "{user} dropped {count} tier {tier} subs"); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		msg  TwitchMessage
+		want string
+	}{
+		{"chat", TwitchMessage{TwitchLogin: "a", Message: "hi"}, "hi"},
+		{"redeem", TwitchMessage{TwitchLogin: "a", Message: "hi", RewardID: "r", Event: &EventMeta{Kind: EventKindPointsRedeem}}, "hi"},
+		{"the viewer's words win", TwitchMessage{TwitchLogin: "a", Message: "12 months!", Event: &EventMeta{Kind: EventKindResub, Months: 12}}, "12 months!"},
+		{"default line", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindResub, Months: 12, Tier: 1}}, "a subscribed for 12 months"},
+		{"the streamer's line", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindGiftSubs, GiftCount: 5, Tier: 3}}, "a dropped 5 tier 3 subs"},
+		{"raid", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindRaid, Viewers: 40}}, "a is raiding with 40 viewers"},
+		{"streak", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindStreak, Streak: 7}}, "a watched 7 streams in a row"},
+		{"follow", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindFollow}}, "a followed"},
+		{"a value the event lacks renders empty", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindGiftSubs, GiftCount: 5}}, "a dropped 5 tier  subs"},
+	}
+	for _, tc := range cases {
+		if got := settings.SpokenText(&tc.msg); got != tc.want {
+			t.Errorf("%s: SpokenText = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestYieldingLanes(t *testing.T) {
+	if got := (&UserSettings{}).YieldingLanes(); !reflect.DeepEqual(got, []MsgClass{MsgClassFollow}) {
+		t.Fatalf("YieldingLanes = %v, want follows", got)
+	}
+	if got := (&UserSettings{FollowsStay: true}).YieldingLanes(); len(got) != 0 {
+		t.Fatalf("YieldingLanes = %v, want none", got)
+	}
+}

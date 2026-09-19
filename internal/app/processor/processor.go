@@ -206,7 +206,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 			logger.Warn("failed to get user settings, using defaults", "err", err)
 			userSettings = &db.UserSettings{}
 		}
-		order := queue.Order(userSettings.EnabledPlayOrder())
+		order := queue.Order{Groups: userSettings.EnabledPlayOrder(), Yielding: userSettings.YieldingLanes()}
 
 		msg, purged, err := p.queue.Claim(ctx, broadcaster.ID, order)
 		if err != nil {
@@ -224,7 +224,7 @@ func (p *Processor) processLoop(ctx context.Context, eventWriter conns.EventWrit
 			logger.Error("error purging yielding messages", "msg_id", msg.ID, "err", err)
 		}
 		if purged > 0 {
-			logger.Info("purged queued chat messages", "count", purged)
+			logger.Info("purged yielding messages", "count", purged)
 		}
 		p.connManager.NotifyControlPanel(broadcaster.ID)
 
@@ -284,19 +284,19 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		return nil
 	}
 
-	if msg.Class == db.MsgClassChat {
-		watchCtx, stopWatch := context.WithCancel(ctx)
-		defer stopWatch()
-		preempt := p.queue.WatchPreempt(watchCtx, msg, order)
-		go func() {
-			select {
-			case <-preempt:
-				state.AddSkipped(msg.ID)
-				eventWriter(skipEvent(msg.ID, true))
-			case <-watchCtx.Done():
-			}
-		}()
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
+	preempt := p.queue.WatchPreempt(watchCtx, msg, order)
+	go func() {
+		select {
+		case <-preempt:
+			state.AddSkipped(msg.ID)
+			eventWriter(skipEvent(msg.ID, true))
+		case <-watchCtx.Done():
+		}
+	}()
 
+	if msg.Class == db.MsgClassChat {
 		col.SetHandler("chat_tts", nil, nil)
 		outcome = archive.OutcomePlayed
 		input := InteractionInput{
@@ -316,19 +316,28 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		return nil
 	}
 
-	cardID, rewardType, err := p.db.GetRewardByTwitchReward(ctx, msg.TwitchMessage.RewardID)
-	if err != nil {
-		return fmt.Errorf("error getting reward by twitch reward: %w", err)
-	}
-
-	// Track reward usage per chatter
-	if msg.TwitchMessage.TwitchUserID != 0 {
-		if err := p.db.IncrementChatUserRewardCount(ctx, msg.TwitchMessage.TwitchUserID, msg.TwitchMessage.TwitchLogin); err != nil {
-			logger.Warn("failed to increment reward count", "err", err)
+	var (
+		cardID     *uuid.UUID
+		rewardType db.TwitchRewardType
+	)
+	if _, ok := msg.TwitchMessage.EventLane(); ok {
+		action := userSettings.EventAction(msg.Class)
+		cardID, rewardType = action.CardID, action.RewardType
+	} else {
+		cardID, rewardType, err = p.db.GetRewardByTwitchReward(ctx, msg.TwitchMessage.RewardID)
+		if err != nil {
+			return fmt.Errorf("error getting reward by twitch reward: %w", err)
 		}
-	}
 
-	monitoring.AppMetrics.RewardRedeems.WithLabelValues(broadcaster.TwitchLogin, rewardType.String()).Inc()
+		// Track reward usage per chatter
+		if msg.TwitchMessage.TwitchUserID != 0 {
+			if err := p.db.IncrementChatUserRewardCount(ctx, msg.TwitchMessage.TwitchUserID, msg.TwitchMessage.TwitchLogin); err != nil {
+				logger.Warn("failed to increment reward count", "err", err)
+			}
+		}
+
+		monitoring.AppMetrics.RewardRedeems.WithLabelValues(broadcaster.TwitchLogin, rewardType.String()).Inc()
+	}
 
 	var charCard *db.Card
 	if cardID != nil {
@@ -347,7 +356,7 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		Requester:    msg.TwitchMessage.TwitchLogin,
 		TwitchUserID: msg.TwitchMessage.TwitchUserID,
 		Broadcaster:  broadcaster,
-		Message:      msg.TwitchMessage.Message,
+		Message:      userSettings.SpokenText(&msg.TwitchMessage),
 		Character:    charCard,
 		UserSettings: userSettings,
 		MsgID:        msg.ID.String(),

@@ -18,16 +18,16 @@ const (
 
 const correlatorTTL = 5 * time.Minute
 
-// Twitch gives the two feeds no shared id, so a redemption is recognised by
-// who redeemed what with which text.
-type redeemKey struct {
+// Twitch gives the two feeds no shared id, so an event is recognised by who
+// did what with which text; what is a reward id, a cheer of some bits, a resub.
+type pairKey struct {
 	broadcasterID int
 	viewerID      int
-	rewardID      string
+	what          string
 	text          string
 }
 
-func newRedeemKey(broadcasterID, viewerID int, rewardID, text string) redeemKey {
+func newPairKey(broadcasterID, viewerID int, what, text string) pairKey {
 	text = strings.Map(func(r rune) rune {
 		// U+E0000 is what chat clients append to get past the duplicate-message
 		// check; it is unassigned, so the format-character class misses it.
@@ -37,10 +37,10 @@ func newRedeemKey(broadcasterID, viewerID int, rewardID, text string) redeemKey 
 		return r
 	}, text)
 
-	return redeemKey{
+	return pairKey{
 		broadcasterID: broadcasterID,
 		viewerID:      viewerID,
-		rewardID:      rewardID,
+		what:          what,
 		text:          strings.Join(strings.Fields(text), " "),
 	}
 }
@@ -57,22 +57,22 @@ type unpaired struct {
 	rows []unpairedRow
 }
 
-// correlator pairs the two arrivals of one redemption. Both feeds keep their
+// correlator pairs the two arrivals of one event. Both feeds keep their
 // order per channel, so the n-th repeat on one pairs with the n-th on the other.
 type correlator struct {
 	lock    sync.Mutex
-	waiting map[redeemKey]*unpaired
+	waiting map[pairKey]*unpaired
 	swept   time.Time
 }
 
 func newCorrelator() *correlator {
-	return &correlator{waiting: make(map[redeemKey]*unpaired)}
+	return &correlator{waiting: make(map[pairKey]*unpaired)}
 }
 
-// pair returns the row the other feed already created for this redemption.
+// pair returns the row the other feed already created for this event.
 // Without one it runs create and keeps the new row for the other feed to find.
 // The lock spans create: the twin arriving meanwhile must see this row.
-func (c *correlator) pair(key redeemKey, from feed, now time.Time, create func() (uuid.UUID, error)) (twin uuid.UUID, paired bool, err error) {
+func (c *correlator) pair(key pairKey, from feed, now time.Time, create func() (uuid.UUID, error)) (twin uuid.UUID, paired bool, err error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

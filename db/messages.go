@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"app/pkg/textfilter"
@@ -57,17 +58,29 @@ type EventKind string
 const (
 	EventKindPointsRedeem  EventKind = "points_redeem"
 	EventKindCustomPowerUp EventKind = "custom_power_up"
+	EventKindCheer         EventKind = "cheer"
+	EventKindSub           EventKind = "sub"
+	EventKindResub         EventKind = "resub"
+	EventKindGiftSubs      EventKind = "sub_gift"
+	EventKindRaid          EventKind = "raid"
+	EventKindStreak        EventKind = "streak"
+	EventKindFollow        EventKind = "follow"
 )
 
 const BitsPerUSD = 100
 
-// EventMeta is what only Twitch's event feed knows about a message; chat
-// delivers the same redemption without any of it.
+// EventMeta is the Twitch event behind a message; a redemption that only chat
+// delivered has none.
 type EventMeta struct {
 	Kind         EventKind `json:"kind"`
 	RedemptionID string    `json:"redemption_id,omitempty"`
 	Bits         int       `json:"bits,omitempty"`
 	USD          float64   `json:"usd,omitempty"`
+	Tier         int       `json:"tier,omitempty"`
+	Months       int       `json:"months,omitempty"`
+	GiftCount    int       `json:"gift_count,omitempty"`
+	Viewers      int       `json:"viewers,omitempty"`
+	Streak       int       `json:"streak,omitempty"`
 }
 
 type MsgClass string
@@ -84,12 +97,46 @@ const (
 	MsgClassUnrouted MsgClass = "unrouted"
 )
 
-const msgClassExpr = `(case
-	when coalesce(msg_queue.msg->>'reward_id', '') = '' then 'chat'
+var eventLanes = []struct {
+	kind  EventKind
+	class MsgClass
+}{
+	{EventKindCheer, MsgClassBits},
+	{EventKindSub, MsgClassSub},
+	{EventKindResub, MsgClassSub},
+	{EventKindGiftSubs, MsgClassSub},
+	{EventKindRaid, MsgClassRaid},
+	{EventKindStreak, MsgClassStreak},
+	{EventKindFollow, MsgClassFollow},
+}
+
+// EventLane is the class of a message that came from an event with no reward
+// behind it; ok is false for chat and for redemptions.
+func (m *TwitchMessage) EventLane() (class MsgClass, ok bool) {
+	if m.RewardID != "" || m.Event == nil {
+		return "", false
+	}
+	for _, lane := range eventLanes {
+		if lane.kind == m.Event.Kind {
+			return lane.class, true
+		}
+	}
+	return "", false
+}
+
+var msgClassExpr = func() string {
+	var eventLane strings.Builder
+	for _, lane := range eventLanes {
+		fmt.Fprintf(&eventLane, " when '%s' then '%s'", lane.kind, lane.class)
+	}
+
+	return `(case
+	when coalesce(msg_queue.msg->>'reward_id', '') = '' then coalesce(case msg_queue.msg->'event'->>'kind'` + eventLane.String() + ` end, 'chat')
 	when not exists (select 1 from reward_buttons rb where rb.twitch_reward_id = msg_queue.msg->>'reward_id') then 'unrouted'
 	when msg_queue.msg->'event'->>'kind' = 'custom_power_up' then 'bits'
 	else 'reward'
 end)`
+}()
 
 func classNames(classes []MsgClass) []string {
 	names := make([]string, len(classes))

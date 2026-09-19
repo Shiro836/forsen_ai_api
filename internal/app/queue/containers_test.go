@@ -83,7 +83,9 @@ func (f *fixture) status(id uuid.UUID) db.MsgStatus {
 	return msg.Status
 }
 
-var rewardFirst = Order{{db.MsgClassReward}}
+type groups = [][]db.MsgClass
+
+var rewardFirst = Order{Groups: groups{{db.MsgClassReward}}}
 
 func (f *fixture) claim() (*Claimed, int) {
 	f.t.Helper()
@@ -111,7 +113,7 @@ func TestContainersOrderDecidesThePick(t *testing.T) {
 	reward := f.push("a", "redeem", f.reward)
 	unbound := f.push("b", "other reward", "rw-unknown")
 
-	order := Order{{db.MsgClassUnrouted}, {db.MsgClassReward}}
+	order := Order{Groups: groups{{db.MsgClassUnrouted}, {db.MsgClassReward}}}
 	msg, _ := f.claimWith(order)
 	if msg.ID != unbound {
 		t.Fatalf("claimed %v, want the later row whose class the order ranks first", msg.ID)
@@ -129,7 +131,7 @@ func TestContainersGroupedClassesRankEqually(t *testing.T) {
 	reward := f.push("a", "redeem", f.reward)
 	f.push("b", "other reward", "rw-unknown")
 
-	msg, _ := f.claimWith(Order{{db.MsgClassUnrouted, db.MsgClassReward}})
+	msg, _ := f.claimWith(Order{Groups: groups{{db.MsgClassUnrouted, db.MsgClassReward}}})
 	if msg.ID != reward {
 		t.Fatalf("claimed %v, want the first-arrived row of the group", msg.ID)
 	}
@@ -150,7 +152,7 @@ func TestContainersPowerUpIsBits(t *testing.T) {
 	f.push("a", "points redeem", f.reward)
 	bits := f.pushBits("power-up", 10)
 
-	msg, _ := f.claimWith(Order{{db.MsgClassBits}, {db.MsgClassReward}})
+	msg, _ := f.claimWith(Order{Groups: groups{{db.MsgClassBits}, {db.MsgClassReward}}})
 	if msg.ID != bits || msg.Class != db.MsgClassBits {
 		t.Fatalf("claimed %v as %q, want the later power-up row as bits", msg.ID, msg.Class)
 	}
@@ -166,7 +168,7 @@ func TestContainersUnboundPowerUpStaysUnrouted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if msg, _ := f.claimWith(Order{{db.MsgClassBits}}); msg.Class != db.MsgClassUnrouted {
+	if msg, _ := f.claimWith(Order{Groups: groups{{db.MsgClassBits}}}); msg.Class != db.MsgClassUnrouted {
 		t.Fatalf("claimed as %q, want unrouted", msg.Class)
 	}
 }
@@ -177,7 +179,7 @@ func TestContainersMergedGroupPlaysBiggerAmountFirst(t *testing.T) {
 	big := f.pushBits("big", 500)
 	alsoBig := f.pushBits("same amount, later", 500)
 
-	merged := Order{{db.MsgClassDonation, db.MsgClassBits}}
+	merged := Order{Groups: groups{{db.MsgClassDonation, db.MsgClassBits}}}
 	for _, want := range []uuid.UUID{big, alsoBig, small} {
 		msg, _ := f.claimWith(merged)
 		if msg.ID != want {
@@ -194,7 +196,7 @@ func TestContainersLoneLanePlaysInArrivalOrder(t *testing.T) {
 	small := f.pushBits("small", 10)
 	f.pushBits("big", 500)
 
-	if msg, _ := f.claimWith(Order{{db.MsgClassBits}, {db.MsgClassDonation}}); msg.ID != small {
+	if msg, _ := f.claimWith(Order{Groups: groups{{db.MsgClassBits}, {db.MsgClassDonation}}}); msg.ID != small {
 		t.Fatalf("claimed %v, want the first-arrived row", msg.ID)
 	}
 }
@@ -204,7 +206,7 @@ func TestContainersEmptyOrderIsArrivalOrder(t *testing.T) {
 	chat := f.push("a", "hi", "")
 	f.push("b", "redeem", f.reward)
 
-	msg, purged := f.claimWith(nil)
+	msg, purged := f.claimWith(Order{})
 	if msg.ID != chat || purged != 0 {
 		t.Fatalf("claimed %v purged=%d, want the first-arrived chat row and nothing purged", msg.ID, purged)
 	}
@@ -345,5 +347,123 @@ func TestContainersRewardNeverPreempted(t *testing.T) {
 	case <-preempt:
 		t.Fatal("reward row was preempted")
 	case <-time.After(3 * watchInterval):
+	}
+}
+
+func (f *fixture) pushEvent(kind db.EventKind) uuid.UUID {
+	f.t.Helper()
+	msg := db.TwitchMessage{TwitchLogin: "viewer", Event: &db.EventMeta{Kind: kind}}
+	id, err := f.db.PushMsg(context.Background(), f.user, msg, &db.MessageData{})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return id
+}
+
+func TestContainersEventsClaimAsTheirLane(t *testing.T) {
+	f := newFixture(t)
+	for _, tc := range []struct {
+		kind db.EventKind
+		want db.MsgClass
+	}{
+		{db.EventKindCheer, db.MsgClassBits},
+		{db.EventKindSub, db.MsgClassSub},
+		{db.EventKindResub, db.MsgClassSub},
+		{db.EventKindGiftSubs, db.MsgClassSub},
+		{db.EventKindRaid, db.MsgClassRaid},
+		{db.EventKindStreak, db.MsgClassStreak},
+		{db.EventKindFollow, db.MsgClassFollow},
+	} {
+		id := f.pushEvent(tc.kind)
+		msg, _ := f.claimWith(Order{})
+		if msg.ID != id || msg.Class != tc.want {
+			t.Fatalf("%s claimed as %q, want %q", tc.kind, msg.Class, tc.want)
+		}
+		if lane, ok := msg.TwitchMessage.EventLane(); !ok || lane != tc.want {
+			t.Fatalf("%s: EventLane %q, the claim says %q", tc.kind, lane, tc.want)
+		}
+		if err := f.q.Complete(context.Background(), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+var followsYield = Order{
+	Groups:   groups{{db.MsgClassSub}, {db.MsgClassFollow}, {db.MsgClassRaid}},
+	Yielding: []db.MsgClass{db.MsgClassFollow},
+}
+
+func TestContainersYieldingLaneDropsForWhatOutranksIt(t *testing.T) {
+	f := newFixture(t)
+	followA := f.pushEvent(db.EventKindFollow)
+	followB := f.pushEvent(db.EventKindFollow)
+	chat := f.push("a", "hi", "")
+	sub := f.pushEvent(db.EventKindSub)
+
+	msg, purged := f.claimWith(followsYield)
+	if msg.ID != sub || purged != 3 {
+		t.Fatalf("claimed %v purged=%d, want the sub with both follows and the chat row purged", msg.ID, purged)
+	}
+	for _, id := range []uuid.UUID{followA, followB, chat} {
+		if s := f.status(id); s != db.MsgStatusDeleted {
+			t.Fatalf("row %v status %s, want Deleted", id, s)
+		}
+	}
+}
+
+func TestContainersYieldingLaneStaysForWhatItOutranks(t *testing.T) {
+	f := newFixture(t)
+	follow := f.pushEvent(db.EventKindFollow)
+	raid := f.pushEvent(db.EventKindRaid)
+
+	msg, purged := f.claimWith(followsYield)
+	if msg.ID != follow || purged != 0 {
+		t.Fatalf("claimed %v purged=%d, want the follow with nothing purged", msg.ID, purged)
+	}
+	if err := f.q.Complete(context.Background(), follow); err != nil {
+		t.Fatal(err)
+	}
+	if msg, _ := f.claimWith(followsYield); msg.ID != raid {
+		t.Fatalf("claimed %v, want the raid", msg.ID)
+	}
+}
+
+func TestContainersLaneThatDoesNotYieldStays(t *testing.T) {
+	f := newFixture(t)
+	follow := f.pushEvent(db.EventKindFollow)
+	f.pushEvent(db.EventKindSub)
+
+	order := followsYield
+	order.Yielding = nil
+
+	if _, purged := f.claimWith(order); purged != 0 {
+		t.Fatalf("purged %d rows, want none", purged)
+	}
+	if s := f.status(follow); s != db.MsgStatusWait {
+		t.Fatalf("follow status %s, want Wait", s)
+	}
+}
+
+func TestContainersYieldingLaneIsPreempted(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	f.pushEvent(db.EventKindFollow)
+	follow, _ := f.claimWith(followsYield)
+	preempt := f.q.WatchPreempt(ctx, follow, followsYield)
+
+	f.pushEvent(db.EventKindRaid)
+	select {
+	case <-preempt:
+		t.Fatal("follow was preempted by a lane it outranks")
+	case <-time.After(2 * watchInterval):
+	}
+
+	f.pushEvent(db.EventKindSub)
+	select {
+	case <-preempt:
+	case <-time.After(3 * watchInterval):
+		t.Fatal("follow was not preempted by a queued sub")
 	}
 }

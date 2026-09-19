@@ -19,11 +19,26 @@ var ErrEmpty = errors.New("queue empty")
 
 const watchInterval = time.Second
 
-// Order is groups of classes, highest first; a group's classes rank equally.
-type Order [][]db.MsgClass
+type Order struct {
+	// Groups are classes, highest first; a group's classes rank equally.
+	Groups [][]db.MsgClass
+	// Yielding classes are dropped from the queue and cut off mid-playback by
+	// anything ranked above them. Chat always is.
+	Yielding []db.MsgClass
+}
 
-func (o Order) classes() []db.MsgClass {
-	return slices.Concat(o...)
+// above is what outranks class: for a class the order does not rank, all of it.
+func (o Order) above(class db.MsgClass) []db.MsgClass {
+	for rank, group := range o.Groups {
+		if slices.Contains(group, class) {
+			return slices.Concat(o.Groups[:rank]...)
+		}
+	}
+	return slices.Concat(o.Groups...)
+}
+
+func (o Order) yielding() []db.MsgClass {
+	return append([]db.MsgClass{db.MsgClassChat}, o.Yielding...)
 }
 
 type Claimed struct {
@@ -40,7 +55,7 @@ func New(database *db.DB) *Queue {
 }
 
 func (q *Queue) Claim(ctx context.Context, userID uuid.UUID, order Order) (claimed *Claimed, purged int, err error) {
-	msg, class, err := q.db.ClaimNextMsg(ctx, userID, order)
+	msg, class, err := q.db.ClaimNextMsg(ctx, userID, order.Groups)
 	if err != nil {
 		if errors.Is(err, db.ErrNoRows) {
 			return nil, 0, ErrEmpty
@@ -49,11 +64,15 @@ func (q *Queue) Claim(ctx context.Context, userID uuid.UUID, order Order) (claim
 	}
 	claimed = &Claimed{Message: msg, Class: class}
 
-	if slices.Contains(order.classes(), class) {
-		purged, err = q.db.PurgeWaitingClass(ctx, userID, db.MsgClassChat)
-		if err != nil {
-			return claimed, 0, fmt.Errorf("purge chat: %w", err)
+	for _, yielding := range order.yielding() {
+		if !slices.Contains(order.above(yielding), class) {
+			continue
 		}
+		n, err := q.db.PurgeWaitingClass(ctx, userID, yielding)
+		if err != nil {
+			return claimed, purged, fmt.Errorf("purge %s: %w", yielding, err)
+		}
+		purged += n
 	}
 
 	return claimed, purged, nil
@@ -78,7 +97,8 @@ func (q *Queue) Recover(ctx context.Context, userID uuid.UUID) (int, error) {
 // Producers run in another process, so this polls.
 func (q *Queue) WatchPreempt(ctx context.Context, claimed *Claimed, order Order) <-chan struct{} {
 	fired := make(chan struct{}, 1)
-	if claimed.Class != db.MsgClassChat {
+	above := order.above(claimed.Class)
+	if !slices.Contains(order.yielding(), claimed.Class) || len(above) == 0 {
 		return fired
 	}
 
@@ -90,7 +110,7 @@ func (q *Queue) WatchPreempt(ctx context.Context, claimed *Claimed, order Order)
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				ranked, err := q.db.HasWaitingOfClasses(ctx, claimed.UserID, order.classes())
+				ranked, err := q.db.HasWaitingOfClasses(ctx, claimed.UserID, above)
 				if err != nil || !ranked {
 					continue
 				}

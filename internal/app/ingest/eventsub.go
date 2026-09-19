@@ -2,7 +2,6 @@ package ingest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"app/pkg/twitch"
+	"app/db"
 
 	"github.com/Its-donkey/kappopher/helix"
 )
@@ -26,6 +25,9 @@ const (
 	eventSubSyncInterval   = 10 * time.Second
 	eventSubRelistInterval = 10 * time.Minute
 	eventSubRetryDelay     = 10 * time.Minute
+	// The webhook handler refuses a notification older than this, so no
+	// redelivery arrives later.
+	eventSubRedeliveryWindow = 10 * time.Minute
 
 	scopeBitsRead = "bits:read"
 )
@@ -35,12 +37,29 @@ type subKey struct {
 	broadcasterID string
 }
 
+func broadcasterField(eventType string) string {
+	if eventType == helix.EventSubTypeChannelRaid {
+		return "to_broadcaster_user_id"
+	}
+	return "broadcaster_user_id"
+}
+
+func (k subKey) condition() map[string]string {
+	condition := map[string]string{broadcasterField(k.eventType): k.broadcasterID}
+	if k.eventType == helix.EventSubTypeChannelFollow {
+		condition["moderator_user_id"] = k.broadcasterID
+	}
+	return condition
+}
+
+func subKeyOf(sub helix.EventSubSubscription) subKey {
+	return subKey{sub.Type, sub.Condition[broadcasterField(sub.Type)]}
+}
+
 type eventSub struct {
 	logger *slog.Logger
 	cfg    EventSubConfig
-
-	auth   *helix.AuthClient
-	client *helix.Client
+	app    *appClient
 
 	conduitID string
 
@@ -50,32 +69,57 @@ type eventSub struct {
 	retryAt map[subKey]time.Time
 
 	notifications chan *helix.EventSubWebhookMessage
+	// A pairing arrival inserts no row, so the queue's unique id cannot catch
+	// its redelivery.
+	delivered *helix.MessageDeduplicator
 }
 
-func newEventSub(logger *slog.Logger, cfg EventSubConfig, twitchCfg *twitch.Config) *eventSub {
-	auth := helix.NewAuthClient(helix.AuthConfig{
-		ClientID:     twitchCfg.ClientID,
-		ClientSecret: twitchCfg.Secret,
-	})
-
+func newEventSub(logger *slog.Logger, cfg EventSubConfig, app *appClient) *eventSub {
 	return &eventSub{
 		logger:        logger,
 		cfg:           cfg,
-		auth:          auth,
-		client:        helix.NewClient(twitchCfg.ClientID, auth),
+		app:           app,
 		desired:       make(map[subKey]struct{}),
 		live:          make(map[subKey]string),
 		retryAt:       make(map[subKey]time.Time),
 		notifications: make(chan *helix.EventSubWebhookMessage, 1024),
+		delivered:     helix.NewMessageDeduplicator(eventSubRedeliveryWindow, 1<<14),
 	}
 }
 
-func desiredSubscriptions(twitchUserID int, scopes []string) []subKey {
-	broadcasterID := strconv.Itoa(twitchUserID)
+// desiredSubscriptions follows the lanes that are on: an event nobody plays is
+// not worth a subscription, and a follow wave on such a channel not worth its rows.
+func desiredSubscriptions(u *db.IngestUser) []subKey {
+	bitsRead := slices.Contains(u.TokenScopes, scopeBitsRead)
 
-	keys := []subKey{{helix.EventSubTypeChannelPointsRedemptionAdd, broadcasterID}}
-	if slices.Contains(scopes, scopeBitsRead) {
-		keys = append(keys, subKey{helix.EventSubTypeChannelCustomPowerUpRedemptionAdd, broadcasterID})
+	var eventTypes []string
+	if u.HasRewardButton {
+		eventTypes = append(eventTypes, helix.EventSubTypeChannelPointsRedemptionAdd)
+		if bitsRead {
+			eventTypes = append(eventTypes, helix.EventSubTypeChannelCustomPowerUpRedemptionAdd)
+		}
+	}
+	if bitsRead && u.Settings.LaneEnabled(db.MsgClassBits) {
+		eventTypes = append(eventTypes, helix.EventSubTypeChannelBitsUse)
+	}
+	if u.Settings.LaneEnabled(db.MsgClassSub) {
+		eventTypes = append(eventTypes,
+			helix.EventSubTypeChannelSubscribe,
+			helix.EventSubTypeChannelSubscriptionMessage,
+			helix.EventSubTypeChannelSubscriptionGift,
+		)
+	}
+	if u.Settings.LaneEnabled(db.MsgClassRaid) {
+		eventTypes = append(eventTypes, helix.EventSubTypeChannelRaid)
+	}
+	if u.Settings.LaneEnabled(db.MsgClassFollow) {
+		eventTypes = append(eventTypes, helix.EventSubTypeChannelFollow)
+	}
+
+	broadcasterID := strconv.Itoa(u.TwitchUserID)
+	keys := make([]subKey, len(eventTypes))
+	for i, eventType := range eventTypes {
+		keys[i] = subKey{eventType, broadcasterID}
 	}
 	return keys
 }
@@ -91,6 +135,9 @@ func (e *eventSub) handler() http.Handler {
 		helix.WithWebhookSecret(e.cfg.Secret),
 		// Twitch revokes subscriptions of slow responders, so the work happens off the request.
 		helix.WithNotificationHandler(func(msg *helix.EventSubWebhookMessage) {
+			if e.delivered.IsDuplicate(msg.MessageID) {
+				return
+			}
 			select {
 			case e.notifications <- msg:
 			default:
@@ -98,7 +145,7 @@ func (e *eventSub) handler() http.Handler {
 			}
 		}),
 		helix.WithRevocationHandler(func(msg *helix.EventSubWebhookMessage) {
-			key := subKey{msg.Subscription.Type, msg.Subscription.Condition["broadcaster_user_id"]}
+			key := subKeyOf(msg.Subscription)
 			e.logger.Warn("eventsub subscription revoked", "type", key.eventType, "broadcaster", key.broadcasterID, "status", msg.Subscription.Status)
 
 			e.lock.Lock()
@@ -146,32 +193,12 @@ func (e *eventSub) run(ctx context.Context, handle func(context.Context, *helix.
 	}
 }
 
-// App tokens carry no refresh token; an expired one is simply requested again.
-func (e *eventSub) call(ctx context.Context, fn func() error) error {
-	if e.auth.GetToken() == nil {
-		if _, err := e.auth.GetAppAccessToken(ctx); err != nil {
-			return fmt.Errorf("get app token: %w", err)
-		}
-	}
-
-	err := fn()
-
-	var apiErr *helix.APIError
-	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized {
-		if _, err := e.auth.GetAppAccessToken(ctx); err != nil {
-			return fmt.Errorf("renew app token: %w", err)
-		}
-		return fn()
-	}
-	return err
-}
-
 // The client id is shared between deployments, so a conduit is recognised as
 // ours by the callback its shard delivers to.
 func (e *eventSub) findConduit(ctx context.Context) (conduitID string, enabled bool, err error) {
 	var conduits *helix.Response[helix.Conduit]
-	if err := e.call(ctx, func() (err error) {
-		conduits, err = e.client.GetConduits(ctx)
+	if err := e.app.call(ctx, func() (err error) {
+		conduits, err = e.app.GetConduits(ctx)
 		return err
 	}); err != nil {
 		return "", false, fmt.Errorf("get conduits: %w", err)
@@ -179,8 +206,8 @@ func (e *eventSub) findConduit(ctx context.Context) (conduitID string, enabled b
 
 	for _, conduit := range conduits.Data {
 		var shards *helix.GetConduitShardsResponse
-		if err := e.call(ctx, func() (err error) {
-			shards, err = e.client.GetConduitShards(ctx, &helix.GetConduitShardsParams{ConduitID: conduit.ID})
+		if err := e.app.call(ctx, func() (err error) {
+			shards, err = e.app.GetConduitShards(ctx, &helix.GetConduitShardsParams{ConduitID: conduit.ID})
 			return err
 		}); err != nil {
 			return "", false, fmt.Errorf("get shards of conduit %s: %w", conduit.ID, err)
@@ -204,8 +231,8 @@ func (e *eventSub) ensureConduit(ctx context.Context) error {
 
 	if conduitID == "" {
 		var conduit *helix.Conduit
-		if err := e.call(ctx, func() (err error) {
-			conduit, err = e.client.CreateConduit(ctx, 1)
+		if err := e.app.call(ctx, func() (err error) {
+			conduit, err = e.app.CreateConduit(ctx, 1)
 			return err
 		}); err != nil {
 			return fmt.Errorf("create conduit: %w", err)
@@ -220,8 +247,8 @@ func (e *eventSub) ensureConduit(ctx context.Context) error {
 	}
 
 	var updated *helix.UpdateConduitShardsResponse
-	if err := e.call(ctx, func() (err error) {
-		updated, err = e.client.UpdateConduitShards(ctx, &helix.UpdateConduitShardsParams{
+	if err := e.app.call(ctx, func() (err error) {
+		updated, err = e.app.UpdateConduitShards(ctx, &helix.UpdateConduitShardsParams{
 			ConduitID: conduitID,
 			Shards: []helix.UpdateConduitShardParams{{
 				ID:        "0",
@@ -246,8 +273,8 @@ func (e *eventSub) relist(ctx context.Context) error {
 	}
 
 	var subs []helix.EventSubSubscription
-	if err := e.call(ctx, func() (err error) {
-		subs, err = e.client.GetAllSubscriptions(ctx, &helix.GetEventSubSubscriptionsParams{ConduitID: e.conduitID})
+	if err := e.app.call(ctx, func() (err error) {
+		subs, err = e.app.GetAllSubscriptions(ctx, &helix.GetEventSubSubscriptionsParams{ConduitID: e.conduitID})
 		return err
 	}); err != nil {
 		return fmt.Errorf("list subscriptions: %w", err)
@@ -259,7 +286,7 @@ func (e *eventSub) relist(ctx context.Context) error {
 			continue
 		}
 
-		key := subKey{sub.Type, sub.Condition["broadcaster_user_id"]}
+		key := subKeyOf(sub)
 		if _, duplicate := live[key]; sub.Status != "enabled" || duplicate {
 			e.logger.Warn("eventsub removing subscription", "type", sub.Type, "broadcaster", key.broadcasterID, "status", sub.Status)
 			e.unsubscribe(ctx, sub.ID)
@@ -276,8 +303,8 @@ func (e *eventSub) relist(ctx context.Context) error {
 }
 
 func (e *eventSub) unsubscribe(ctx context.Context, subscriptionID string) {
-	if err := e.call(ctx, func() error {
-		return e.client.DeleteEventSubSubscription(ctx, subscriptionID)
+	if err := e.app.call(ctx, func() error {
+		return e.app.DeleteEventSubSubscription(ctx, subscriptionID)
 	}); err != nil {
 		e.logger.Error("eventsub unsubscribe failed", "subscription", subscriptionID, "err", err)
 	}
@@ -303,11 +330,11 @@ func (e *eventSub) sync(ctx context.Context) {
 
 	for _, key := range missing {
 		var sub *helix.EventSubSubscription
-		err := e.call(ctx, func() (err error) {
-			sub, err = e.client.CreateEventSubSubscription(ctx, &helix.CreateEventSubSubscriptionParams{
+		err := e.app.call(ctx, func() (err error) {
+			sub, err = e.app.CreateEventSubSubscription(ctx, &helix.CreateEventSubSubscriptionParams{
 				Type:      key.eventType,
 				Version:   helix.GetEventSubVersion(key.eventType),
-				Condition: map[string]string{"broadcaster_user_id": key.broadcasterID},
+				Condition: key.condition(),
 				Transport: helix.CreateEventSubTransport{Method: "conduit", ConduitID: e.conduitID},
 			})
 			return err

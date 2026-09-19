@@ -105,12 +105,12 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 }
 
 type IngestUser struct {
-	ID                uuid.UUID
-	TwitchLogin       string
-	TwitchUserID      int
-	IngestAllMessages bool
-	HasRewardButton   bool
-	TokenScopes       []string
+	ID              uuid.UUID
+	TwitchLogin     string
+	TwitchUserID    int
+	Settings        UserSettings
+	HasRewardButton bool
+	TokenScopes     []string
 }
 
 func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
@@ -118,8 +118,7 @@ func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
 	tokenScopes := sq.Select("t.scopes").From("twitch_tokens t").Where("t.user_id = u.id")
 
 	query, args, err := psql.
-		Select("u.id", "u.twitch_login", "u.twitch_user_id").
-		Column("coalesce((u.data->>'ingest_all_messages')::boolean, false)").
+		Select("u.id", "u.twitch_login", "u.twitch_user_id", "u.data").
 		Column(sq.Expr("exists(?)", hasRewardButton)).
 		Column(sq.Expr("coalesce((?), '{}')", tokenScopes)).
 		From("permissions p").
@@ -139,7 +138,7 @@ func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
 	var users []*IngestUser
 	for rows.Next() {
 		var u IngestUser
-		if err := rows.Scan(&u.ID, &u.TwitchLogin, &u.TwitchUserID, &u.IngestAllMessages, &u.HasRewardButton, &u.TokenScopes); err != nil {
+		if err := rows.Scan(&u.ID, &u.TwitchLogin, &u.TwitchUserID, &u.Settings, &u.HasRewardButton, &u.TokenScopes); err != nil {
 			return nil, fmt.Errorf("failed to scan ingest user: %w", err)
 		}
 		users = append(users, &u)

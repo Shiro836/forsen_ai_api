@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -124,6 +125,56 @@ func (s *UserSettings) EventLine(line EventLine) string {
 		return text
 	}
 	return line.Default()
+}
+
+var eventKindLines = map[EventKind]EventLine{
+	EventKindSub:      EventLineSub,
+	EventKindResub:    EventLineResub,
+	EventKindGiftSubs: EventLineGift,
+	EventKindRaid:     EventLineRaid,
+	EventKindStreak:   EventLineStreak,
+	EventKindFollow:   EventLineFollow,
+}
+
+// SpokenText is the viewer's own message when they typed one, otherwise the
+// streamer's line for the event. A placeholder the event has no value for
+// renders empty.
+func (s *UserSettings) SpokenText(msg *TwitchMessage) string {
+	if msg.Message != "" || msg.Event == nil {
+		return msg.Message
+	}
+	line, ok := eventKindLines[msg.Event.Kind]
+	if !ok {
+		return ""
+	}
+
+	number := func(n int) string {
+		if n == 0 {
+			return ""
+		}
+		return strconv.Itoa(n)
+	}
+	values := map[string]string{
+		"user":    msg.TwitchLogin,
+		"tier":    number(msg.Event.Tier),
+		"months":  number(msg.Event.Months),
+		"count":   number(msg.Event.GiftCount),
+		"viewers": number(msg.Event.Viewers),
+		"streak":  number(msg.Event.Streak),
+	}
+
+	return eventLinePlaceholder.ReplaceAllStringFunc(s.EventLine(line), func(placeholder string) string {
+		return values[strings.Trim(placeholder, "{}")]
+	})
+}
+
+// YieldingLanes are dropped from the queue and cut off mid-playback by
+// anything ranked above them.
+func (s *UserSettings) YieldingLanes() []MsgClass {
+	if s.FollowsStay {
+		return nil
+	}
+	return []MsgClass{MsgClassFollow}
 }
 
 // SetEventLine stores text for line; empty text or the default itself clears
