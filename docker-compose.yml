@@ -25,6 +25,7 @@ services:
     volumes:
       - ./cfg/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./cfg/minio_prometheus_token:/etc/prometheus/minio_token
+      - prom-data:/prometheus
     command:
       # Overriding command drops the image's own flags, so the storage path
       # stays the default data/ under the workdir — moving it strands the
@@ -165,6 +166,7 @@ services:
 volumes:
   ch-data:
   loki-data:
+  prom-data:
   pg-data:
   emote-pg-data:
   grafana-data-1:
