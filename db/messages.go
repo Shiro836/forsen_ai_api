@@ -48,6 +48,26 @@ type TwitchMessage struct {
 	TwitchUserID int    `json:"twitch_user_id,omitempty"`
 	Message      string `json:"message"`
 	RewardID     string `json:"reward_id"`
+
+	Event *EventMeta `json:"event,omitempty"`
+}
+
+type EventKind string
+
+const (
+	EventKindPointsRedeem  EventKind = "points_redeem"
+	EventKindCustomPowerUp EventKind = "custom_power_up"
+)
+
+const BitsPerUSD = 100
+
+// EventMeta is what only Twitch's event feed knows about a message; chat
+// delivers the same redemption without any of it.
+type EventMeta struct {
+	Kind         EventKind `json:"kind"`
+	RedemptionID string    `json:"redemption_id,omitempty"`
+	Bits         int       `json:"bits,omitempty"`
+	USD          float64   `json:"usd,omitempty"`
 }
 
 type MsgClass string
@@ -62,8 +82,9 @@ const (
 
 const msgClassExpr = `(case
 	when coalesce(msg_queue.msg->>'reward_id', '') = '' then 'chat'
-	when exists (select 1 from reward_buttons rb where rb.twitch_reward_id = msg_queue.msg->>'reward_id') then 'reward'
-	else 'unrouted'
+	when not exists (select 1 from reward_buttons rb where rb.twitch_reward_id = msg_queue.msg->>'reward_id') then 'unrouted'
+	when msg_queue.msg->'event'->>'kind' = 'custom_power_up' then 'bits'
+	else 'reward'
 end)`
 
 func classNames(classes []MsgClass) []string {
@@ -139,16 +160,19 @@ func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMes
 }
 
 // Groups play in the given order and classes sharing a group rank equally;
-// classes in no group play last.
+// classes in no group play last. A group of several classes plays its bigger
+// dollar amounts first, everything else plays in arrival order.
 func (db *DB) ClaimNextMsg(ctx context.Context, userID uuid.UUID, order [][]MsgClass) (*Message, MsgClass, error) {
 	var (
 		classes []string
 		ranks   []int
+		merged  []bool
 	)
 	for rank, group := range order {
 		for _, class := range group {
 			classes = append(classes, string(class))
 			ranks = append(ranks, rank)
+			merged = append(merged, len(group) > 1)
 		}
 	}
 
@@ -156,6 +180,7 @@ func (db *DB) ClaimNextMsg(ctx context.Context, userID uuid.UUID, order [][]MsgC
 		From("msg_queue").
 		Where(sq.Eq{"msg_queue.user_id": userID, "msg_queue.status": MsgStatusWait}).
 		OrderByClause("(?::int[])[array_position(?::text[], "+msgClassExpr+")] nulls last", ranks, classes).
+		OrderByClause("case when (?::bool[])[array_position(?::text[], "+msgClassExpr+")] then (msg_queue.msg->'event'->>'usd')::numeric end desc nulls last", merged, classes).
 		// ids are uuid v7, so id order is arrival order
 		OrderBy("msg_queue.id").
 		Limit(1)
@@ -257,6 +282,28 @@ type MessageData struct {
 
 	ShowImages *bool    `json:"show_images,omitempty"`
 	ImageIDs   []string `json:"image_ids,omitempty"`
+}
+
+func (db *DB) SetMsgEvent(ctx context.Context, msgID uuid.UUID, event *EventMeta) error {
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to encode message event: %w", err)
+	}
+
+	query, args, err := psql.Update("msg_queue").
+		Set("msg", sq.Expr("jsonb_set(msg, '{event}', ?::jsonb)", string(encoded))).
+		Set("updated", bumpUpdated).
+		Where(sq.Eq{"id": msgID}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("failed to build message event query: %w", err)
+	}
+
+	if _, err := db.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("failed to set message event: %w", err)
+	}
+
+	return nil
 }
 
 func (db *DB) UpdateMessageData(ctx context.Context, msgID uuid.UUID, data *MessageData) error {

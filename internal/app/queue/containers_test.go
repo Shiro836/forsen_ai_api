@@ -135,6 +135,70 @@ func TestContainersGroupedClassesRankEqually(t *testing.T) {
 	}
 }
 
+func (f *fixture) pushBits(text string, bits int) uuid.UUID {
+	f.t.Helper()
+	id := f.push("viewer", text, f.reward)
+	event := &db.EventMeta{Kind: db.EventKindCustomPowerUp, Bits: bits, USD: float64(bits) / db.BitsPerUSD}
+	if err := f.db.SetMsgEvent(context.Background(), id, event); err != nil {
+		f.t.Fatal(err)
+	}
+	return id
+}
+
+func TestContainersPowerUpIsBits(t *testing.T) {
+	f := newFixture(t)
+	f.push("a", "points redeem", f.reward)
+	bits := f.pushBits("power-up", 10)
+
+	msg, _ := f.claimWith(Order{{db.MsgClassBits}, {db.MsgClassReward}})
+	if msg.ID != bits || msg.Class != db.MsgClassBits {
+		t.Fatalf("claimed %v as %q, want the later power-up row as bits", msg.ID, msg.Class)
+	}
+	if msg.TwitchMessage.Event == nil || msg.TwitchMessage.Event.Bits != 10 {
+		t.Fatalf("claimed row lost its event: %+v", msg.TwitchMessage.Event)
+	}
+}
+
+func TestContainersUnboundPowerUpStaysUnrouted(t *testing.T) {
+	f := newFixture(t)
+	id := f.push("a", "power-up nobody bound", "rw-unknown")
+	if err := f.db.SetMsgEvent(context.Background(), id, &db.EventMeta{Kind: db.EventKindCustomPowerUp, Bits: 10, USD: 0.1}); err != nil {
+		t.Fatal(err)
+	}
+
+	if msg, _ := f.claimWith(Order{{db.MsgClassBits}}); msg.Class != db.MsgClassUnrouted {
+		t.Fatalf("claimed as %q, want unrouted", msg.Class)
+	}
+}
+
+func TestContainersMergedGroupPlaysBiggerAmountFirst(t *testing.T) {
+	f := newFixture(t)
+	small := f.pushBits("small", 10)
+	big := f.pushBits("big", 500)
+	alsoBig := f.pushBits("same amount, later", 500)
+
+	merged := Order{{db.MsgClassDonation, db.MsgClassBits}}
+	for _, want := range []uuid.UUID{big, alsoBig, small} {
+		msg, _ := f.claimWith(merged)
+		if msg.ID != want {
+			t.Fatalf("claimed %v, want %v", msg.ID, want)
+		}
+		if err := f.q.Complete(context.Background(), msg.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestContainersLoneLanePlaysInArrivalOrder(t *testing.T) {
+	f := newFixture(t)
+	small := f.pushBits("small", 10)
+	f.pushBits("big", 500)
+
+	if msg, _ := f.claimWith(Order{{db.MsgClassBits}, {db.MsgClassDonation}}); msg.ID != small {
+		t.Fatalf("claimed %v, want the first-arrived row", msg.ID)
+	}
+}
+
 func TestContainersEmptyOrderIsArrivalOrder(t *testing.T) {
 	f := newFixture(t)
 	chat := f.push("a", "hi", "")
