@@ -164,6 +164,13 @@ func (e *eventSub) run(ctx context.Context, handle func(context.Context, *helix.
 				return
 			case msg := <-e.notifications:
 				metrics.EventSubNotifications.WithLabelValues(msg.SubscriptionType).Inc()
+				// Every payload is logged before anything reads it: the queue
+				// keeps only what it plays, so this is the record of the rest.
+				e.logger.Info("eventsub notification",
+					"type", msg.SubscriptionType,
+					"message_id", msg.MessageID,
+					"subscription", msg.Subscription.ID,
+					"event", string(msg.Event))
 				handle(ctx, msg)
 			}
 		}

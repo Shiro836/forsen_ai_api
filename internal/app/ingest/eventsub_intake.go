@@ -190,7 +190,11 @@ func (s *Service) handleEventSub(ctx context.Context, msg *helix.EventSubWebhook
 		s.logger.Error("failed to parse eventsub notification", "err", err, "type", msg.SubscriptionType, "event", string(msg.Event))
 		return
 	}
+
+	logger := s.logger.With("type", msg.SubscriptionType, "message_id", msg.MessageID, "user", broadcasterLogin)
+
 	if in == nil {
+		logger.Info("eventsub event ignored", "reason", "the event feed announces it elsewhere")
 		return
 	}
 
@@ -198,12 +202,14 @@ func (s *Service) handleEventSub(ctx context.Context, msg *helix.EventSubWebhook
 	userCfg, ok := s.activeUsers[strings.ToLower(broadcasterLogin)]
 	s.activeUsersLock.RUnlock()
 	if !ok {
+		logger.Info("eventsub event ignored", "reason", "channel is not ingested")
 		return
 	}
 
 	// Chat never delivers a redemption without text, and hands "^^" text to
 	// clanker instead of the queue; the same redemption must not enter from here.
 	if in.msg.RewardID != "" && (len(in.msg.Message) == 0 || strings.HasPrefix(in.msg.Message, "^^")) {
+		logger.Info("eventsub event ignored", "reason", "redemption is not the queue's to play")
 		return
 	}
 

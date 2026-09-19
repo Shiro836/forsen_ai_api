@@ -252,7 +252,11 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	switch {
 	case len(msg.CustomRewardID) != 0:
 		in.pairAs = msg.CustomRewardID
-	case msg.Bits > 0 && userCfg.settings.LaneEnabled(db.MsgClassBits) && !fromAnotherChannel(msg.Tags):
+	case msg.Bits > 0 && !fromAnotherChannel(msg.Tags):
+		s.logger.Info("chat cheer", "user", msg.Channel, "bits", msg.Bits, "raw", msg.Raw)
+		if !userCfg.settings.LaneEnabled(db.MsgClassBits) {
+			return
+		}
 		in.msg.Event = &db.EventMeta{Kind: db.EventKindCheer, Bits: msg.Bits, USD: float64(msg.Bits) / db.BitsPerUSD}
 		in.pairAs = pairAsCheer(msg.Bits)
 	case !userCfg.settings.LaneEnabled(db.MsgClassChat):
@@ -308,6 +312,10 @@ func noticeArrival(msg gempir.UserNoticeMessage) (in arrival, ok bool) {
 }
 
 func (s *Service) handleUserNotice(msg gempir.UserNoticeMessage) {
+	// Chat announces more kinds than the queue plays, and the queue keeps only
+	// what it plays, so the line itself is the record of the rest.
+	s.logger.Info("chat notice", "user", msg.Channel, "notice", msg.MsgID, "raw", msg.Raw)
+
 	s.activeUsersLock.RLock()
 	userCfg, ok := s.activeUsers[strings.ToLower(msg.Channel)]
 	s.activeUsersLock.RUnlock()
@@ -340,8 +348,14 @@ func (s *Service) pushMsg(ctx context.Context, userCfg *ingestUserConfig, msg db
 // arrival becomes the queue row and the second only adds what its feed alone
 // knows.
 func (s *Service) push(ctx context.Context, channel string, userCfg *ingestUserConfig, in arrival, from feed) {
-	if lane, ok := in.msg.EventLane(); ok && !userCfg.settings.LaneEnabled(lane) {
-		return
+	lane, _ := in.msg.EventLane()
+	logger := s.logger.With("user", channel, "unique_id", in.uniqueID)
+	if lane != "" {
+		logger = logger.With("lane", lane)
+		if !userCfg.settings.LaneEnabled(lane) {
+			logger.Info("event not queued", "reason", "lane is off")
+			return
+		}
 	}
 
 	// The feeds agree on the text as typed, so that is what pairs them.
@@ -350,6 +364,7 @@ func (s *Service) push(ctx context.Context, channel string, userCfg *ingestUserC
 	if in.msg.Event != nil && in.msg.Event.Kind == db.EventKindCheer {
 		in.msg.Message = s.cheermotes.strip(ctx, userCfg.twitchUserID, in.msg.Message)
 		if in.msg.Message == "" {
+			logger.Info("event not queued", "reason", "nothing to say but the cheermotes")
 			return
 		}
 	}
@@ -369,22 +384,22 @@ func (s *Service) push(ctx context.Context, channel string, userCfg *ingestUserC
 		twin, paired, err = s.correlator.pair(key, from, time.Now(), create)
 	}
 	if err != nil {
-		s.logger.Error("failed to push message", "err", err, "user", channel, "unique_id", in.uniqueID)
+		logger.Error("failed to push message", "err", err)
 		return
 	}
 
 	if !paired {
-		s.logger.Info("ingested message", "user", channel, "msg_id", in.uniqueID)
+		logger.Info("ingested message", "msg_id", in.uniqueID)
 		return
 	}
 
 	if from == feedEventSub {
 		if err := s.db.SetMsgEvent(ctx, twin, in.msg.Event); err != nil {
-			s.logger.Error("failed to add event to paired message", "err", err, "user", channel, "queue_id", twin)
+			logger.Error("failed to add event to paired message", "err", err, "queue_id", twin)
 			return
 		}
 	}
-	s.logger.Info("paired message", "user", channel, "queue_id", twin, "unique_id", in.uniqueID)
+	logger.Info("paired message", "queue_id", twin)
 }
 
 func parseVoiceCommand(message string) (string, bool) {
