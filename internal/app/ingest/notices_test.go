@@ -20,6 +20,9 @@ const (
 	mysteryGift    = `@badge-info=subscriber/123;badges=subscriber/120,premium/1;color=#FF0000;display-name=some_gifter;emotes=;flags=;id=6d412482-f5d5-43ed-9a64-4cc2e2a82132;login=some_gifter;mod=0;msg-id=submysterygift;msg-param-community-gift-id=17694935589118822615;msg-param-mass-gift-count=5;msg-param-origin-id=17694935589118822615;msg-param-sender-count=32;msg-param-sub-plan=1000;room-id=26490481;subscriber=1;system-msg=x;tmi-sent-ts=1789849399856;user-id=42467504;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer`
 	giftRecipient  = `@badge-info=subscriber/123;badges=subscriber/120,sub-gifter/25;color=#FF0000;display-name=some_gifter;emotes=;flags=;id=b33cbe0c-7c70-4e8e-8b75-bfdd98a0d2d2;login=some_gifter;mod=0;msg-id=subgift;msg-param-community-gift-id=17694935589118822615;msg-param-gift-months=1;msg-param-months=72;msg-param-origin-id=17694935589118822615;msg-param-recipient-display-name=some_viewer;msg-param-recipient-id=17662106;msg-param-recipient-user-name=some_viewer;msg-param-sender-count=0;msg-param-sub-plan-name=x;msg-param-sub-plan=1000;room-id=26490481;subscriber=1;system-msg=x;tmi-sent-ts=1789849400894;user-id=42467504;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer`
 	standaloneGift = `@badge-info=subscriber/86;badges=broadcaster/1,subscriber/3072,partner/1;color=#DAA520;display-name=some_gifter;emotes=;flags=;id=f70d0ea6-16c6-4c17-addb-a8da1af874ed;login=some_gifter;mod=0;msg-id=subgift;msg-param-gift-months=1;msg-param-months=3;msg-param-origin-id=3579205679884335276;msg-param-recipient-display-name=some_viewer;msg-param-recipient-id=1496027923;msg-param-recipient-user-name=some_viewer;msg-param-sender-count=0;msg-param-sub-plan-name=x;msg-param-sub-plan=1000;room-id=162957501;subscriber=1;system-msg=x;tmi-sent-ts=1789900513749;user-id=162957501;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer`
+	primeUpgrade   = `@badge-info=subscriber/2;badges=subscriber/2,nasa-roman/1;color=#FF69B4;display-name=Some_Viewer;emotes=;flags=;id=dcff9944-cd36-495f-a564-8d2658a8a5d4;login=some_viewer;mod=0;msg-id=primepaidupgrade;msg-param-sub-plan=1000;room-id=280197012;subscriber=1;system-msg=x;tmi-sent-ts=1789911394006;user-id=92060342;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer`
+	giftUpgrade    = `@badge-info=subscriber/4;badges=subscriber/2,twitch-recap-2025/1;color=#FF69B4;display-name=Some_Viewer;emotes=;flags=;id=0682ab80-8f03-4fe5-a02c-abd36a491462;login=some_viewer;mod=0;msg-id=giftpaidupgrade;msg-param-sender-login=someone;msg-param-sender-name=someone;room-id=929140741;subscriber=1;system-msg=x;tmi-sent-ts=1789911254011;user-id=722315869;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer`
+	payForward     = `@badge-info=subscriber/17;badges=subscriber/12,pichu/1;color=;display-name=Some_Viewer;emotes=;flags=;id=378e214b-930b-445b-a1f5-5f135687f850;login=some_viewer;mod=0;msg-id=communitypayforward;msg-param-prior-gifter-anonymous=false;msg-param-prior-gifter-display-name=someone;msg-param-prior-gifter-id=194348079;msg-param-prior-gifter-user-name=someone;room-id=28764226;subscriber=1;system-msg=x;tmi-sent-ts=1789911727463;user-id=95315270;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer`
 	anonymousGift  = `@badge-info=;badges=;color=;display-name=AnAnonymousGifter;emotes=;flags=;id=fdfa1527-3499-4881-b8e2-efd7f463b44d;login=ananonymousgifter;mod=0;msg-id=subgift;msg-param-fun-string=FunStringThree;msg-param-gift-months=1;msg-param-months=6;msg-param-origin-id=9320595997383922116;msg-param-recipient-display-name=some_viewer;msg-param-recipient-id=123716893;msg-param-recipient-user-name=some_viewer;msg-param-sub-plan-name=x;msg-param-sub-plan=1000;room-id=36196174;subscriber=0;system-msg=x;tmi-sent-ts=1789900613956;user-id=274598607;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer`
 	raidNotice     = `@badge-info=;badges=partner/1;color=#00FF7F;display-name=Some_Raider;emotes=;flags=;id=49c7fe4b-1cd7-4afe-a727-c492331657d6;login=some_raider;mod=0;msg-id=raid;msg-param-displayName=Some_Raider;msg-param-login=some_raider;msg-param-profileImageURL=x;msg-param-viewerCount=91;room-id=209005581;subscriber=0;system-msg=x;tmi-sent-ts=1789900530893;user-id=150480078;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer`
 	streakNotice   = `@badge-info=subscriber/46;badges=subscriber/42,pichu/1;color=#FF0000;display-name=Some_Viewer;emotes=;flags=;id=9807c606-e5b3-4dd0-a066-4ea5fdbadff3;login=some_viewer;mod=0;msg-id=viewermilestone;msg-param-category=watch-streak;msg-param-copoReward=450;msg-param-id=71616713-26ae-4427-bb6c-f37c2480a3b0;msg-param-value=25;room-id=39276140;subscriber=1;system-msg=x;tmi-sent-ts=1789849221358;user-id=125629679;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #streamer :hello`
@@ -59,37 +62,38 @@ func TestNoticeArrival(t *testing.T) {
 		{"new sub", subNotice, arrival{
 			msg:      viewer(424549349, "", db.EventMeta{Kind: db.EventKindSub, Tier: 1}),
 			uniqueID: "5c2588c3-5ca7-4cad-a176-1912c99933b8",
-			pairAs:   pairAsSub,
+		}},
+		{"prime sub continued as a paid one", primeUpgrade, arrival{
+			msg:      viewer(92060342, "", db.EventMeta{Kind: db.EventKindSub, Tier: 1}),
+			uniqueID: "dcff9944-cd36-495f-a564-8d2658a8a5d4",
+		}},
+		{"gifted sub continued as a paid one", giftUpgrade, arrival{
+			msg:      viewer(722315869, "", db.EventMeta{Kind: db.EventKindSub}),
+			uniqueID: "0682ab80-8f03-4fe5-a02c-abd36a491462",
 		}},
 		{"resub with the viewer's words", resubNotice, arrival{
 			msg:      viewer(137578120, "hope you're doing fine", db.EventMeta{Kind: db.EventKindResub, Tier: 1, Months: 60}),
 			uniqueID: "68b7c055-2b27-42c7-84b5-6c2cd3e90dd1",
-			pairAs:   pairAsResub,
 		}},
 		{"prime resub without words", primeResub, arrival{
 			msg:      viewer(601959373, "", db.EventMeta{Kind: db.EventKindResub, Tier: 1, Months: 6}),
 			uniqueID: "931a0a3b-ca63-4a3d-a10d-d6fc7e73cc90",
-			pairAs:   pairAsResub,
 		}},
 		{"community gift", mysteryGift, arrival{
 			msg:      gifter(42467504, db.EventMeta{Kind: db.EventKindGiftSubs, Tier: 1, GiftCount: 5}),
 			uniqueID: "6d412482-f5d5-43ed-9a64-4cc2e2a82132",
-			pairAs:   "gift:5",
 		}},
 		{"gift to one viewer", standaloneGift, arrival{
 			msg:      gifter(162957501, db.EventMeta{Kind: db.EventKindGiftSubs, Tier: 1, GiftCount: 1}),
 			uniqueID: "f70d0ea6-16c6-4c17-addb-a8da1af874ed",
-			pairAs:   "gift:1",
 		}},
 		{"anonymous gift, which the event feed sends with no gifter at all", anonymousGift, arrival{
 			msg:      db.TwitchMessage{TwitchLogin: anonymousLogin, Event: &db.EventMeta{Kind: db.EventKindGiftSubs, Tier: 1, GiftCount: 1}},
 			uniqueID: "fdfa1527-3499-4881-b8e2-efd7f463b44d",
-			pairAs:   "gift:1",
 		}},
 		{"raid", raidNotice, arrival{
 			msg:      db.TwitchMessage{TwitchLogin: "some_raider", TwitchUserID: 150480078, Event: &db.EventMeta{Kind: db.EventKindRaid, Viewers: 91}},
 			uniqueID: "49c7fe4b-1cd7-4afe-a727-c492331657d6",
-			pairAs:   pairAsRaid,
 		}},
 		{"watch streak", streakNotice, arrival{
 			msg:      viewer(125629679, "hello", db.EventMeta{Kind: db.EventKindStreak, Streak: 25}),
@@ -104,6 +108,9 @@ func TestNoticeArrival(t *testing.T) {
 
 	_, ok := noticeArrival(notice(t, giftRecipient))
 	assert.False(t, ok, "a community gift is one message, not one per recipient")
+
+	_, ok = noticeArrival(notice(t, payForward))
+	assert.False(t, ok, "a gift paid forward is announced by the gift's own notices")
 }
 
 func TestOnlyACheerIsACheer(t *testing.T) {

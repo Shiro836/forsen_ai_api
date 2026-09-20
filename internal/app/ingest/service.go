@@ -17,6 +17,13 @@ import (
 	"github.com/google/uuid"
 )
 
+type feed string
+
+const (
+	feedChat     feed = "chat"
+	feedEventSub feed = "events"
+)
+
 // ingestUserConfig is never changed once it is in activeUsers; a sync swaps
 // in a new one, so handlers read theirs without the lock.
 type ingestUserConfig struct {
@@ -32,7 +39,6 @@ type Service struct {
 
 	chatClient *twitch.ShardedClient
 	eventSub   *eventSub
-	correlator *correlator
 	cheermotes *cheermotes
 
 	activeUsers     map[string]*ingestUserConfig
@@ -46,7 +52,6 @@ func NewService(logger *slog.Logger, database *db.DB, cfg *twitch.Config, eventS
 		logger:      logger,
 		db:          database,
 		cfg:         cfg,
-		correlator:  newCorrelator(),
 		cheermotes:  newCheermotes(logger, app),
 		activeUsers: make(map[string]*ingestUserConfig),
 	}
@@ -202,65 +207,93 @@ func (s *Service) departChannel(channel string) {
 	s.chatClient.Depart(channel)
 }
 
+// chatLine is a chat message the way either feed delivers it. Both feeds are
+// turned into one and handled by the same code, under the id Twitch gave the
+// message, which is the same on both.
+type chatLine struct {
+	channel  string
+	id       string
+	viewerID int
+	viewer   string
+	text     string
+	rewardID string
+	// cheered is the bits of a cheer, and zero for anything else that costs bits.
+	cheered int
+}
+
+func ircChatLine(msg gempir.PrivateMessage) chatLine {
+	viewerID, _ := strconv.Atoi(msg.User.ID)
+	bits, _ := cheerBits(msg)
+
+	return chatLine{
+		channel:  msg.Channel,
+		id:       msg.ID,
+		viewerID: viewerID,
+		viewer:   msg.User.Name,
+		text:     msg.Message,
+		rewardID: msg.CustomRewardID,
+		cheered:  bits,
+	}
+}
+
 func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	metrics.MessagesIngested.Inc()
 
+	line := ircChatLine(msg)
+	if line.cheered > 0 {
+		s.logger.Info("chat cheer", "user", msg.Channel, "bits", line.cheered, "raw", msg.Raw)
+	}
+
+	s.handleChatLine(line, feedChat)
+}
+
+func (s *Service) handleChatLine(line chatLine, from feed) {
 	s.activeUsersLock.RLock()
-	userCfg, ok := s.activeUsers[strings.ToLower(msg.Channel)]
+	userCfg, ok := s.activeUsers[strings.ToLower(line.channel)]
 	s.activeUsersLock.RUnlock()
 
 	if !ok {
 		return
 	}
 
-	if len(msg.Message) == 0 || len(msg.User.Name) == 0 {
+	if len(line.text) == 0 || len(line.viewer) == 0 {
 		return
 	}
 
-	twitchUserID, _ := strconv.Atoi(msg.User.ID)
-
 	// Handle ^^voice command before any other processing
-	if voiceName, ok := parseVoiceCommand(msg.Message); ok {
-		s.handleVoiceCommand(twitchUserID, msg.User.Name, voiceName)
+	if voiceName, ok := parseVoiceCommand(line.text); ok {
+		s.handleVoiceCommand(line.viewerID, line.viewer, voiceName)
 		return
 	}
 
 	// Route ^^ commands (except ^^voice) to clanker queue
-	if strings.HasPrefix(msg.Message, "^^") {
+	if strings.HasPrefix(line.text, "^^") {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		_, err := s.db.PushClankerMsg(ctx, msg.Channel, userCfg.twitchUserID, msg.User.Name, twitchUserID, msg.Message, msg.ID)
+		_, err := s.db.PushClankerMsg(ctx, line.channel, userCfg.twitchUserID, line.viewer, line.viewerID, line.text, line.id)
 		if err != nil {
-			s.logger.Error("failed to push clanker message", "err", err, "user", msg.Channel)
+			s.logger.Error("failed to push clanker message", "err", err, "user", line.channel)
 		} else {
-			s.logger.Info("routed clanker message", "user", msg.Channel, "msg_id", msg.ID)
+			s.logger.Info("routed clanker message", "user", line.channel, "msg_id", line.id)
 		}
 		return
 	}
 
 	in := arrival{
 		msg: db.TwitchMessage{
-			TwitchLogin:  msg.User.Name,
-			TwitchUserID: twitchUserID,
-			Message:      msg.Message,
-			RewardID:     msg.CustomRewardID,
+			TwitchLogin:  line.viewer,
+			TwitchUserID: line.viewerID,
+			Message:      line.text,
+			RewardID:     line.rewardID,
 		},
-		uniqueID: msg.ID,
+		uniqueID: line.id,
 	}
 
-	bits, cheered := cheerBits(msg)
-
 	switch {
-	case len(msg.CustomRewardID) != 0:
-		in.pairAs, in.pairOnText = msg.CustomRewardID, true
-	case cheered:
-		s.logger.Info("chat cheer", "user", msg.Channel, "bits", bits, "raw", msg.Raw)
-		if !userCfg.settings.LaneEnabled(db.MsgClassBits) {
-			return
-		}
-		in.msg.Event = &db.EventMeta{Kind: db.EventKindCheer, Bits: bits, USD: float64(bits) / db.BitsPerUSD}
-		in.pairAs, in.pairOnText = pairAsCheer(bits), true
+	case len(line.rewardID) != 0:
+	case line.cheered > 0 && userCfg.settings.LaneEnabled(db.MsgClassBits):
+		in.msg.Event = &db.EventMeta{Kind: db.EventKindCheer, Bits: line.cheered, USD: float64(line.cheered) / db.BitsPerUSD}
 	case !userCfg.settings.LaneEnabled(db.MsgClassChat):
 		return
 	}
@@ -268,7 +301,7 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	s.push(ctx, msg.Channel, userCfg, in, feedChat)
+	s.push(ctx, line.channel, userCfg, in, from)
 }
 
 // cheerBits is the bits of a cheer: a plain chat message that spends them. A
@@ -314,24 +347,21 @@ func noticeArrival(msg gempir.UserNoticeMessage) (in arrival, ok bool) {
 	}
 
 	switch {
-	case msg.MsgID == "sub":
+	// Going from a Prime or a gifted sub to a paid one is announced by this
+	// notice alone, with no sub notice beside it.
+	case msg.MsgID == "sub", msg.MsgID == "primepaidupgrade", msg.MsgID == "giftpaidupgrade", msg.MsgID == "anongiftpaidupgrade":
 		in.msg.Event = &db.EventMeta{Kind: db.EventKindSub, Tier: tier}
-		in.pairAs = pairAsSub
 	case msg.MsgID == "resub":
 		in.msg.Event = &db.EventMeta{Kind: db.EventKindResub, Tier: tier, Months: param("msg-param-cumulative-months")}
-		in.pairAs = pairAsResub
 	case msg.MsgID == "submysterygift":
-		count := param("msg-param-mass-gift-count")
-		in.msg.Event = &db.EventMeta{Kind: db.EventKindGiftSubs, Tier: tier, GiftCount: count}
-		in.pairAs = pairAsGift(count)
+		in.msg.Event = &db.EventMeta{Kind: db.EventKindGiftSubs, Tier: tier, GiftCount: param("msg-param-mass-gift-count")}
 	// Every recipient of a community gift gets a notice of their own; the
-	// gift was announced once already, by submysterygift.
+	// gift was announced once already, by submysterygift. Paying a gift
+	// forward is announced on top of the gift's own notices, never instead.
 	case msg.MsgID == "subgift" && msg.MsgParams["msg-param-community-gift-id"] == "":
 		in.msg.Event = &db.EventMeta{Kind: db.EventKindGiftSubs, Tier: tier, GiftCount: 1}
-		in.pairAs = pairAsGift(1)
 	case msg.MsgID == "raid":
 		in.msg.Event = &db.EventMeta{Kind: db.EventKindRaid, Viewers: param("msg-param-viewerCount")}
-		in.pairAs = pairAsRaid
 	case msg.MsgID == "viewermilestone" && msg.MsgParams["msg-param-category"] == "watch-streak":
 		in.msg.Event = &db.EventMeta{Kind: db.EventKindStreak, Streak: param("msg-param-value")}
 	default:
@@ -364,23 +394,11 @@ func (s *Service) handleUserNotice(msg gempir.UserNoticeMessage) {
 	s.push(ctx, msg.Channel, userCfg, in, feedChat)
 }
 
-func (s *Service) pushMsg(ctx context.Context, userCfg *ingestUserConfig, msg db.TwitchMessage, uniqueID string) (uuid.UUID, error) {
-	showImages := false
-	data := &db.MessageData{
-		ImageIDs:   imagetag.ExtractIDs(msg.Message, 2),
-		ShowImages: &showImages,
-	}
-
-	return s.db.PushIngestMsg(ctx, userCfg.id, msg, data, uniqueID)
-}
-
-// push takes one feed's arrival. Of an event both feeds deliver, the first
-// arrival becomes the queue row and the second only adds what its feed alone
-// knows.
+// push queues one feed's arrival under Twitch's id for the message. The other
+// feed brings the same id, so the queue itself turns its arrival into a no-op.
 func (s *Service) push(ctx context.Context, channel string, userCfg *ingestUserConfig, in arrival, from feed) {
-	lane, _ := in.msg.EventLane()
-	logger := s.logger.With("user", channel, "unique_id", in.uniqueID)
-	if lane != "" {
+	logger := s.logger.With("user", channel, "unique_id", in.uniqueID, "feed", from)
+	if lane, ok := in.msg.EventLane(); ok {
 		logger = logger.With("lane", lane)
 		if !userCfg.settings.LaneEnabled(lane) {
 			logger.Info("event not queued", "reason", "lane is off")
@@ -388,12 +406,10 @@ func (s *Service) push(ctx context.Context, channel string, userCfg *ingestUserC
 		}
 	}
 
-	// Taken before the cheermotes go: the feeds agree on the text as typed.
-	pairText := ""
-	if in.pairOnText {
-		pairText = in.msg.Message
+	var key string
+	if in.msg.RewardID != "" {
+		key = redeemKey(in.msg.TwitchUserID, in.msg.RewardID, in.msg.Message)
 	}
-	key := newPairKey(userCfg.twitchUserID, in.msg.TwitchUserID, in.pairAs, pairText)
 
 	if in.msg.Event != nil && in.msg.Event.Kind == db.EventKindCheer {
 		in.msg.Message = s.cheermotes.strip(ctx, userCfg.twitchUserID, in.msg.Message)
@@ -403,37 +419,23 @@ func (s *Service) push(ctx context.Context, channel string, userCfg *ingestUserC
 		}
 	}
 
-	create := func() (uuid.UUID, error) {
-		return s.pushMsg(ctx, userCfg, in.msg, in.uniqueID)
+	showImages := false
+	data := &db.MessageData{
+		ImageIDs:   imagetag.ExtractIDs(in.msg.Message, 2),
+		ShowImages: &showImages,
 	}
 
-	var (
-		twin   uuid.UUID
-		paired bool
-		err    error
-	)
-	if in.pairAs == "" {
-		_, err = create()
-	} else {
-		twin, paired, err = s.correlator.pair(key, from, time.Now(), create)
-	}
+	queueID, created, err := s.db.PushIngestMsg(ctx, userCfg.id, in.msg, data, in.uniqueID, key)
 	if err != nil {
 		logger.Error("failed to push message", "err", err)
 		return
 	}
 
-	if !paired {
-		logger.Info("ingested message", "msg_id", in.uniqueID)
-		return
+	if created {
+		logger.Info("ingested message", "queue_id", queueID)
+	} else {
+		logger.Info("message was queued already", "queue_id", queueID)
 	}
-
-	if from == feedEventSub {
-		if err := s.db.SetMsgEvent(ctx, twin, in.msg.Event); err != nil {
-			logger.Error("failed to add event to paired message", "err", err, "queue_id", twin)
-			return
-		}
-	}
-	logger.Info("paired message", "queue_id", twin)
 }
 
 func parseVoiceCommand(message string) (string, bool) {

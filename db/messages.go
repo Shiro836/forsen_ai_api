@@ -181,13 +181,13 @@ func (db *DB) PushMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage, 
 	return id, nil
 }
 
-func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage, data *MessageData, uniqueID string) (uuid.UUID, error) {
-	var id uuid.UUID
-
-	// We use ON CONFLICT DO UPDATE to ensure RETURNING works.
-	// We update the updated timestamp to signal it was seen again, or just a dummy update.
-
-	err := db.QueryRow(ctx, `
+// PushIngestMsg queues a message under Twitch's id for it. Both feeds deliver
+// one message under one id, so the second delivery lands on the first one's
+// row, and created tells the two apart.
+func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMessage, data *MessageData, uniqueID, redeemKey string) (id uuid.UUID, created bool, err error) {
+	// The no-op update is what makes RETURNING answer on a conflict too; xmax
+	// is zero only on a row this statement inserted.
+	err = db.QueryRow(ctx, `
 		INSERT INTO
 			msg_queue (
 				user_id,
@@ -195,16 +195,61 @@ func (db *DB) PushIngestMsg(ctx context.Context, userID uuid.UUID, msg TwitchMes
 				status,
 				data,
 				unique_id,
+				redeem_key,
 				updated
 			)
-		VALUES ($1, $2, $3, $4, $5, nextval('updated_seq'))
+		VALUES ($1, $2, $3, $4, $5, nullif($6, ''), nextval('updated_seq'))
 		ON CONFLICT (unique_id) WHERE unique_id IS NOT NULL
 		DO UPDATE SET unique_id = EXCLUDED.unique_id
-		RETURNING id
-	`, userID, msg, MsgStatusWait, data, uniqueID).Scan(&id)
-
+		RETURNING id, xmax = 0
+	`, userID, msg, MsgStatusWait, data, uniqueID, redeemKey).Scan(&id, &created)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to push ingest message: %w", err)
+		return uuid.Nil, false, fmt.Errorf("failed to push ingest message: %w", err)
+	}
+
+	return id, created, nil
+}
+
+// AttachRedemption adds what only Twitch's redemption event knows to the
+// message the redeem was made with: the oldest unfinished one under redeemKey
+// that has none yet. ErrNoRows: no such message, or attached already.
+func (db *DB) AttachRedemption(ctx context.Context, userID uuid.UUID, redeemKey string, event *EventMeta) (uuid.UUID, error) {
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to encode redemption: %w", err)
+	}
+
+	const redemptionID = "msg_queue.msg->'event'->>'redemption_id'"
+
+	attached := sq.Select("1").From("msg_queue").
+		Where(sq.Eq{"msg_queue.user_id": userID}).
+		Where(sq.Expr(redemptionID+" = ?", event.RedemptionID))
+
+	target := sq.Select("msg_queue.id").From("msg_queue").
+		Where(sq.Eq{
+			"msg_queue.user_id":    userID,
+			"msg_queue.redeem_key": redeemKey,
+			"msg_queue.status":     []MsgStatus{MsgStatusWait, MsgStatusCurrent},
+		}).
+		Where(redemptionID + " is null").
+		Where(sq.Expr("not exists (?)", attached)).
+		OrderBy("msg_queue.id").
+		Limit(1).
+		Suffix("for update skip locked")
+
+	query, args, err := psql.Update("msg_queue").
+		Set("msg", sq.Expr("jsonb_set(msg, '{event}', ?::jsonb)", string(encoded))).
+		Set("updated", bumpUpdated).
+		Where(sq.Expr("msg_queue.id = (?)", target)).
+		Suffix("returning msg_queue.id").
+		ToSql()
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to build attach redemption query: %w", err)
+	}
+
+	var id uuid.UUID
+	if err := db.QueryRow(ctx, query, args...).Scan(&id); err != nil {
+		return uuid.Nil, fmt.Errorf("failed to attach redemption: %w", parseErr(err))
 	}
 
 	return id, nil
@@ -280,6 +325,11 @@ func (db *DB) GetMessageByID(ctx context.Context, msgID uuid.UUID) (*Message, er
 	return &msg, nil
 }
 
+// TwitchRedeliveryWindow is how long Twitch keeps redelivering an event it got
+// no answer for. A row has to outlive it: its unique id is the only thing that
+// turns a redelivery into a no-op instead of a second play.
+const TwitchRedeliveryWindow = 10 * time.Minute
+
 // CleanQueue purges finished rows beyond the last ~200 updates. With
 // respectWatermark it never deletes a row the archive exporter has not
 // acknowledged, so an archive outage grows the queue instead of losing rows.
@@ -292,8 +342,10 @@ func (db *DB) CleanQueue(ctx context.Context, respectWatermark bool) error {
 		and
 			updated < currval('updated_seq') - 200
 		and
+			uuid_v7_to_timestamptz(id) < now() - $4::interval
+		and
 			(not $3 or updated <= (select coalesce(max(watermark), 0) from export_state))
-	`, MsgStatusDeleted, MsgStatusProcessed, respectWatermark)
+	`, MsgStatusDeleted, MsgStatusProcessed, respectWatermark, TwitchRedeliveryWindow)
 
 	if err != nil {
 		var pgErr *pgconn.PgError

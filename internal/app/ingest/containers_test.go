@@ -4,10 +4,13 @@ package ingest
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,93 +66,201 @@ func startDB(t *testing.T) *db.DB {
 	return database
 }
 
-// TestContainersBothFeedsMakeOneRow delivers each event the way both feeds do,
-// in either order, and once more from a single feed: a second feed must never
-// add a row, and a missing one must never lose it.
-func TestContainersBothFeedsMakeOneRow(t *testing.T) {
+type fixture struct {
+	t       *testing.T
+	db      *db.DB
+	service *Service
+	userID  uuid.UUID
+}
+
+const streamerLogin = "streamer"
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
 	ctx := context.Background()
 	database := startDB(t)
 
-	userID, err := database.UpsertUser(ctx, &db.User{TwitchLogin: "streamer", TwitchUserID: 1})
+	userID, err := database.UpsertUser(ctx, &db.User{TwitchLogin: streamerLogin, TwitchUserID: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings := &db.UserSettings{}
-	for _, lane := range []db.MsgClass{db.MsgClassSub, db.MsgClassRaid} {
+	settings := db.UserSettings{}
+	for _, lane := range []db.MsgClass{db.MsgClassSub, db.MsgClassRaid, db.MsgClassChat} {
 		settings.SetLaneEnabled(lane, true)
 	}
-	userCfg := &ingestUserConfig{id: userID, twitchUserID: 1, settings: *settings}
 
 	service := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)), database, &twitch.Config{}, EventSubConfig{})
+	service.activeUsers[streamerLogin] = &ingestUserConfig{id: userID, twitchUserID: 1, settings: settings}
 
-	viewer := 100
-	event := func(pairAs, chatText string, meta db.EventMeta) (fromChat, fromEvents arrival) {
-		viewer++
-		chatMeta, eventsMeta := meta, meta
-		fromChat = arrival{
-			msg:      db.TwitchMessage{TwitchLogin: "viewer", TwitchUserID: viewer, Message: chatText, Event: &chatMeta},
-			uniqueID: uuid.NewString(),
-			pairAs:   pairAs,
+	return &fixture{t: t, db: database, service: service, userID: userID}
+}
+
+func (f *fixture) rows() []*db.Message {
+	f.t.Helper()
+	msgs, err := f.db.GetMessageUpdates(context.Background(), f.userID, 0)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	sort.Slice(msgs, func(i, j int) bool { return msgs[i].ID.String() < msgs[j].ID.String() })
+	return msgs
+}
+
+func redeemLine(id, text string) chatLine {
+	return chatLine{channel: streamerLogin, id: id, viewerID: 7, viewer: "viewer", text: text, rewardID: "reward"}
+}
+
+func redemptionOf(id, text string) *redemption {
+	return &redemption{
+		broadcasterLogin: streamerLogin,
+		viewerID:         7,
+		rewardID:         "reward",
+		text:             text,
+		event:            db.EventMeta{Kind: db.EventKindCustomPowerUp, RedemptionID: id, Bits: 10, USD: 0.1},
+	}
+}
+
+func TestContainersOneMessageIsOneRow(t *testing.T) {
+	f := newFixture(t)
+
+	for name, order := range map[string][]feed{
+		"chat first":   {feedChat, feedEventSub},
+		"events first": {feedEventSub, feedChat},
+		"redelivered":  {feedChat, feedEventSub, feedEventSub, feedChat},
+		"chat alone":   {feedChat},
+		"events alone": {feedEventSub},
+	} {
+		before := len(f.rows())
+		id := uuid.NewString()
+		for _, from := range order {
+			f.service.handleChatLine(chatLine{channel: streamerLogin, id: id, viewerID: 7, viewer: "viewer", text: "same words every time"}, from)
 		}
-		fromEvents = arrival{
-			msg:      db.TwitchMessage{TwitchLogin: "viewer", TwitchUserID: viewer, Event: &eventsMeta},
-			uniqueID: "eventsub:" + uuid.NewString(),
-			pairAs:   pairAs,
+		if got := len(f.rows()) - before; got != 1 {
+			t.Fatalf("%s: %d rows, want 1", name, got)
 		}
-		return fromChat, fromEvents
 	}
 
-	rows := func() int {
-		msgs, err := database.GetMessageUpdates(ctx, userID, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return len(msgs)
+	before := len(f.rows())
+	id := uuid.NewString()
+	var wg sync.WaitGroup
+	for i := range 40 {
+		wg.Go(func() {
+			from := feedChat
+			if i%2 == 1 {
+				from = feedEventSub
+			}
+			f.service.handleChatLine(redeemLine(id, "raced"), from)
+		})
+	}
+	wg.Wait()
+	if got := len(f.rows()) - before; got != 1 {
+		t.Fatalf("both feeds at once: %d rows, want 1", got)
+	}
+}
+
+func TestContainersNoticeFromBothFeedsIsOneRow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	userCfg, _ := f.service.activeUser(streamerLogin)
+
+	in := arrival{
+		msg:      db.TwitchMessage{TwitchLogin: "viewer", TwitchUserID: 7, Event: &db.EventMeta{Kind: db.EventKindSub, Tier: 1}},
+		uniqueID: uuid.NewString(),
+	}
+	f.service.push(ctx, streamerLogin, userCfg, in, feedChat)
+	f.service.push(ctx, streamerLogin, userCfg, in, feedEventSub)
+
+	if got := len(f.rows()); got != 1 {
+		t.Fatalf("%d rows, want 1", got)
+	}
+}
+
+func TestContainersRedemptionFindsItsMessage(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	f.service.attachRedemption(ctx, redemptionOf("too-early", "nothing queued yet"))
+	if got := len(f.rows()); got != 0 {
+		t.Fatalf("a redemption made %d rows; it is not a message", got)
 	}
 
-	kinds := []struct {
-		name   string
-		pairAs string
-		meta   db.EventMeta
-	}{
-		{"sub", pairAsSub, db.EventMeta{Kind: db.EventKindSub, Tier: 1}},
-		{"resub", pairAsResub, db.EventMeta{Kind: db.EventKindResub, Tier: 1, Months: 6}},
-		{"gift", pairAsGift(5), db.EventMeta{Kind: db.EventKindGiftSubs, Tier: 1, GiftCount: 5}},
-		{"raid", pairAsRaid, db.EventMeta{Kind: db.EventKindRaid, Viewers: 91}},
+	// What chat clients append to get past the duplicate-message check never
+	// reaches the redemption's text.
+	messageID := uuid.NewString()
+	f.service.handleChatLine(redeemLine(messageID, "hello \U000E0000"), feedChat)
+	f.service.attachRedemption(ctx, redemptionOf("r-1", "hello"))
+
+	gotRedemption := func() {
+		t.Helper()
+		rows := f.rows()
+		if len(rows) != 1 {
+			t.Fatalf("%d rows, want 1", len(rows))
+		}
+		event := rows[0].TwitchMessage.Event
+		if event == nil || event.RedemptionID != "r-1" || event.Bits != 10 || event.USD != 0.1 {
+			t.Fatalf("message did not keep its redemption: %+v", event)
+		}
+	}
+	gotRedemption()
+
+	// The other feed's copy of the message comes after the redemption here.
+	f.service.handleChatLine(redeemLine(messageID, "hello"), feedEventSub)
+	gotRedemption()
+
+	f.service.handleChatLine(redeemLine(uuid.NewString(), "hello"), feedChat)
+	f.service.attachRedemption(ctx, redemptionOf("r-1", "hello"))
+	if event := f.rows()[1].TwitchMessage.Event; event != nil {
+		t.Fatalf("a redelivered redemption landed on the next identical message: %+v", event)
+	}
+}
+
+func TestContainersIdenticalRedeemsEachGetTheirOwnRedemption(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	const redeems = 100
+
+	for i := range redeems {
+		f.service.handleChatLine(redeemLine(uuid.NewString(), "spam"), feedChat)
+		// The event feed trails chat, so some redemptions find several
+		// identical messages waiting.
+		if i%3 == 2 {
+			for j := i - 2; j <= i; j++ {
+				f.service.attachRedemption(ctx, redemptionOf(fmt.Sprintf("r-%03d", j), "spam"))
+			}
+		}
+	}
+	f.service.attachRedemption(ctx, redemptionOf(fmt.Sprintf("r-%03d", redeems-1), "spam"))
+
+	rows := f.rows()
+	if len(rows) != redeems {
+		t.Fatalf("%d rows, want %d", len(rows), redeems)
+	}
+	for i, row := range rows {
+		want := fmt.Sprintf("r-%03d", i)
+		if event := row.TwitchMessage.Event; event == nil || event.RedemptionID != want {
+			t.Fatalf("message %d carries %+v, want redemption %s", i, event, want)
+		}
+	}
+}
+
+func TestContainersFinishedMessageTakesNoRedemption(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	f.service.handleChatLine(redeemLine(uuid.NewString(), "again"), feedChat)
+	played := f.rows()[0]
+	if err := f.db.UpdateMessageStatus(ctx, played.ID, db.MsgStatusProcessed); err != nil {
+		t.Fatal(err)
 	}
 
-	want := 0
-	for _, kind := range kinds {
-		// Chat may carry words the event never has; that must not split the pair.
-		fromChat, fromEvents := event(kind.pairAs, "words only chat has", kind.meta)
-		service.push(ctx, "streamer", userCfg, fromChat, feedChat)
-		service.push(ctx, "streamer", userCfg, fromEvents, feedEventSub)
-		want++
-		if got := rows(); got != want {
-			t.Fatalf("%s, chat first: %d rows, want %d", kind.name, got, want)
-		}
+	f.service.handleChatLine(redeemLine(uuid.NewString(), "again"), feedChat)
+	f.service.attachRedemption(ctx, redemptionOf("r-new", "again"))
 
-		fromChat, fromEvents = event(kind.pairAs, "", kind.meta)
-		service.push(ctx, "streamer", userCfg, fromEvents, feedEventSub)
-		service.push(ctx, "streamer", userCfg, fromChat, feedChat)
-		want++
-		if got := rows(); got != want {
-			t.Fatalf("%s, events first: %d rows, want %d", kind.name, got, want)
-		}
-
-		fromChat, _ = event(kind.pairAs, "", kind.meta)
-		service.push(ctx, "streamer", userCfg, fromChat, feedChat)
-		want++
-		if got := rows(); got != want {
-			t.Fatalf("%s, chat alone: %d rows, want %d", kind.name, got, want)
-		}
-
-		_, fromEvents = event(kind.pairAs, "", kind.meta)
-		service.push(ctx, "streamer", userCfg, fromEvents, feedEventSub)
-		want++
-		if got := rows(); got != want {
-			t.Fatalf("%s, events alone: %d rows, want %d", kind.name, got, want)
-		}
+	rows := f.rows()
+	if event := rows[0].TwitchMessage.Event; event != nil {
+		t.Fatalf("a message that already played took the redemption of a later one: %+v", event)
+	}
+	if event := rows[1].TwitchMessage.Event; event == nil || event.RedemptionID != "r-new" {
+		t.Fatalf("the waiting message did not get its redemption: %+v", event)
 	}
 }
 

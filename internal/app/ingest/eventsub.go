@@ -25,35 +25,32 @@ const (
 	eventSubSyncInterval   = 10 * time.Second
 	eventSubRelistInterval = 10 * time.Minute
 	eventSubRetryDelay     = 10 * time.Minute
-	// The webhook handler refuses a notification older than this, so no
-	// redelivery arrives later.
-	eventSubRedeliveryWindow = 10 * time.Minute
 
 	scopeBitsRead = "bits:read"
 )
+
+// Reading a channel's chat through the event feed takes all three, granted by
+// the streamer, who is then the one reading their own chat.
+var chatScopes = []string{"user:read:chat", "user:bot", "channel:bot"}
 
 type subKey struct {
 	eventType     string
 	broadcasterID string
 }
 
-func broadcasterField(eventType string) string {
-	if eventType == helix.EventSubTypeChannelRaid {
-		return "to_broadcaster_user_id"
-	}
-	return "broadcaster_user_id"
-}
-
 func (k subKey) condition() map[string]string {
-	condition := map[string]string{broadcasterField(k.eventType): k.broadcasterID}
-	if k.eventType == helix.EventSubTypeChannelFollow {
+	condition := map[string]string{"broadcaster_user_id": k.broadcasterID}
+	switch k.eventType {
+	case helix.EventSubTypeChannelFollow:
 		condition["moderator_user_id"] = k.broadcasterID
+	case helix.EventSubTypeChannelChatMessage, helix.EventSubTypeChannelChatNotification:
+		condition["user_id"] = k.broadcasterID
 	}
 	return condition
 }
 
 func subKeyOf(sub helix.EventSubSubscription) subKey {
-	return subKey{sub.Type, sub.Condition[broadcasterField(sub.Type)]}
+	return subKey{sub.Type, sub.Condition["broadcaster_user_id"]}
 }
 
 type eventSub struct {
@@ -69,9 +66,6 @@ type eventSub struct {
 	retryAt map[subKey]time.Time
 
 	notifications chan *helix.EventSubWebhookMessage
-	// A pairing arrival inserts no row, so the queue's unique id cannot catch
-	// its redelivery.
-	delivered *helix.MessageDeduplicator
 }
 
 func newEventSub(logger *slog.Logger, cfg EventSubConfig, app *appClient) *eventSub {
@@ -83,36 +77,33 @@ func newEventSub(logger *slog.Logger, cfg EventSubConfig, app *appClient) *event
 		live:          make(map[subKey]string),
 		retryAt:       make(map[subKey]time.Time),
 		notifications: make(chan *helix.EventSubWebhookMessage, 1024),
-		delivered:     helix.NewMessageDeduplicator(eventSubRedeliveryWindow, 1<<14),
 	}
 }
 
-// desiredSubscriptions follows the lanes that are on: an event nobody plays is
-// not worth a subscription, and a follow wave on such a channel not worth its rows.
+// desiredSubscriptions asks for a second copy of whatever chat is ingested
+// for: the event feed delivers the same messages and notices under the same
+// ids, so a line chat loses still arrives. Redemptions add what chat never
+// says; follows are in no chat at all.
 func desiredSubscriptions(u *db.IngestUser) []subKey {
-	bitsRead := slices.Contains(u.TokenScopes, scopeBitsRead)
+	lane := u.Settings.LaneEnabled
 
 	var eventTypes []string
 	if u.HasRewardButton {
 		eventTypes = append(eventTypes, helix.EventSubTypeChannelPointsRedemptionAdd)
-		if bitsRead {
+		if slices.Contains(u.TokenScopes, scopeBitsRead) {
 			eventTypes = append(eventTypes, helix.EventSubTypeChannelCustomPowerUpRedemptionAdd)
 		}
 	}
-	if bitsRead && u.Settings.LaneEnabled(db.MsgClassBits) {
-		eventTypes = append(eventTypes, helix.EventSubTypeChannelBitsUse)
+
+	readsChat := !slices.ContainsFunc(chatScopes, func(scope string) bool { return !slices.Contains(u.TokenScopes, scope) })
+	if readsChat && (u.HasRewardButton || lane(db.MsgClassBits) || lane(db.MsgClassChat)) {
+		eventTypes = append(eventTypes, helix.EventSubTypeChannelChatMessage)
 	}
-	if u.Settings.LaneEnabled(db.MsgClassSub) {
-		eventTypes = append(eventTypes,
-			helix.EventSubTypeChannelSubscribe,
-			helix.EventSubTypeChannelSubscriptionMessage,
-			helix.EventSubTypeChannelSubscriptionGift,
-		)
+	if readsChat && (lane(db.MsgClassSub) || lane(db.MsgClassRaid) || lane(db.MsgClassStreak)) {
+		eventTypes = append(eventTypes, helix.EventSubTypeChannelChatNotification)
 	}
-	if u.Settings.LaneEnabled(db.MsgClassRaid) {
-		eventTypes = append(eventTypes, helix.EventSubTypeChannelRaid)
-	}
-	if u.Settings.LaneEnabled(db.MsgClassFollow) {
+
+	if lane(db.MsgClassFollow) {
 		eventTypes = append(eventTypes, helix.EventSubTypeChannelFollow)
 	}
 
@@ -135,9 +126,6 @@ func (e *eventSub) handler() http.Handler {
 		helix.WithWebhookSecret(e.cfg.Secret),
 		// Twitch revokes subscriptions of slow responders, so the work happens off the request.
 		helix.WithNotificationHandler(func(msg *helix.EventSubWebhookMessage) {
-			if e.delivered.IsDuplicate(msg.MessageID) {
-				return
-			}
 			select {
 			case e.notifications <- msg:
 			default:
@@ -164,13 +152,6 @@ func (e *eventSub) run(ctx context.Context, handle func(context.Context, *helix.
 				return
 			case msg := <-e.notifications:
 				metrics.EventSubNotifications.WithLabelValues(msg.SubscriptionType).Inc()
-				// Every payload is logged before anything reads it: the queue
-				// keeps only what it plays, so this is the record of the rest.
-				e.logger.Info("eventsub notification",
-					"type", msg.SubscriptionType,
-					"message_id", msg.MessageID,
-					"subscription", msg.Subscription.ID,
-					"event", string(msg.Event))
 				handle(ctx, msg)
 			}
 		}
