@@ -137,8 +137,9 @@ func TestParseRedemption(t *testing.T) {
 			RewardID:     "a79c1221-3ab2-4367-a401-a8e333255abb",
 			Event:        &db.EventMeta{Kind: db.EventKindPointsRedeem, RedemptionID: "e78aa3bd-3d8e-4c06-b9da-9f308e7d44cd"},
 		},
-		uniqueID: "eventsub:e78aa3bd-3d8e-4c06-b9da-9f308e7d44cd",
-		pairAs:   "a79c1221-3ab2-4367-a401-a8e333255abb",
+		uniqueID:   "eventsub:e78aa3bd-3d8e-4c06-b9da-9f308e7d44cd",
+		pairAs:     "a79c1221-3ab2-4367-a401-a8e333255abb",
+		pairOnText: true,
 	}, points)
 
 	_, powerUp := parsed(t, helix.EventSubTypeChannelCustomPowerUpRedemptionAdd,
@@ -151,8 +152,9 @@ func TestParseRedemption(t *testing.T) {
 			RewardID:     "307cc91e-a5c0-4799-a10e-37bb9a2c8b61",
 			Event:        &db.EventMeta{Kind: db.EventKindCustomPowerUp, RedemptionID: "82ce56df-c9e7-44c5-8da0-fe811c0106a1", Bits: 10, USD: 0.1},
 		},
-		uniqueID: "eventsub:82ce56df-c9e7-44c5-8da0-fe811c0106a1",
-		pairAs:   "307cc91e-a5c0-4799-a10e-37bb9a2c8b61",
+		uniqueID:   "eventsub:82ce56df-c9e7-44c5-8da0-fe811c0106a1",
+		pairAs:     "307cc91e-a5c0-4799-a10e-37bb9a2c8b61",
+		pairOnText: true,
 	}, powerUp)
 
 	_, _, err := parseEvent(&helix.EventSubWebhookMessage{SubscriptionType: helix.EventSubTypeChannelUpdate})
@@ -183,7 +185,7 @@ func TestParseLaneEvents(t *testing.T) {
 		{
 			helix.EventSubTypeChannelSubscribe,
 			`{` + viewer + broadcaster + `"tier":"1000","is_gift":false}`,
-			&arrival{msg: message("", db.EventMeta{Kind: db.EventKindSub, Tier: 1}), uniqueID: "eventsub:msg-1"},
+			&arrival{msg: message("", db.EventMeta{Kind: db.EventKindSub, Tier: 1}), uniqueID: "eventsub:msg-1", pairAs: pairAsSub},
 		},
 		{
 			helix.EventSubTypeChannelSubscribe,
@@ -193,7 +195,7 @@ func TestParseLaneEvents(t *testing.T) {
 		{
 			helix.EventSubTypeChannelSubscriptionGift,
 			`{` + viewer + broadcaster + `"total":2,"tier":"1000","cumulative_total":284,"is_anonymous":false}`,
-			&arrival{msg: message("", db.EventMeta{Kind: db.EventKindGiftSubs, Tier: 1, GiftCount: 2}), uniqueID: "eventsub:msg-1"},
+			&arrival{msg: message("", db.EventMeta{Kind: db.EventKindGiftSubs, Tier: 1, GiftCount: 2}), uniqueID: "eventsub:msg-1", pairAs: "gift:2"},
 		},
 		{
 			helix.EventSubTypeChannelSubscriptionMessage,
@@ -207,15 +209,16 @@ func TestParseLaneEvents(t *testing.T) {
 		{
 			helix.EventSubTypeChannelRaid,
 			`{"from_broadcaster_user_id":"1234","from_broadcaster_user_login":"cool_user","from_broadcaster_user_name":"Cool_User","to_broadcaster_user_id":"1337","to_broadcaster_user_login":"cooler_user","to_broadcaster_user_name":"Cooler_User","viewers":9001}`,
-			&arrival{msg: message("", db.EventMeta{Kind: db.EventKindRaid, Viewers: 9001}), uniqueID: "eventsub:msg-1"},
+			&arrival{msg: message("", db.EventMeta{Kind: db.EventKindRaid, Viewers: 9001}), uniqueID: "eventsub:msg-1", pairAs: pairAsRaid},
 		},
 		{
 			helix.EventSubTypeChannelBitsUse,
 			`{` + viewer + broadcaster + `"bits":2,"type":"cheer","power_up":null,"custom_power_up":null,"message":{"text":"cheer1 hi cheer1","fragments":[{"type":"cheermote","text":"cheer1","cheermote":{"prefix":"cheer","bits":1,"tier":1},"emote":null},{"type":"text","text":" hi ","cheermote":null,"emote":null},{"type":"cheermote","text":"cheer1","cheermote":{"prefix":"cheer","bits":1,"tier":1},"emote":null}]}}`,
 			&arrival{
-				msg:      message("cheer1 hi cheer1", db.EventMeta{Kind: db.EventKindCheer, Bits: 2, USD: 0.02}),
-				uniqueID: "eventsub:msg-1",
-				pairAs:   "cheer:2",
+				msg:        message("cheer1 hi cheer1", db.EventMeta{Kind: db.EventKindCheer, Bits: 2, USD: 0.02}),
+				uniqueID:   "eventsub:msg-1",
+				pairAs:     "cheer:2",
+				pairOnText: true,
 			},
 		},
 		{

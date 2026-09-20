@@ -27,15 +27,28 @@ type arrival struct {
 	uniqueID string
 	// pairAs is set when the other feed delivers the same event.
 	pairAs string
+	// pairOnText is for events one viewer can repeat within minutes, where
+	// only the text tells two of them apart. Elsewhere the feeds may not even
+	// agree on it: a sub's chat notice can carry words its event never has.
+	pairOnText bool
 }
 
 const (
-	pairAsResub    = "resub"
+	pairAsSub   = "sub"
+	pairAsResub = "resub"
+	pairAsRaid  = "raid"
+
 	anonymousLogin = "anonymous"
+	// The account chat puts in place of whoever gifted anonymously.
+	anonymousGifterLogin = "ananonymousgifter"
 )
 
 func pairAsCheer(bits int) string {
 	return "cheer:" + strconv.Itoa(bits)
+}
+
+func pairAsGift(count int) string {
+	return "gift:" + strconv.Itoa(count)
 }
 
 // Chat says "Prime" where the event feed says "1000".
@@ -73,9 +86,10 @@ func parseEvent(msg *helix.EventSubWebhookMessage) (broadcasterLogin string, in 
 			return "", nil, err
 		}
 		in = &arrival{
-			msg:      viewerMessage(ev.EventSubUser, ev.UserInput, db.EventMeta{Kind: db.EventKindPointsRedeem, RedemptionID: ev.ID}),
-			uniqueID: "eventsub:" + ev.ID,
-			pairAs:   ev.Reward.ID,
+			msg:        viewerMessage(ev.EventSubUser, ev.UserInput, db.EventMeta{Kind: db.EventKindPointsRedeem, RedemptionID: ev.ID}),
+			uniqueID:   "eventsub:" + ev.ID,
+			pairAs:     ev.Reward.ID,
+			pairOnText: true,
 		}
 		in.msg.RewardID = ev.Reward.ID
 		return ev.BroadcasterUserLogin, in, nil
@@ -92,8 +106,9 @@ func parseEvent(msg *helix.EventSubWebhookMessage) (broadcasterLogin string, in 
 				Bits:         ev.CustomPowerUp.Bits,
 				USD:          float64(ev.CustomPowerUp.Bits) / db.BitsPerUSD,
 			}),
-			uniqueID: "eventsub:" + ev.ID,
-			pairAs:   ev.CustomPowerUp.ID,
+			uniqueID:   "eventsub:" + ev.ID,
+			pairAs:     ev.CustomPowerUp.ID,
+			pairOnText: true,
 		}
 		in.msg.RewardID = ev.CustomPowerUp.ID
 		return ev.BroadcasterUserLogin, in, nil
@@ -112,8 +127,9 @@ func parseEvent(msg *helix.EventSubWebhookMessage) (broadcasterLogin string, in 
 				Bits: ev.BitsUsed,
 				USD:  float64(ev.BitsUsed) / db.BitsPerUSD,
 			}),
-			uniqueID: uniqueID,
-			pairAs:   pairAsCheer(ev.BitsUsed),
+			uniqueID:   uniqueID,
+			pairAs:     pairAsCheer(ev.BitsUsed),
+			pairOnText: true,
 		}, nil
 
 	case helix.EventSubTypeChannelSubscribe:
@@ -128,6 +144,7 @@ func parseEvent(msg *helix.EventSubWebhookMessage) (broadcasterLogin string, in 
 		return ev.BroadcasterUserLogin, &arrival{
 			msg:      viewerMessage(ev.EventSubUser, "", db.EventMeta{Kind: db.EventKindSub, Tier: subTier(ev.Tier)}),
 			uniqueID: uniqueID,
+			pairAs:   pairAsSub,
 		}, nil
 
 	case helix.EventSubTypeChannelSubscriptionMessage:
@@ -153,9 +170,10 @@ func parseEvent(msg *helix.EventSubWebhookMessage) (broadcasterLogin string, in 
 		in = &arrival{
 			msg:      viewerMessage(ev.EventSubUser, "", db.EventMeta{Kind: db.EventKindGiftSubs, Tier: subTier(ev.Tier), GiftCount: ev.Total}),
 			uniqueID: uniqueID,
+			pairAs:   pairAsGift(ev.Total),
 		}
 		if ev.IsAnonymous {
-			in.msg.TwitchLogin = anonymousLogin
+			in.msg.TwitchLogin, in.msg.TwitchUserID = anonymousLogin, 0
 		}
 		return ev.BroadcasterUserLogin, in, nil
 
@@ -178,6 +196,7 @@ func parseEvent(msg *helix.EventSubWebhookMessage) (broadcasterLogin string, in 
 		return ev.ToBroadcasterUserLogin, &arrival{
 			msg:      viewerMessage(raider, "", db.EventMeta{Kind: db.EventKindRaid, Viewers: ev.Viewers}),
 			uniqueID: uniqueID,
+			pairAs:   pairAsRaid,
 		}, nil
 	}
 

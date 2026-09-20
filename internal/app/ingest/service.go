@@ -253,14 +253,14 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 
 	switch {
 	case len(msg.CustomRewardID) != 0:
-		in.pairAs = msg.CustomRewardID
+		in.pairAs, in.pairOnText = msg.CustomRewardID, true
 	case cheered:
 		s.logger.Info("chat cheer", "user", msg.Channel, "bits", bits, "raw", msg.Raw)
 		if !userCfg.settings.LaneEnabled(db.MsgClassBits) {
 			return
 		}
 		in.msg.Event = &db.EventMeta{Kind: db.EventKindCheer, Bits: bits, USD: float64(bits) / db.BitsPerUSD}
-		in.pairAs = pairAsCheer(bits)
+		in.pairAs, in.pairOnText = pairAsCheer(bits), true
 	case !userCfg.settings.LaneEnabled(db.MsgClassChat):
 		return
 	}
@@ -271,8 +271,8 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	s.push(ctx, msg.Channel, userCfg, in, feedChat)
 }
 
-// cheerBits is the bits of a cheer. A Power-up spends bits on something that is
-// not a cheer, and unlike a cheer its message carries a notice id.
+// cheerBits is the bits of a cheer: a plain chat message that spends them. A
+// Power-up's message carries a notice id and is never one.
 func cheerBits(msg gempir.PrivateMessage) (int, bool) {
 	if msg.Bits == 0 || msg.Tags["msg-id"] != "" || fromAnotherChannel(msg.Tags) {
 		return 0, false
@@ -305,14 +305,33 @@ func noticeArrival(msg gempir.UserNoticeMessage) (in arrival, ok bool) {
 		uniqueID: msg.ID,
 	}
 
+	tier := subTier(msg.MsgParams["msg-param-sub-plan"])
+
+	// The event feed names nobody behind an anonymous gift; chat names a
+	// stand-in account, which must not pass for the gifter.
+	if in.msg.TwitchLogin == anonymousGifterLogin {
+		in.msg.TwitchLogin, in.msg.TwitchUserID = anonymousLogin, 0
+	}
+
 	switch {
+	case msg.MsgID == "sub":
+		in.msg.Event = &db.EventMeta{Kind: db.EventKindSub, Tier: tier}
+		in.pairAs = pairAsSub
 	case msg.MsgID == "resub":
-		in.msg.Event = &db.EventMeta{
-			Kind:   db.EventKindResub,
-			Tier:   subTier(msg.MsgParams["msg-param-sub-plan"]),
-			Months: param("msg-param-cumulative-months"),
-		}
+		in.msg.Event = &db.EventMeta{Kind: db.EventKindResub, Tier: tier, Months: param("msg-param-cumulative-months")}
 		in.pairAs = pairAsResub
+	case msg.MsgID == "submysterygift":
+		count := param("msg-param-mass-gift-count")
+		in.msg.Event = &db.EventMeta{Kind: db.EventKindGiftSubs, Tier: tier, GiftCount: count}
+		in.pairAs = pairAsGift(count)
+	// Every recipient of a community gift gets a notice of their own; the
+	// gift was announced once already, by submysterygift.
+	case msg.MsgID == "subgift" && msg.MsgParams["msg-param-community-gift-id"] == "":
+		in.msg.Event = &db.EventMeta{Kind: db.EventKindGiftSubs, Tier: tier, GiftCount: 1}
+		in.pairAs = pairAsGift(1)
+	case msg.MsgID == "raid":
+		in.msg.Event = &db.EventMeta{Kind: db.EventKindRaid, Viewers: param("msg-param-viewerCount")}
+		in.pairAs = pairAsRaid
 	case msg.MsgID == "viewermilestone" && msg.MsgParams["msg-param-category"] == "watch-streak":
 		in.msg.Event = &db.EventMeta{Kind: db.EventKindStreak, Streak: param("msg-param-value")}
 	default:
@@ -369,8 +388,12 @@ func (s *Service) push(ctx context.Context, channel string, userCfg *ingestUserC
 		}
 	}
 
-	// The feeds agree on the text as typed, so that is what pairs them.
-	key := newPairKey(userCfg.twitchUserID, in.msg.TwitchUserID, in.pairAs, in.msg.Message)
+	// Taken before the cheermotes go: the feeds agree on the text as typed.
+	pairText := ""
+	if in.pairOnText {
+		pairText = in.msg.Message
+	}
+	key := newPairKey(userCfg.twitchUserID, in.msg.TwitchUserID, in.pairAs, pairText)
 
 	if in.msg.Event != nil && in.msg.Event.Kind == db.EventKindCheer {
 		in.msg.Message = s.cheermotes.strip(ctx, userCfg.twitchUserID, in.msg.Message)
