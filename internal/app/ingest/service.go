@@ -249,16 +249,18 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 		uniqueID: msg.ID,
 	}
 
+	bits, cheered := cheerBits(msg)
+
 	switch {
 	case len(msg.CustomRewardID) != 0:
 		in.pairAs = msg.CustomRewardID
-	case msg.Bits > 0 && !fromAnotherChannel(msg.Tags):
-		s.logger.Info("chat cheer", "user", msg.Channel, "bits", msg.Bits, "raw", msg.Raw)
+	case cheered:
+		s.logger.Info("chat cheer", "user", msg.Channel, "bits", bits, "raw", msg.Raw)
 		if !userCfg.settings.LaneEnabled(db.MsgClassBits) {
 			return
 		}
-		in.msg.Event = &db.EventMeta{Kind: db.EventKindCheer, Bits: msg.Bits, USD: float64(msg.Bits) / db.BitsPerUSD}
-		in.pairAs = pairAsCheer(msg.Bits)
+		in.msg.Event = &db.EventMeta{Kind: db.EventKindCheer, Bits: bits, USD: float64(bits) / db.BitsPerUSD}
+		in.pairAs = pairAsCheer(bits)
 	case !userCfg.settings.LaneEnabled(db.MsgClassChat):
 		return
 	}
@@ -267,6 +269,15 @@ func (s *Service) handleMessage(msg gempir.PrivateMessage) {
 	defer cancel()
 
 	s.push(ctx, msg.Channel, userCfg, in, feedChat)
+}
+
+// cheerBits is the bits of a cheer. A Power-up spends bits on something that is
+// not a cheer, and unlike a cheer its message carries a notice id.
+func cheerBits(msg gempir.PrivateMessage) (int, bool) {
+	if msg.Bits == 0 || msg.Tags["msg-id"] != "" || fromAnotherChannel(msg.Tags) {
+		return 0, false
+	}
+	return msg.Bits, true
 }
 
 // In a shared chat the other channels' messages arrive here too, and what was

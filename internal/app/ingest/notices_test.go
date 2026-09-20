@@ -61,6 +61,36 @@ func TestNoticeArrival(t *testing.T) {
 	assert.False(t, ok, "a new sub is the event feed's to deliver")
 }
 
+// Both lines are real, captured 2026-09-19 with the viewer and channel replaced.
+func TestOnlyACheerIsACheer(t *testing.T) {
+	const (
+		cheer   = `@badge-info=;badges=;bits=200;color=#0000FF;display-name=Some_Viewer;emotes=;flags=;id=0b91cd7d-01f2-4f3e-b23a-6d38e55df643;mod=0;room-id=48878319;subscriber=0;tmi-sent-ts=1789849219807;turbo=0;user-id=202021370;user-type= :some_viewer!some_viewer@some_viewer.tmi.twitch.tv PRIVMSG #streamer :Cheer200 lo de verte en stream`
+		powerUp = `@badge-info=;badges=;color=;display-name=Some_Viewer;emotes=;first-msg=0;flags=;id=8a7b6c5d-0e1f-4a2b-9c3d-4e5f6a7b8c9d;mod=0;msg-id=highlighted-message;room-id=175831187;subscriber=0;tmi-sent-ts=1789850000000;turbo=0;user-id=202021370;user-type= :some_viewer!some_viewer@some_viewer.tmi.twitch.tv PRIVMSG #streamer :look at me`
+	)
+
+	parse := func(raw string) gempir.PrivateMessage {
+		msg, ok := gempir.ParseMessage(raw).(*gempir.PrivateMessage)
+		require.True(t, ok)
+		return *msg
+	}
+
+	bits, cheered := cheerBits(parse(cheer))
+	assert.True(t, cheered)
+	assert.Equal(t, 200, bits)
+
+	// The captured Power-up cost channel points, so give it a bits price too:
+	// paying with bits must still not make it a cheer.
+	paid := parse(powerUp)
+	paid.Bits = 30
+	_, cheered = cheerBits(paid)
+	assert.False(t, cheered, "a Power-up is not a cheer")
+
+	shared := parse(cheer)
+	shared.Tags["source-room-id"] = "1"
+	_, cheered = cheerBits(shared)
+	assert.False(t, cheered, "a cheer in another channel's shared chat is not ours")
+}
+
 func TestNoticeFromAnotherChannelIsIgnored(t *testing.T) {
 	msg := notice(t, streakNotice)
 	msg.Tags["source-room-id"] = "1"
