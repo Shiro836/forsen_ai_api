@@ -1,5 +1,5 @@
 <div>
-    <form>
+    <form hx-post="/filters" hx-target="#settings_save_result" hx-swap="{{template "save-status-swap"}}">
         <div class="flex flex-col justify-start pt-6 pl-6">
             <div class="flex flex-col flex-grow justify-start w-[25rem]">
                 <div class="flex items-center pb-2">
@@ -48,11 +48,11 @@
                 <input type="number" id="max_sing_count" name="max_sing_count" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="0" autocomplete="off" value="{{ .MaxSingCount }}" min="0">
 
                 <div class="flex items-center pb-2 pt-12">
-                    <label for="ingest_all_messages" class="flex items-center cursor-pointer">
-                        <input type="checkbox" id="ingest_all_messages" name="ingest_all_messages" class="mr-2 w-4 h-4" {{ if .IngestAllMessages }}checked{{ end }}>
-                        TTS for all messages
+                    <label for="close_redemptions" class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="close_redemptions" name="close_redemptions" class="mr-2 w-4 h-4" {{ if .CloseRedemptions }}checked{{ end }}>
+                        Complete redeems on Twitch
                     </label>
-                    {{ template "help-tip" "Play TTS for every chat message,\nnot just channel point redemptions." }}
+                    {{ template "help-tip" "Played redeems are marked completed, skipped ones refund the points.\nOff: redeems stay open, mods can refund them by hand." }}
                 </div>
 
                 <div class="flex items-center pb-2 pt-4">
@@ -79,12 +79,10 @@
                     {{ template "help-tip" "Skip the regex/word-list content filter (built-in and your custom filters above)." }}
                 </div>
 
-                <div class="flex pt-4 justify-end pt-4 font-bold">
-                    <button class='{{template "button-2"}} py-2 px-4 w-24' hx-post="/filters" hx-target="#filters_result">Update</button>
-                </div>
-                <div class="flex pt-2 justify-end">
-                    <div id="filters_result"></div>
-                </div>
+            </div>
+            <div class="mt-6 {{template "save-bar-pinned"}}">
+                {{ template "save-button" "Save" }}
+                {{ template "save-status" (newSaveStatus "settings_save_result") }}
             </div>
         </div>
     </form>

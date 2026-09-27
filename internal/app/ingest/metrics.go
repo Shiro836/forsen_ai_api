@@ -12,6 +12,10 @@ type Metrics struct {
 	MessagesIngested     prometheus.Counter
 	ConnectedClients     prometheus.Gauge
 	ShardCount           prometheus.Gauge
+
+	EventSubSubscriptions     prometheus.Gauge
+	EventSubSubscribeFailures *prometheus.CounterVec
+	EventSubNotifications     *prometheus.CounterVec
 }
 
 var metrics = &Metrics{
@@ -57,6 +61,24 @@ var metrics = &Metrics{
 		Name:      "active_count",
 		Help:      "Number of active Twitch IRC shards (connections managed by the sharded client)",
 	}),
+	EventSubSubscriptions: prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "twitch_ingest",
+		Subsystem: "eventsub",
+		Name:      "subscriptions_count",
+		Help:      "Number of enabled EventSub subscriptions on our conduit",
+	}),
+	EventSubSubscribeFailures: prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "twitch_ingest",
+		Subsystem: "eventsub",
+		Name:      "subscribe_failures_total",
+		Help:      "Number of EventSub subscriptions Twitch refused, labeled by event type",
+	}, []string{"type"}),
+	EventSubNotifications: prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "twitch_ingest",
+		Subsystem: "eventsub",
+		Name:      "notifications_total",
+		Help:      "Number of EventSub notifications received, labeled by event type",
+	}, []string{"type"}),
 }
 
 func RegisterMetrics(reg prometheus.Registerer) {
@@ -67,4 +89,7 @@ func RegisterMetrics(reg prometheus.Registerer) {
 	reg.MustRegister(metrics.MessagesIngested)
 	reg.MustRegister(metrics.ConnectedClients)
 	reg.MustRegister(metrics.ShardCount)
+	reg.MustRegister(metrics.EventSubSubscriptions)
+	reg.MustRegister(metrics.EventSubSubscribeFailures)
+	reg.MustRegister(metrics.EventSubNotifications)
 }

@@ -1,5 +1,5 @@
 <div>
-    <form hx-encoding="multipart/form-data">
+    <form hx-encoding="multipart/form-data" hx-post="/characters/{{.CharacterID}}" hx-target="#character_save_result" hx-swap="{{template "save-status-swap"}}">
         <div class="flex flex-col">
 
             <div class="flex pb-10">
@@ -53,7 +53,8 @@
                             {{ template "help-tip" "TTS will try to replicate voice provided in uploaded audio reference. Background noise is not recommended. If you don't get response, your audio might be too long, make it shorter." }}
                         </div>
                         <div>
-                            <input id="voice_ref" name="voice_ref" type="file" accept="audio" class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer"></input>
+                            <input id="voice_ref" name="voice_ref" type="file" accept="audio" {{ template "file-hash-attrs" .VoiceRefHash }} class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer"></input>
+                            {{ template "file-hash" .VoiceRefHash }}
                         </div>
                     </div>
                     <div class="flex flex-col pt-8">
@@ -62,7 +63,8 @@
                             {{ template "help-tip" "Image that will be shown in the OBS overlay when this char is requested." }}
                         </div>
                         <div>
-                            <input id="image" name="image" type="file" accept="image" class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer"></input>
+                            <input id="image" name="image" type="file" accept="image" {{ template "file-hash-attrs" .ImageHash }} class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer"></input>
+                            {{ template "file-hash" .ImageHash }}
                         </div>
                     </div>
                 </div>
@@ -102,11 +104,10 @@
                 </div>
             </div>
 
-            <div class="flex justify-end pt-8">
-                <button class='py-2 px-4 border-2 {{template "button-2"}}' hx-post="/characters/{{.CharacterID}}" hx-target="#operation_result">{{if .Card}}Update{{else}}Create{{end}}</button>
+            <div class="mt-8 {{template "save-bar-pinned"}}">
+                {{ if .Card }}{{ template "save-button" "Save" }}{{ else }}{{ template "save-button" "Create" }}{{ end }}
+                {{ template "save-status" (newSaveStatus "character_save_result" "voice_ref" "image") }}
             </div>
-
-            <div id="operation_result"></div>
 
         </div>
     </form>

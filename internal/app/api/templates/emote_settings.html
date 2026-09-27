@@ -18,14 +18,14 @@
     <div class="pb-2 text-sm opacity-70">Inherited from the platform default. Saving makes these this channel's own.</div>
     {{ end }}
 
-    <form hx-post="/emotes/{{ .TwitchUserID }}/settings" hx-target="#emote_settings_result">
+    <form hx-post="/emotes/{{ .TwitchUserID }}/settings" hx-target="#emote_settings_save_result" hx-swap="{{template "save-status-swap"}}">
         {{ template "emote-class-toggles" .Classes }}
-        <div class="flex items-center gap-4 pt-2">
-            <button class='{{template "button-2"}} px-4 py-2 font-bold'>Save</button>
+        <div class="{{template "save-bar-inline"}}">
+            {{ template "save-button" "Save" }}
             <button type="button" class='{{template "button-2"}} px-4 py-2'
                 hx-post="/emotes/{{ .TwitchUserID }}/settings/reset" hx-target="#emote_settings"
                 hx-swap="outerHTML">Reset to default</button>
-            <div id="emote_settings_result"></div>
+            {{ template "save-status" (newSaveStatus "emote_settings_save_result") }}
         </div>
     </form>
 </div>
