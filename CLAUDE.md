@@ -47,7 +47,7 @@ Subscriber channels are **drop-on-full by design** — never assume guaranteed d
 
 ## Before starting any task
 
-Read these memory files from the auto-memory directory (`~/.claude/projects/-home-forsen-repos-forsen-ai-api/memory/`) and follow them; MEMORY.md alone is not enough:
+Standing feedback and project notes live in `.cursor/rules/` (gitignored). `AGENTS.md` is a symlink to this file. The auto-memory directory (`~/.claude/projects/-home-forsen-repos-forsen-ai-api/memory/`) is symlinks into those rules; `MEMORY.md` is the index. If the rules are already in your context, don't open them again. Otherwise follow:
 
 - `feedback_use_build_script.md` — every change ends with `scripts/build_prod.sh` before reporting done. The user restarts the service after you finish; `go build ./...` only typechecks and leaves the old binary running.
 - `feedback_sudo_commands.md`, `feedback_db_readonly.md`, `feedback_secrets_public_repo.md` — what you may not execute or write.
