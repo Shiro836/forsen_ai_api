@@ -67,7 +67,7 @@ services:
 
   grafana:
     user: root
-    image: grafana/grafana:12.4.5
+    image: grafana/grafana:12.4.13
     ports:
       - 2999:3000
     environment:
