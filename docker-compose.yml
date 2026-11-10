@@ -25,8 +25,14 @@ services:
     volumes:
       - ./cfg/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./cfg/minio_prometheus_token:/etc/prometheus/minio_token
+      - prom-data:/prometheus
     command:
+      # Overriding command drops the image's own flags, so the storage path
+      # stays the default data/ under the workdir — moving it strands the
+      # blocks already written there.
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=1y'
+      - '--storage.tsdb.retention.size=40GB'
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -40,6 +46,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./cfg/loki/local-config.yaml:/etc/loki/local-config.yaml
+      - loki-data:/loki
     restart: unless-stopped
     networks:
       - forsen
@@ -158,6 +165,8 @@ services:
 
 volumes:
   ch-data:
+  loki-data:
+  prom-data:
   pg-data:
   emote-pg-data:
   grafana-data-1:
