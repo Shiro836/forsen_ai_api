@@ -126,12 +126,20 @@ func TestBDProviderStatusRenders(t *testing.T) {
 	})
 	assert.Contains(t, page, `id="bd-streamlabs-status"`)
 	assert.Contains(t, page, "connect again")
-	assert.Contains(t, page, `hx-get="/donation-providers/streamlabs/status?state=s"`)
+	assert.Contains(t, page, `hx-get="/donation-providers/streamlabs/status?state=s`)
+	assert.Contains(t, page, `card=false`)
 	assert.NotContains(t, page, "listening")
 	assert.NotContains(t, page, "connecting")
 
 	off := getString("bd-provider-status", &bdProvider{ID: "streamelements", Connected: true, Status: "connected"})
 	assert.NotContains(t, off, "hx-get=", "a card that is not live has nothing to poll")
+
+	refresh := getString("bd-provider", &bdProvider{
+		ID: "streamlabs", Connected: true, Live: true, Status: "connected", State: "ok", OOB: true,
+	})
+	assert.Contains(t, refresh, `hx-swap-oob="outerHTML"`)
+	assert.Contains(t, refresh, `id="bd-streamlabs-status"`)
+	assert.Contains(t, refresh, "disconnect")
 }
 
 func TestBDProviderState(t *testing.T) {

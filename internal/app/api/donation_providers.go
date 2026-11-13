@@ -64,6 +64,7 @@ type bdProvider struct {
 	StatusError string
 	Expiry      string
 	State       string
+	OOB         bool
 }
 
 // bdProviderState is what the page polls on. The healthy states look the same
@@ -245,8 +246,20 @@ func (api *API) donationProviderStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	block := bdProviderFor(provider, links)
-	if state := r.URL.Query().Get("state"); state != "" && state == block.State {
+	state := r.URL.Query().Get("state")
+	card := r.URL.Query().Get("card")
+	cardChanged := card != "" && card != fmt.Sprintf("%t", block.Connected)
+
+	if !cardChanged && state != "" && state == block.State {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if cardChanged {
+		block.OOB = true
+		if err := html.ExecuteTemplate(w, "bd-provider", block); err != nil {
+			api.logger.Error("render donation provider refresh failed", "err", err, "provider", provider, "user", user.ID)
+		}
 		return
 	}
 
