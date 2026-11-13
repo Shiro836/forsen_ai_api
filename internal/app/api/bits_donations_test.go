@@ -3,10 +3,12 @@ package api
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"testing"
 
 	"app/db"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +39,10 @@ func bdForm(state *bdState, extra url.Values) *http.Request {
 		if action.CardID != nil {
 			form.Set("card_"+string(class), action.CardID.String())
 		}
+	}
+	form.Set("resub_action", strconv.Itoa(int(state.ResubAction.RewardType)))
+	if state.ResubAction.CardID != nil {
+		form.Set("resub_card", state.ResubAction.CardID.String())
 	}
 	for line, text := range state.Lines {
 		form.Set("line_"+string(line), text)
@@ -80,6 +86,30 @@ func TestBDFollowsYieldByDefault(t *testing.T) {
 	errs := (&API{}).bdStore(form, nil, settings, unticked)
 	assert.False(t, errs.any())
 	assert.True(t, settings.FollowsStay)
+}
+
+func TestBDResubActionRenders(t *testing.T) {
+	page := getString("bd-event", &bdEvent{
+		Class:   db.MsgClassSub,
+		Name:    "Subs",
+		Enabled: true,
+		ResubActions: []bdActionOption{
+			{Value: 2, Label: "BAJ TTS", Checked: true},
+			{Value: 1, Label: "TTS"},
+			{Value: 3, Label: "AI"},
+		},
+	})
+	assert.Contains(t, page, "Resub action")
+	assert.Contains(t, page, `name="resub_action"`)
+	assert.Contains(t, page, `name="resub_card"`)
+
+	picker := getString("bd-picker-grid", &bdPicker{
+		Class:      db.MsgClassSub,
+		Target:     "resub",
+		Characters: []bdCharacter{{ID: uuid.New(), Name: "x"}},
+	})
+	assert.Contains(t, picker, `id="bd-resub-grid"`)
+	assert.Contains(t, picker, `"class": "resub"`)
 }
 
 func TestBDEdit(t *testing.T) {

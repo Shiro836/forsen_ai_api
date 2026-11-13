@@ -37,11 +37,16 @@ type bdLineField struct {
 }
 
 var eventCardLines = map[db.MsgClass][]bdLineField{
-	db.MsgClassSub:    {{db.EventLineSub, "new sub"}, {db.EventLineResub, "resub"}, {db.EventLineGift, "gift subs"}},
-	db.MsgClassRaid:   {{db.EventLineRaid, ""}},
-	db.MsgClassStreak: {{db.EventLineStreak, ""}},
-	db.MsgClassFollow: {{db.EventLineFollow, ""}},
+	db.MsgClassDonation: {{db.EventLineDonation, "no message"}},
+	db.MsgClassSub:      {{db.EventLineSub, "new sub"}, {db.EventLineResub, "resub"}, {db.EventLineGift, "gift subs"}},
+	db.MsgClassRaid:     {{db.EventLineRaid, ""}},
+	db.MsgClassStreak:   {{db.EventLineStreak, ""}},
+	db.MsgClassFollow:   {{db.EventLineFollow, ""}},
 }
+
+// bdResubPicker is a picker target, not a lane: resubs stay in the Sub lane but
+// can have their own action and character.
+const bdResubPicker = db.MsgClass("resub")
 
 // bdState is everything the page edits. It travels in the form, so nothing
 // reaches the streamer's settings before Save.
@@ -49,6 +54,7 @@ type bdState struct {
 	Order       [][]db.MsgClass
 	Enabled     map[db.MsgClass]bool
 	Actions     map[db.MsgClass]db.EventAction
+	ResubAction db.EventAction
 	Lines       map[db.EventLine]string
 	FollowsStay bool
 }
@@ -58,6 +64,7 @@ func bdStateFromSettings(settings *db.UserSettings) *bdState {
 		Order:       settings.PlayOrder(),
 		Enabled:     make(map[db.MsgClass]bool),
 		Actions:     make(map[db.MsgClass]db.EventAction),
+		ResubAction: settings.ResubEventAction(),
 		Lines:       make(map[db.EventLine]string),
 		FollowsStay: settings.FollowsStay,
 	}
@@ -114,17 +121,9 @@ func bdStateFromForm(r *http.Request) (*bdState, error) {
 	}
 
 	for _, class := range eventCards {
-		rewardType, err := strconv.Atoi(r.Form.Get("action_" + string(class)))
-		if err != nil || !slices.Contains(eventActions, db.TwitchRewardType(rewardType)) {
-			return nil, fmt.Errorf("invalid action for %s", class)
-		}
-		action := db.EventAction{RewardType: db.TwitchRewardType(rewardType)}
-		if value := r.Form.Get("card_" + string(class)); value != "" {
-			cardID, err := uuid.Parse(value)
-			if err != nil {
-				return nil, fmt.Errorf("invalid character for %s", class)
-			}
-			action.CardID = &cardID
+		action, err := parseBDAction(r, "action_"+string(class), "card_"+string(class))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", class, err)
 		}
 		state.Actions[class] = action
 
@@ -137,7 +136,33 @@ func bdStateFromForm(r *http.Request) (*bdState, error) {
 		}
 	}
 
+	resub, err := parseBDAction(r, "resub_action", "resub_card")
+	if err != nil {
+		return nil, fmt.Errorf("resub: %w", err)
+	}
+	state.ResubAction = resub
+
 	return state, nil
+}
+
+func parseBDAction(r *http.Request, actionField, cardField string) (db.EventAction, error) {
+	raw := r.Form.Get(actionField)
+	if raw == "" {
+		return db.EventAction{RewardType: db.TwitchRewardUniversalTTS}, nil
+	}
+	rewardType, err := strconv.Atoi(raw)
+	if err != nil || !slices.Contains(eventActions, db.TwitchRewardType(rewardType)) {
+		return db.EventAction{}, fmt.Errorf("invalid action")
+	}
+	action := db.EventAction{RewardType: db.TwitchRewardType(rewardType)}
+	if value := r.Form.Get(cardField); value != "" {
+		cardID, err := uuid.Parse(value)
+		if err != nil {
+			return db.EventAction{}, fmt.Errorf("invalid character")
+		}
+		action.CardID = &cardID
+	}
+	return action, nil
 }
 
 func groupPaid(group []db.MsgClass) bool {
@@ -183,6 +208,9 @@ func (s *bdState) edit(r *http.Request) (picker db.MsgClass, err error) {
 		}
 
 	case "picker":
+		if class == bdResubPicker {
+			return bdResubPicker, nil
+		}
 		if !slices.Contains(eventCards, class) {
 			return "", fmt.Errorf("unknown event")
 		}
@@ -190,7 +218,14 @@ func (s *bdState) edit(r *http.Request) (picker db.MsgClass, err error) {
 
 	case "character":
 		cardID, err := uuid.Parse(r.Form.Get("card_id"))
-		if err != nil || !slices.Contains(eventCards, class) {
+		if err != nil {
+			return "", fmt.Errorf("invalid character")
+		}
+		if class == bdResubPicker {
+			s.ResubAction.CardID = &cardID
+			return "", nil
+		}
+		if !slices.Contains(eventCards, class) {
 			return "", fmt.Errorf("invalid character")
 		}
 		action := s.Actions[class]
@@ -202,12 +237,13 @@ func (s *bdState) edit(r *http.Request) (picker db.MsgClass, err error) {
 }
 
 type bdErrors struct {
-	Actions map[db.MsgClass]string
-	Lines   map[db.EventLine]string
+	Actions     map[db.MsgClass]string
+	Lines       map[db.EventLine]string
+	ResubAction string
 }
 
 func (e bdErrors) any() bool {
-	return len(e.Actions) > 0 || len(e.Lines) > 0
+	return len(e.Actions) > 0 || len(e.Lines) > 0 || e.ResubAction != ""
 }
 
 // bdStore writes the state into settings, which the caller saves only when no
@@ -234,6 +270,14 @@ func (api *API) bdStore(r *http.Request, user *db.User, settings *db.UserSetting
 			if _, err := api.db.GetCharCardByID(r.Context(), user.ID, *action.CardID); err != nil {
 				errs.Actions[class] = "character not found"
 			}
+		}
+	}
+
+	if err := settings.SetResubAction(state.ResubAction); err != nil {
+		errs.ResubAction = err.Error()
+	} else if state.ResubAction.RewardType != db.TwitchRewardUniversalTTS {
+		if _, err := api.db.GetCharCardByID(r.Context(), user.ID, *state.ResubAction.CardID); err != nil {
+			errs.ResubAction = "character not found"
 		}
 	}
 
@@ -275,6 +319,7 @@ type bdCharacter struct {
 
 type bdPicker struct {
 	Class      db.MsgClass
+	Target     string
 	Query      string
 	Characters []bdCharacter
 }
@@ -301,6 +346,14 @@ type bdEvent struct {
 	Yields         bool
 	Lines          []*bdLine
 	Presets        []string
+
+	// Resubs stay in the Sub lane but can pick their own action.
+	ResubActions        []bdActionOption
+	ResubNeedsCharacter bool
+	ResubCardID         string
+	ResubCharacter      *bdCharacter
+	ResubPicker         *bdPicker
+	ResubActionError    string
 }
 
 const bdSaveStatusID = "bd_save_result"
@@ -335,7 +388,7 @@ func newBDOrder(state *bdState) bdOrder {
 	return order
 }
 
-func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSettings, state *bdState, class db.MsgClass, openPicker bool, errs bdErrors) (*bdEvent, error) {
+func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSettings, state *bdState, class db.MsgClass, pickerTarget db.MsgClass, errs bdErrors) (*bdEvent, error) {
 	action := state.Actions[class]
 
 	event := &bdEvent{
@@ -376,12 +429,39 @@ func (api *API) newBDEvent(r *http.Request, user *db.User, settings *db.UserSett
 		}
 	}
 
-	if event.NeedsCharacter && (openPicker || event.Character == nil) {
+	if event.NeedsCharacter && (pickerTarget == class || (pickerTarget == "" && event.Character == nil)) {
 		picker, err := api.newBDPicker(r, user, settings, class, "")
 		if err != nil {
 			return nil, err
 		}
 		event.Picker = picker
+	}
+
+	if class == db.MsgClassSub {
+		resub := state.ResubAction
+		event.ResubNeedsCharacter = resub.RewardType != db.TwitchRewardUniversalTTS
+		event.ResubActionError = errs.ResubAction
+		for _, rewardType := range eventActions {
+			event.ResubActions = append(event.ResubActions, bdActionOption{
+				Value:   int(rewardType),
+				Label:   rewardType.String(),
+				Checked: rewardType == resub.RewardType,
+			})
+		}
+		if resub.CardID != nil {
+			event.ResubCardID = resub.CardID.String()
+			if card, err := api.db.GetCharCardByID(r.Context(), user.ID, *resub.CardID); err == nil {
+				event.ResubCharacter = &bdCharacter{ID: card.ID, Name: card.Name}
+			}
+		}
+		if event.ResubNeedsCharacter && (pickerTarget == bdResubPicker || (pickerTarget == "" && event.ResubCharacter == nil)) {
+			picker, err := api.newBDPicker(r, user, settings, class, "")
+			if err != nil {
+				return nil, err
+			}
+			picker.Target = string(bdResubPicker)
+			event.ResubPicker = picker
+		}
 	}
 
 	return event, nil
@@ -399,7 +479,7 @@ func (api *API) newBDPicker(r *http.Request, user *db.User, settings *db.UserSet
 	query = strings.TrimSpace(query)
 	needle := strings.ToLower(query)
 
-	picker := &bdPicker{Class: class, Query: query}
+	picker := &bdPicker{Class: class, Target: string(class), Query: query}
 	for _, card := range cards {
 		if settings.CardDisabled(card.ID) {
 			continue
@@ -425,7 +505,7 @@ func (api *API) newBDPage(r *http.Request, user *db.User, settings *db.UserSetti
 		page.Save.Error = "not saved, fix the marked fields"
 	}
 	for _, class := range eventCards {
-		event, err := api.newBDEvent(r, user, settings, state, class, class == picker, errs)
+		event, err := api.newBDEvent(r, user, settings, state, class, picker, errs)
 		if err != nil {
 			return nil, err
 		}
@@ -545,7 +625,10 @@ func (api *API) bitsDonationsPicker(w http.ResponseWriter, r *http.Request) {
 	}
 
 	class := db.MsgClass(chi.URLParam(r, "event"))
-	if !slices.Contains(eventCards, class) {
+	target := string(class)
+	if class == bdResubPicker {
+		class = db.MsgClassSub
+	} else if !slices.Contains(eventCards, class) {
 		http.Error(w, "unknown event", http.StatusNotFound)
 		return
 	}
@@ -555,5 +638,6 @@ func (api *API) bitsDonationsPicker(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to load characters: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	picker.Target = target
 	_ = html.ExecuteTemplate(w, "bd-picker-grid", picker)
 }

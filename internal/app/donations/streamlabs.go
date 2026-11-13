@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,9 @@ import (
 const (
 	streamlabsSocketEndpoint = "https://sockets.streamlabs.com"
 	streamlabsTokenURL       = "https://streamlabs.com/api/v2.0/socket/token"
+	streamlabsDonationsURL   = "https://streamlabs.com/api/v2.0/donations"
+	slBackfillLimit          = 100
+	slBackfillMaxPage        = 5
 )
 
 type streamlabs struct {
@@ -43,6 +47,13 @@ func (s *streamlabs) Run(ctx context.Context, creds Credentials, session Session
 	socketToken, err := s.socketToken(ctx, creds.AccessToken)
 	if err != nil {
 		return err
+	}
+
+	if since, ok := backfillSince(creds); ok {
+		s.logger.Info("backfilling donations", "since", since)
+		if err := s.backfill(ctx, creds.AccessToken, since, session); err != nil {
+			s.logger.Error("streamlabs backfill failed", "err", err)
+		}
 	}
 
 	opts := socket.DefaultOptions()
@@ -220,9 +231,14 @@ func parseStreamlabsEvent(raw json.RawMessage) ([]Event, bool, string) {
 			continue
 		}
 
-		id := strings.TrimSpace(donation.DonationID)
+		// The numeric id is the one the REST history calls donation_id; using
+		// it on both paths is what makes a backfilled event a no-op later.
+		id := streamlabsFallbackID(donation.ID, "", 0)
 		if id == "" {
-			id = streamlabsFallbackID(donation.ID, payload.EventID, i)
+			id = strings.TrimSpace(donation.DonationID)
+		}
+		if id == "" && payload.EventID != "" {
+			id = payload.EventID + ":" + strconv.Itoa(i)
 		}
 		if id == "" {
 			continue
@@ -288,4 +304,159 @@ func streamlabsFallbackID(raw json.RawMessage, eventID string, index int) string
 		return ""
 	}
 	return eventID + ":" + strconv.Itoa(index)
+}
+
+type streamlabsDonationAPI struct {
+	DonationID json.RawMessage `json:"donation_id"`
+	CreatedAt  json.RawMessage `json:"created_at"`
+	Currency   string          `json:"currency"`
+	Amount     json.RawMessage `json:"amount"`
+	Name       string          `json:"name"`
+	Message    *string         `json:"message"`
+}
+
+func (s *streamlabs) backfill(ctx context.Context, accessToken string, since time.Time, session Session) error {
+	var events []Event
+	truncated := false
+	before := ""
+
+	for page := 0; page < slBackfillMaxPage; page++ {
+		q := url.Values{}
+		q.Set("limit", strconv.Itoa(slBackfillLimit))
+		q.Set("verified", "1")
+		if before != "" {
+			q.Set("before", before)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, streamlabsDonationsURL+"?"+q.Encode(), nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := s.client.Do(req)
+		if err != nil {
+			return fmt.Errorf("donations page %d: %w", page+1, err)
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+			resp.Body.Close()
+			return fmt.Errorf("donations page %d: status %d", page+1, resp.StatusCode)
+		}
+
+		var body struct {
+			Data []streamlabsDonationAPI `json:"data"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&body)
+		resp.Body.Close()
+		if err != nil {
+			return fmt.Errorf("donations page %d: %w", page+1, err)
+		}
+		if len(body.Data) == 0 {
+			break
+		}
+
+		var oldest time.Time
+		for _, donation := range body.Data {
+			event, ok, reason := parseStreamlabsHistory(donation, since)
+			if ok {
+				events = append(events, event)
+			} else if reason != "older than the watermark" {
+				s.logger.Info("backfilled donation not queued", "reason", reason)
+			}
+
+			created := parseStreamlabsTime(donation.CreatedAt)
+			if !created.IsZero() && (oldest.IsZero() || created.Before(oldest)) {
+				oldest = created
+			}
+		}
+
+		if len(body.Data) < slBackfillLimit {
+			break
+		}
+		// The API returns newest first; once a page reaches the watermark,
+		// every later page is older.
+		if !oldest.IsZero() && !oldest.After(since) {
+			break
+		}
+		before = streamlabsFallbackID(body.Data[len(body.Data)-1].DonationID, "", 0)
+		if before == "" {
+			break
+		}
+		truncated = page == slBackfillMaxPage-1
+	}
+
+	if truncated {
+		s.logger.Warn("streamlabs backfill truncated", "pages", slBackfillMaxPage)
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].CreatedAt.Before(events[j].CreatedAt) })
+	for _, event := range events {
+		session.Emit(event)
+	}
+	return nil
+}
+
+func parseStreamlabsHistory(donation streamlabsDonationAPI, since time.Time) (Event, bool, string) {
+	createdAt := parseStreamlabsTime(donation.CreatedAt)
+	if createdAt.IsZero() {
+		return Event{}, false, "no timestamp"
+	}
+	if !createdAt.After(since) {
+		return Event{}, false, "older than the watermark"
+	}
+
+	id := streamlabsFallbackID(donation.DonationID, "", 0)
+	if id == "" {
+		return Event{}, false, "no donation id"
+	}
+	amount, ok := streamlabsAmount(donation.Amount)
+	if !ok {
+		return Event{}, false, "no amount"
+	}
+	currency := normalizeCurrency(donation.Currency)
+	amountMinor := MinorUnits(amount, currency)
+	if amountMinor <= 0 || len(currency) != 3 {
+		return Event{}, false, "no amount"
+	}
+
+	from := strings.TrimSpace(donation.Name)
+	if from == "" {
+		from = "anonymous"
+	}
+	message := ""
+	if donation.Message != nil {
+		message = *donation.Message
+	}
+
+	return Event{
+		Provider:    db.ProviderStreamlabs,
+		ProviderID:  id,
+		From:        from,
+		Message:     strings.TrimSpace(message),
+		AmountMinor: amountMinor,
+		Currency:    currency,
+		CreatedAt:   createdAt,
+	}, true, ""
+}
+
+func parseStreamlabsTime(raw json.RawMessage) time.Time {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return time.Time{}
+	}
+
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		if seconds, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64); err == nil {
+			return time.Unix(seconds, 0).UTC()
+		}
+		return parseProviderTime(text)
+	}
+
+	var seconds int64
+	if err := json.Unmarshal(raw, &seconds); err == nil {
+		return time.Unix(seconds, 0).UTC()
+	}
+	return time.Time{}
 }

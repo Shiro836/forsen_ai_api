@@ -42,6 +42,7 @@ type DonationProviderToken struct {
 	AccessToken  string
 	RefreshToken string
 	ExpiresAt    *time.Time
+	LastEventAt  *time.Time
 	UpdatedAt    time.Time
 }
 
@@ -155,7 +156,7 @@ func (db *DB) ConnectedDonationProviders(ctx context.Context, userID uuid.UUID) 
 }
 
 func listDonationProviderTokensSQL() (string, []any, error) {
-	return psql.Select("user_id", "provider", "access_token", "coalesce(refresh_token, '')", "expires_at", "updated_at").
+	return psql.Select("user_id", "provider", "access_token", "coalesce(refresh_token, '')", "expires_at", "last_event_at", "updated_at").
 		From("donation_providers").
 		ToSql()
 }
@@ -177,14 +178,18 @@ func (db *DB) ListDonationProviderTokens(ctx context.Context) ([]DonationProvide
 	var tokens []DonationProviderToken
 	for rows.Next() {
 		var (
-			token     DonationProviderToken
-			expiresAt sql.NullTime
+			token       DonationProviderToken
+			expiresAt   sql.NullTime
+			lastEventAt sql.NullTime
 		)
-		if err := rows.Scan(&token.UserID, &token.Provider, &token.AccessToken, &token.RefreshToken, &expiresAt, &token.UpdatedAt); err != nil {
+		if err := rows.Scan(&token.UserID, &token.Provider, &token.AccessToken, &token.RefreshToken, &expiresAt, &lastEventAt, &token.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("list donation provider tokens: %w", err)
 		}
 		if expiresAt.Valid {
 			token.ExpiresAt = &expiresAt.Time
+		}
+		if lastEventAt.Valid {
+			token.LastEventAt = &lastEventAt.Time
 		}
 		tokens = append(tokens, token)
 	}
@@ -230,6 +235,29 @@ func setDonationProviderStatusSQL(userID uuid.UUID, provider, status, statusErro
 		Set("status_updated_at", sq.Expr("now()")).
 		Where(sq.Eq{"user_id": userID, "provider": provider}).
 		ToSql()
+}
+
+// AdvanceDonationProviderLastEvent moves the backfill watermark forward. The
+// greatest() keeps a late event from moving it backwards.
+func (db *DB) AdvanceDonationProviderLastEvent(ctx context.Context, userID uuid.UUID, provider string, at time.Time) error {
+	if !validDonationProvider(provider) {
+		return fmt.Errorf("advance donation provider last event: unknown provider")
+	}
+	if at.IsZero() {
+		return nil
+	}
+
+	query, args, err := psql.Update("donation_providers").
+		Set("last_event_at", sq.Expr("greatest(coalesce(last_event_at, ?), ?)", at, at)).
+		Where(sq.Eq{"user_id": userID, "provider": provider}).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("advance donation provider last event: %w", err)
+	}
+	if _, err := db.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("advance donation provider last event: %w", err)
+	}
+	return nil
 }
 
 // SetDonationProviderStatus stores the connection outcome the streamer's page

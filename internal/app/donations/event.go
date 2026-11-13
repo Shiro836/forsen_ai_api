@@ -30,6 +30,9 @@ type Credentials struct {
 	AccessToken  string
 	RefreshToken string
 	ExpiresAt    *time.Time
+	// LastEventAt is the backfill watermark; nil means the credential has
+	// never delivered an event, so there is nothing to restore.
+	LastEventAt *time.Time
 }
 
 // Session is what a source reports back to the supervisor.

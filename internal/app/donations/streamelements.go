@@ -1,13 +1,17 @@
 package donations
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,23 +23,30 @@ import (
 )
 
 const (
-	astroEndpoint    = "wss://astro.streamelements.com/"
-	astroTopic       = "channel.activities"
-	astroReadTimeout = 90 * time.Second
+	astroEndpoint     = "wss://astro.streamelements.com/"
+	astroTopic        = "channel.activities"
+	astroReadTimeout  = 90 * time.Second
+	seAPIBase         = "https://api.streamelements.com"
+	seBackfillLimit   = 100
+	seBackfillMaxPage = 5
 )
 
 // streamElements is the Astro websocket client. The protocol is StreamElements'
 // documented gateway; there is no Go client to depend on, so the frame layer is
 // gorilla and everything above it is the documented subscribe/publish shape.
 type streamElements struct {
-	logger *slog.Logger
-	dialer *websocket.Dialer
+	logger  *slog.Logger
+	dialer  *websocket.Dialer
+	http    *http.Client
+	apiBase string
 }
 
 func NewStreamElements(logger *slog.Logger) Source {
 	return &streamElements{
-		logger: logger,
-		dialer: &websocket.Dialer{HandshakeTimeout: 10 * time.Second},
+		logger:  logger,
+		dialer:  &websocket.Dialer{HandshakeTimeout: 10 * time.Second},
+		http:    &http.Client{Timeout: 20 * time.Second},
+		apiBase: seAPIBase,
 	}
 }
 
@@ -48,6 +59,15 @@ func (s *streamElements) Run(ctx context.Context, creds Credentials, session Ses
 	channel, err := jwtClaim(creds.AccessToken, "channel")
 	if err != nil || channel == "" {
 		return fmt.Errorf("%w: %v", ErrAuth, err)
+	}
+
+	if since, ok := backfillSince(creds); ok {
+		s.logger.Info("backfilling tips", "since", since)
+		if err := s.backfillTips(ctx, channel, creds.AccessToken, since, session); err != nil {
+			// A REST outage must not keep the live socket down; the next
+			// reconnect retries from the same watermark.
+			s.logger.Error("streamelements backfill failed", "err", err)
+		}
 	}
 
 	return s.serve(ctx, channel, creds.AccessToken, session)
@@ -291,6 +311,162 @@ func parseProviderTime(value string) time.Time {
 	}
 	if t, err := time.Parse(time.RFC3339Nano, value); err == nil {
 		return t
+	}
+	return time.Time{}
+}
+
+type streamElementsTip struct {
+	ID        string          `json:"_id"`
+	TipID     string          `json:"tipId"`
+	CreatedAt json.RawMessage `json:"createdAt"`
+	Deleted   bool            `json:"deleted"`
+	Approved  string          `json:"approved"`
+	Data      struct {
+		Amount      float64 `json:"amount"`
+		Currency    string  `json:"currency"`
+		Username    string  `json:"username"`
+		DisplayName string  `json:"displayName"`
+		Message     string  `json:"message"`
+	} `json:"data"`
+}
+
+func (s *streamElements) backfillTips(ctx context.Context, channel, token string, since time.Time, session Session) error {
+	var events []Event
+	truncated := false
+
+	for page := 0; page < seBackfillMaxPage; page++ {
+		q := url.Values{}
+		q.Set("limit", strconv.Itoa(seBackfillLimit))
+		q.Set("offset", strconv.Itoa(page*seBackfillLimit))
+		endpoint := fmt.Sprintf("%s/kappa/v2/tips/%s?%s", s.apiBase, url.PathEscape(channel), q.Encode())
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := s.http.Do(req)
+		if err != nil {
+			return fmt.Errorf("tips page %d: %w", page+1, err)
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+			resp.Body.Close()
+			return fmt.Errorf("tips page %d: status %d", page+1, resp.StatusCode)
+		}
+
+		var body struct {
+			Docs        []json.RawMessage `json:"docs"`
+			HasNextPage bool              `json:"hasNextPage"`
+		}
+		err = json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&body)
+		resp.Body.Close()
+		if err != nil {
+			return fmt.Errorf("tips page %d: %w", page+1, err)
+		}
+
+		for _, raw := range body.Docs {
+			event, ok, reason := parseStreamElementsTip(raw, since)
+			if !ok {
+				if reason != "older than the watermark" {
+					s.logger.Info("backfilled tip not queued", "reason", reason)
+				}
+				continue
+			}
+			events = append(events, event)
+		}
+
+		if !body.HasNextPage || len(body.Docs) == 0 {
+			break
+		}
+		truncated = page == seBackfillMaxPage-1
+	}
+
+	if truncated {
+		s.logger.Warn("streamelements backfill truncated", "pages", seBackfillMaxPage)
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].CreatedAt.Before(events[j].CreatedAt) })
+	for _, event := range events {
+		session.Emit(event)
+	}
+	return nil
+}
+
+func parseStreamElementsTip(raw json.RawMessage, since time.Time) (Event, bool, string) {
+	var tip streamElementsTip
+	if err := json.Unmarshal(raw, &tip); err != nil {
+		return Event{}, false, "unreadable payload"
+	}
+	if tip.Deleted {
+		return Event{}, false, "deleted"
+	}
+	if strings.EqualFold(tip.Approved, "rejected") {
+		return Event{}, false, "rejected"
+	}
+
+	id := tip.TipID
+	if id == "" {
+		id = tip.ID
+	}
+	if id == "" {
+		return Event{}, false, "no tip id"
+	}
+
+	createdAt := parseTipTime(tip.CreatedAt)
+	if createdAt.IsZero() {
+		return Event{}, false, "no timestamp"
+	}
+	if !createdAt.After(since) {
+		return Event{}, false, "older than the watermark"
+	}
+
+	currency := normalizeCurrency(tip.Data.Currency)
+	if len(currency) != 3 {
+		return Event{}, false, "no currency"
+	}
+	amount := MinorUnits(tip.Data.Amount, currency)
+	if amount <= 0 {
+		return Event{}, false, "no amount"
+	}
+
+	from := strings.TrimSpace(tip.Data.DisplayName)
+	if from == "" {
+		from = strings.TrimSpace(tip.Data.Username)
+	}
+	if from == "" {
+		from = "anonymous"
+	}
+
+	return Event{
+		Provider:    db.ProviderStreamElements,
+		ProviderID:  id,
+		From:        from,
+		Message:     strings.TrimSpace(tip.Data.Message),
+		AmountMinor: amount,
+		Currency:    currency,
+		CreatedAt:   createdAt,
+	}, true, ""
+}
+
+func parseTipTime(raw json.RawMessage) time.Time {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return time.Time{}
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		if parsed := parseProviderTime(text); !parsed.IsZero() {
+			return parsed
+		}
+		if seconds, err := strconv.ParseInt(text, 10, 64); err == nil {
+			return time.Unix(seconds, 0).UTC()
+		}
+	}
+	var seconds int64
+	if err := json.Unmarshal(raw, &seconds); err == nil {
+		return time.Unix(seconds, 0).UTC()
 	}
 	return time.Time{}
 }

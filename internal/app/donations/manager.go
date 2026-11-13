@@ -163,6 +163,12 @@ func (m *Manager) start(ctx context.Context, key Key, source Source, spec Spec) 
 func (m *Manager) run(ctx context.Context, key Key, source Source, spec Spec, conn *connection) {
 	defer close(conn.done)
 
+	lastEvent := time.Time{}
+	if spec.Credentials.LastEventAt != nil {
+		lastEvent = *spec.Credentials.LastEventAt
+	}
+	var lastEventMu sync.Mutex
+
 	backoff := time.Second
 	for {
 		if ctx.Err() != nil {
@@ -173,7 +179,14 @@ func (m *Manager) run(ctx context.Context, key Key, source Source, spec Spec, co
 		connected := false
 		session := Session{
 			Emit: func(event Event) {
-				m.enqueue(ctx, key, event)
+				if !m.enqueue(ctx, key, event) || event.CreatedAt.IsZero() {
+					return
+				}
+				lastEventMu.Lock()
+				if event.CreatedAt.After(lastEvent) {
+					lastEvent = event.CreatedAt
+				}
+				lastEventMu.Unlock()
 			},
 			Connected: func() {
 				connected = true
@@ -182,7 +195,14 @@ func (m *Manager) run(ctx context.Context, key Key, source Source, spec Spec, co
 			},
 		}
 
-		err := source.Run(ctx, spec.Credentials, session)
+		creds := spec.Credentials
+		lastEventMu.Lock()
+		at := lastEvent
+		lastEventMu.Unlock()
+		if !at.IsZero() {
+			creds.LastEventAt = &at
+		}
+		err := source.Run(ctx, creds, session)
 		if ctx.Err() != nil {
 			return
 		}
@@ -241,21 +261,19 @@ func (m *Manager) clearPermanent(key Key) {
 	m.mu.Unlock()
 }
 
-func (m *Manager) enqueue(ctx context.Context, key Key, event Event) {
+func (m *Manager) enqueue(ctx context.Context, key Key, event Event) bool {
 	logger := m.logger.With(
 		"user", key.UserID,
 		"provider", key.Provider,
 		"provider_id", event.ProviderID,
 	)
 
+	// An empty donation is still played: the streamer's "no message" line is
+	// filled in at play time, like every other event lane.
 	message := strings.TrimSpace(event.Message)
-	if message == "" {
-		logger.Info("donation not queued", "reason", "nothing to say")
-		return
-	}
 	if event.AmountMinor <= 0 {
 		logger.Info("donation not queued", "reason", "no amount")
-		return
+		return true
 	}
 
 	usdMinor, rate, ok := m.rates.USD(event.AmountMinor, event.Currency)
@@ -294,7 +312,10 @@ func (m *Manager) enqueue(ctx context.Context, key Key, event Event) {
 	queueID, created, err := m.db.PushIngestMsg(writeCtx, key.UserID, msg, data, event.Provider+":"+event.ProviderID, "")
 	if err != nil {
 		logger.Error("failed to queue donation", "err", err)
-		return
+		return false
+	}
+	if err := m.db.AdvanceDonationProviderLastEvent(writeCtx, key.UserID, key.Provider, event.CreatedAt); err != nil {
+		logger.Error("failed to advance the donation backfill watermark", "err", err)
 	}
 	if created {
 		logger.Info("ingested donation",
@@ -304,9 +325,10 @@ func (m *Manager) enqueue(ctx context.Context, key Key, event Event) {
 			"usd", float64(usdMinor)/100,
 			"mock", event.Mock,
 		)
-		return
+		return true
 	}
 	logger.Info("donation was queued already", "queue_id", queueID)
+	return true
 }
 
 func errorText(err error) string {

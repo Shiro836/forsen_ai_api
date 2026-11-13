@@ -119,6 +119,40 @@ func TestSetEventAction(t *testing.T) {
 	}
 }
 
+func TestSetResubAction(t *testing.T) {
+	settings := &UserSettings{}
+
+	if err := settings.SetResubAction(EventAction{RewardType: TwitchRewardAI}); err == nil {
+		t.Fatal("a resub action without its character was accepted")
+	}
+
+	card := uuid.New()
+	if err := settings.SetResubAction(EventAction{RewardType: TwitchRewardAI, CardID: &card}); err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.ResubEventAction(); got.RewardType != TwitchRewardAI || *got.CardID != card {
+		t.Fatalf("ResubEventAction = %+v", got)
+	}
+	if got := settings.EventAction(MsgClassSub); got.RewardType != TwitchRewardUniversalTTS {
+		t.Fatalf("the resub action leaked into the Sub lane: %+v", got)
+	}
+
+	following := &UserSettings{}
+	if err := following.SetEventAction(MsgClassSub, EventAction{RewardType: TwitchRewardAI, CardID: &card}); err != nil {
+		t.Fatal(err)
+	}
+	if got := following.ResubEventAction(); got.RewardType != TwitchRewardAI || *got.CardID != card {
+		t.Fatalf("a resub without its own action must follow Sub: %+v", got)
+	}
+
+	if err := settings.SetResubAction(EventAction{RewardType: TwitchRewardUniversalTTS}); err != nil {
+		t.Fatal(err)
+	}
+	if settings.ResubAction != nil {
+		t.Fatalf("the default resub action must not be stored: %+v", settings.ResubAction)
+	}
+}
+
 func TestEventLine(t *testing.T) {
 	settings := &UserSettings{}
 	if got := settings.EventLine(EventLineRaid); got != EventLineRaid.Default() {
@@ -168,6 +202,7 @@ func TestSpokenText(t *testing.T) {
 		{"raid", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindRaid, Viewers: 40}}, "a is raiding with 40 viewers"},
 		{"streak", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindStreak, Streak: 7}}, "a watched 7 streams in a row"},
 		{"follow", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindFollow}}, "a followed"},
+		{"donation without a message", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindDonation}}, "a donated"},
 		{"a value the event lacks renders empty", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindGiftSubs, GiftCount: 5}}, "a dropped 5 tier  subs"},
 	}
 	for _, tc := range cases {

@@ -124,8 +124,11 @@ type UserSettings struct {
 
 	PlayGroups   [][]MsgClass              `json:"play_order,omitempty"`
 	EventActions map[MsgClass]*EventAction `json:"event_actions,omitempty"`
-	LanesEnabled map[MsgClass]bool         `json:"lanes_enabled,omitempty"`
-	EventLines   map[EventLine]string      `json:"event_lines,omitempty"`
+	// ResubAction overrides the Sub action for EventKindResub only. Nil
+	// follows the Sub action.
+	ResubAction  *EventAction         `json:"resub_action,omitempty"`
+	LanesEnabled map[MsgClass]bool    `json:"lanes_enabled,omitempty"`
+	EventLines   map[EventLine]string `json:"event_lines,omitempty"`
 	// FollowsStay is the unticked "drop on higher tier events": follows are
 	// free and bot-able, so by default they yield like chat TTS does.
 	FollowsStay bool `json:"follows_stay,omitempty"`

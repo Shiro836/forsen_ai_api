@@ -193,7 +193,7 @@ func TestStreamlabsStartUsesBetaRedirect(t *testing.T) {
 	assert.Equal(t, "code", q.Get("response_type"))
 	assert.Equal(t, "cid", q.Get("client_id"))
 	assert.Equal(t, streamlabsRedirectURI, q.Get("redirect_uri"))
-	assert.Equal(t, "socket.token", q.Get("scope"))
+	assert.Equal(t, streamlabsScope, q.Get("scope"))
 	assert.NotContains(t, rec.Header().Get("Location"), "topsecret")
 
 	var state *http.Cookie
@@ -309,7 +309,7 @@ func TestFetchProviderTokenPostsForm(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write([]byte(`{"access_token":"atk","refresh_token":"rtk","scope":"socket.token"}`))
+		_, _ = w.Write([]byte(`{"access_token":"atk","refresh_token":"rtk","scope":"socket.token donations.read"}`))
 	}))
 	t.Cleanup(srv.Close)
 
@@ -334,7 +334,7 @@ func TestFetchProviderTokenPostsForm(t *testing.T) {
 	assert.Equal(t, "the-code", parsed.Get("code"))
 	assert.Equal(t, "atk", tok.AccessToken)
 	assert.Equal(t, "rtk", tok.RefreshToken)
-	assert.Equal(t, []string{"socket.token"}, tok.Scopes)
+	assert.Equal(t, []string{"socket.token", "donations.read"}, tok.Scopes)
 
 	assert.Nil(t, storedRefresh(false, tok.RefreshToken))
 	kept := storedRefresh(true, tok.RefreshToken)

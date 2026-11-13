@@ -29,7 +29,7 @@ func TestParseStreamlabsDonation(t *testing.T) {
 		t.Fatalf("events: %d", len(events))
 	}
 	event := events[0]
-	if event.ProviderID != "0820c9d5bafd768c9843f5e35c885e71" {
+	if event.ProviderID != "96164121" {
 		t.Fatalf("provider id: %s", event.ProviderID)
 	}
 	if event.From != "test" {

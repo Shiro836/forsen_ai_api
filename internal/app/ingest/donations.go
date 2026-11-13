@@ -39,6 +39,7 @@ func donationDesired(users []*db.IngestUser, tokens []db.DonationProviderToken) 
 				AccessToken:  token.AccessToken,
 				RefreshToken: token.RefreshToken,
 				ExpiresAt:    token.ExpiresAt,
+				LastEventAt:  token.LastEventAt,
 			},
 			UpdatedAt: token.UpdatedAt,
 		}

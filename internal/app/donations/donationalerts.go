@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,9 +20,10 @@ import (
 )
 
 const (
-	daCentrifugeURL = "wss://centrifugo.donationalerts.com/connection/websocket"
-	daAPIBase       = "https://www.donationalerts.com"
-	daDonationTopic = "$alerts:donation_"
+	daCentrifugeURL   = "wss://centrifugo.donationalerts.com/connection/websocket"
+	daAPIBase         = "https://www.donationalerts.com"
+	daDonationTopic   = "$alerts:donation_"
+	daBackfillMaxPage = 3
 )
 
 // DonationAlertsApp is the OAuth application used to refresh a streamer's
@@ -58,6 +60,13 @@ func (s *donationalerts) Run(ctx context.Context, creds Credentials, session Ses
 	}
 	if user.ID == 0 || user.SocketConnectionToken == "" {
 		return fmt.Errorf("%w: donation alerts user has no socket token", ErrAuth)
+	}
+
+	if since, ok := backfillSince(creds); ok {
+		s.logger.Info("backfilling donations", "since", since)
+		if err := s.backfill(ctx, auth, since, session); err != nil {
+			s.logger.Error("donation alerts backfill failed", "err", err)
+		}
 	}
 
 	config := centrifuge.DefaultConfig()
@@ -159,6 +168,70 @@ func (s *donationalerts) handlePublish(data []byte, session Session) {
 		return
 	}
 	session.Emit(event)
+}
+
+func (s *donationalerts) backfill(ctx context.Context, auth *donationAlertsAuth, since time.Time, session Session) error {
+	var events []Event
+	truncated := false
+
+	for page := 1; page <= daBackfillMaxPage; page++ {
+		body, err := auth.get(ctx, fmt.Sprintf("/api/v1/alerts/donations?page=%d", page))
+		if err != nil {
+			return err
+		}
+
+		var parsed struct {
+			Data []json.RawMessage `json:"data"`
+			Meta struct {
+				CurrentPage int `json:"current_page"`
+				LastPage    int `json:"last_page"`
+			} `json:"meta"`
+			Links struct {
+				Next *string `json:"next"`
+			} `json:"links"`
+		}
+		if err := json.Unmarshal(body, &parsed); err != nil {
+			return fmt.Errorf("donation alerts history: %w", err)
+		}
+		if len(parsed.Data) == 0 {
+			break
+		}
+
+		var oldest time.Time
+		for _, raw := range parsed.Data {
+			event, ok, reason := parseDonationAlertsEvent(raw)
+			if !ok {
+				if reason != "older than the watermark" {
+					s.logger.Info("backfilled donation not queued", "reason", reason)
+				}
+				continue
+			}
+			if !event.CreatedAt.After(since) {
+				continue
+			}
+			events = append(events, event)
+			if oldest.IsZero() || event.CreatedAt.Before(oldest) {
+				oldest = event.CreatedAt
+			}
+		}
+
+		if parsed.Meta.LastPage == 0 || parsed.Meta.CurrentPage >= parsed.Meta.LastPage || parsed.Links.Next == nil {
+			break
+		}
+		if !oldest.IsZero() && !oldest.After(since) {
+			break
+		}
+		truncated = page == daBackfillMaxPage
+	}
+
+	if truncated {
+		s.logger.Warn("donation alerts backfill truncated", "pages", daBackfillMaxPage)
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].CreatedAt.Before(events[j].CreatedAt) })
+	for _, event := range events {
+		session.Emit(event)
+	}
+	return nil
 }
 
 type daUser struct {
@@ -407,8 +480,11 @@ func parseDonationAlertsEvent(data []byte) (Event, bool, string) {
 	}
 
 	createdAt := time.Now().UTC()
-	if parsed, err := time.Parse("2006-01-02 15:04:05", donation.CreatedAt); err == nil {
-		createdAt = parsed.UTC()
+	for _, layout := range []string{"2006-01-02 15:04:05", "2006-01-02 15.04.05"} {
+		if parsed, err := time.Parse(layout, donation.CreatedAt); err == nil {
+			createdAt = parsed.UTC()
+			break
+		}
 	}
 
 	return Event{

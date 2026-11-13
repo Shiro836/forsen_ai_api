@@ -136,6 +136,14 @@ func TestContainersStreamElementsAstro(t *testing.T) {
 		t.Fatalf("class: %s, id: %s", class, claimed.ID)
 	}
 
+	tokens, err := database.ListDonationProviderTokens(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 || tokens[0].LastEventAt == nil {
+		t.Fatalf("the backfill watermark was not stored: %+v", tokens)
+	}
+
 	manager.Sync(ctx, map[Key]Spec{})
 	if len(manager.live) != 0 {
 		t.Fatalf("%d connections left after an empty sync", len(manager.live))

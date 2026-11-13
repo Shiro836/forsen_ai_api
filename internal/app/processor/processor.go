@@ -322,6 +322,9 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 	)
 	if _, ok := msg.TwitchMessage.EventLane(); ok {
 		action := userSettings.EventAction(msg.Class)
+		if msg.TwitchMessage.Event.Kind == db.EventKindResub {
+			action = userSettings.ResubEventAction()
+		}
 		cardID, rewardType = action.CardID, action.RewardType
 	} else {
 		cardID, rewardType, err = p.db.GetRewardByTwitchReward(ctx, msg.TwitchMessage.RewardID)

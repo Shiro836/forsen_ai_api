@@ -64,6 +64,26 @@ func (s *UserSettings) SetEventAction(class MsgClass, action EventAction) error 
 	return nil
 }
 
+func (s *UserSettings) SetResubAction(action EventAction) error {
+	if action.RewardType == TwitchRewardUniversalTTS {
+		s.ResubAction = nil
+		return nil
+	}
+	if !action.Complete() {
+		return fmt.Errorf("pick a character")
+	}
+	s.ResubAction = &action
+	return nil
+}
+
+// ResubEventAction is the resub's own action when set, otherwise the Sub lane's.
+func (s *UserSettings) ResubEventAction() EventAction {
+	if s.ResubAction != nil && s.ResubAction.Complete() {
+		return *s.ResubAction
+	}
+	return s.EventAction(MsgClassSub)
+}
+
 // EnabledPlayOrder leaves out the lanes that are off: their messages must not
 // outrank or interrupt anything on the way to being dropped.
 func (s *UserSettings) EnabledPlayOrder() [][]MsgClass {
@@ -81,12 +101,13 @@ func (s *UserSettings) EnabledPlayOrder() [][]MsgClass {
 type EventLine string
 
 const (
-	EventLineSub    EventLine = "sub"
-	EventLineResub  EventLine = "resub"
-	EventLineGift   EventLine = "gift"
-	EventLineRaid   EventLine = "raid"
-	EventLineStreak EventLine = "streak"
-	EventLineFollow EventLine = "follow"
+	EventLineSub      EventLine = "sub"
+	EventLineResub    EventLine = "resub"
+	EventLineGift     EventLine = "gift"
+	EventLineRaid     EventLine = "raid"
+	EventLineStreak   EventLine = "streak"
+	EventLineFollow   EventLine = "follow"
+	EventLineDonation EventLine = "donation"
 )
 
 type eventLineSpec struct {
@@ -95,12 +116,13 @@ type eventLineSpec struct {
 }
 
 var eventLineSpecs = map[EventLine]eventLineSpec{
-	EventLineSub:    {"{user} subscribed", []string{"user", "tier"}},
-	EventLineResub:  {"{user} subscribed for {months} months", []string{"user", "months", "tier"}},
-	EventLineGift:   {"{user} gifted {count} subs", []string{"user", "count", "tier"}},
-	EventLineRaid:   {"{user} is raiding with {viewers} viewers", []string{"user", "viewers"}},
-	EventLineStreak: {"{user} watched {streak} streams in a row", []string{"user", "streak"}},
-	EventLineFollow: {"{user} followed", []string{"user"}},
+	EventLineSub:      {"{user} subscribed", []string{"user", "tier"}},
+	EventLineResub:    {"{user} subscribed for {months} months", []string{"user", "months", "tier"}},
+	EventLineGift:     {"{user} gifted {count} subs", []string{"user", "count", "tier"}},
+	EventLineRaid:     {"{user} is raiding with {viewers} viewers", []string{"user", "viewers"}},
+	EventLineStreak:   {"{user} watched {streak} streams in a row", []string{"user", "streak"}},
+	EventLineFollow:   {"{user} followed", []string{"user"}},
+	EventLineDonation: {"{user} donated", []string{"user"}},
 }
 
 const EventLineMaxLen = 200
@@ -134,6 +156,7 @@ var eventKindLines = map[EventKind]EventLine{
 	EventKindRaid:     EventLineRaid,
 	EventKindStreak:   EventLineStreak,
 	EventKindFollow:   EventLineFollow,
+	EventKindDonation: EventLineDonation,
 }
 
 // SpokenText is the viewer's own message when they typed one, otherwise the

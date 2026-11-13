@@ -31,7 +31,7 @@ const (
 
 	streamlabsAuthorizeURL = "https://streamlabs.com/api/v2.0/authorize"
 	streamlabsTokenURL     = "https://streamlabs.com/api/v2.0/token"
-	streamlabsScope        = "socket.token"
+	streamlabsScope        = "socket.token donations.read"
 
 	donationAlertsAuthorizeURL = "https://www.donationalerts.com/oauth/authorize"
 	donationAlertsTokenURL     = "https://www.donationalerts.com/oauth/token"
