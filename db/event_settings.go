@@ -119,7 +119,7 @@ type eventLineSpec struct {
 var eventLineSpecs = map[EventLine]eventLineSpec{
 	EventLineSub:      {"{user} subscribed", []string{"user", "tier"}},
 	EventLineResub:    {"{user} subscribed for {months} months", []string{"user", "months", "tier"}},
-	EventLineGift:     {"{user} gifted {count} subs", []string{"user", "count", "tier"}},
+	EventLineGift:     {"{user} gifted {count} tier {tier} subs", []string{"user", "count", "tier"}},
 	EventLineRaid:     {"{user} is raiding with {viewers} viewers", []string{"user", "viewers"}},
 	EventLineStreak:   {"{user} watched {streak} streams in a row", []string{"user", "streak"}},
 	EventLineFollow:   {"{user} followed", []string{"user"}},

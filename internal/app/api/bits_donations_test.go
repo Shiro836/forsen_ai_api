@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 
 	"app/db"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestBDPresetsAreSaveable(t *testing.T) {
-	require.Equal(t, []string{"default", "cute", "gachi", "forsen"}, bdPresetNames())
+	require.Equal(t, []string{"default", "cute", "gachi"}, bdPresetNames())
 
 	for _, preset := range bdPresets {
 		for _, fields := range eventCardLines {
@@ -24,6 +25,29 @@ func TestBDPresetsAreSaveable(t *testing.T) {
 				assert.NoErrorf(t, (&db.UserSettings{}).SetEventLine(field.Line, text), "%s preset, %s line", preset.Name, field.Line)
 			}
 		}
+	}
+}
+
+func TestBDPresetsSpeakInTheirVoice(t *testing.T) {
+	defaults := bdPresetByName("default")
+	require.NotNil(t, defaults)
+	for line, text := range defaults.Lines {
+		assert.Equalf(t, line.Default(), text, "default preset %s line", line)
+	}
+
+	for _, tc := range []struct{ name, voice string }{
+		{name: "cute", voice: "gura: "},
+		{name: "gachi", voice: "billy: "},
+	} {
+		preset := bdPresetByName(tc.name)
+		require.NotNil(t, preset)
+		for line, text := range preset.Lines {
+			assert.Truef(t, strings.HasPrefix(text, tc.voice), "%s preset %s line %q", tc.name, line, text)
+		}
+	}
+
+	for _, preset := range bdPresets {
+		assert.Containsf(t, preset.Lines[db.EventLineGift], "{tier}", "%s preset gift line", preset.Name)
 	}
 }
 
