@@ -14,6 +14,7 @@ backup_*.sql
 playground
 
 *.env
+scripts/fire_donation.py
 
 pkg/ai/refs/*
 pkg/ai/res/*
@@ -32,3 +33,5 @@ cfg/cfg.yaml~
 cfg/*.bak
 cfg/*.bak-*
 cfg/*.orig
+
+__pycache__/
