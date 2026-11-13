@@ -8,7 +8,7 @@ import (
 func TestParseDonationAlertsEvent(t *testing.T) {
 	event, ok, reason := parseDonationAlertsEvent([]byte(`{
 		"id": 30530030,
-		"name": "donation",
+		"name": "Donations",
 		"username": "Ivan",
 		"message_type": "text",
 		"message": "Hello!",

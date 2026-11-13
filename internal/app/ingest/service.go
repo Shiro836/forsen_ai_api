@@ -431,10 +431,6 @@ func (s *Service) push(ctx context.Context, channel string, userCfg *ingestUserC
 
 	if in.msg.Event != nil && in.msg.Event.Kind == db.EventKindCheer {
 		in.msg.Message = s.cheermotes.strip(ctx, userCfg.twitchUserID, in.msg.Message)
-		if in.msg.Message == "" {
-			logger.Info("event not queued", "reason", "nothing to say but the cheermotes")
-			return
-		}
 	}
 
 	showImages := false

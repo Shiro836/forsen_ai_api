@@ -108,6 +108,7 @@ const (
 	EventLineStreak   EventLine = "streak"
 	EventLineFollow   EventLine = "follow"
 	EventLineDonation EventLine = "donation"
+	EventLineBits     EventLine = "bits"
 )
 
 type eventLineSpec struct {
@@ -122,7 +123,8 @@ var eventLineSpecs = map[EventLine]eventLineSpec{
 	EventLineRaid:     {"{user} is raiding with {viewers} viewers", []string{"user", "viewers"}},
 	EventLineStreak:   {"{user} watched {streak} streams in a row", []string{"user", "streak"}},
 	EventLineFollow:   {"{user} followed", []string{"user"}},
-	EventLineDonation: {"{user} donated", []string{"user"}},
+	EventLineDonation: {"{user} donated {amount}", []string{"user", "amount"}},
+	EventLineBits:     {"{user} cheered {bits} bits", []string{"user", "bits"}},
 }
 
 const EventLineMaxLen = 200
@@ -157,6 +159,7 @@ var eventKindLines = map[EventKind]EventLine{
 	EventKindStreak:   EventLineStreak,
 	EventKindFollow:   EventLineFollow,
 	EventKindDonation: EventLineDonation,
+	EventKindCheer:    EventLineBits,
 }
 
 // SpokenText is the viewer's own message when they typed one, otherwise the
@@ -184,6 +187,8 @@ func (s *UserSettings) SpokenText(msg *TwitchMessage) string {
 		"count":   number(msg.Event.GiftCount),
 		"viewers": number(msg.Event.Viewers),
 		"streak":  number(msg.Event.Streak),
+		"amount":  msg.Event.AmountText,
+		"bits":    number(msg.Event.Bits),
 	}
 
 	return eventLinePlaceholder.ReplaceAllStringFunc(s.EventLine(line), func(placeholder string) string {

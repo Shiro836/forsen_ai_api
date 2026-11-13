@@ -22,6 +22,24 @@ func TestMinorUnits(t *testing.T) {
 	}
 }
 
+func TestFormatAmount(t *testing.T) {
+	cases := []struct {
+		amountMinor int64
+		currency    string
+		want        string
+	}{
+		{420, "USD", "4.20 USD"},
+		{500, "JPY", "500 JPY"},
+		{1234, "KWD", "1.234 KWD"},
+		{0, "USD", ""},
+	}
+	for _, tc := range cases {
+		if got := FormatAmount(tc.amountMinor, tc.currency); got != tc.want {
+			t.Errorf("FormatAmount(%d, %q) = %q, want %q", tc.amountMinor, tc.currency, got, tc.want)
+		}
+	}
+}
+
 func TestUSDMinor(t *testing.T) {
 	if got, ok := USDMinor(420, "USD", 1); !ok || got != 420 {
 		t.Fatalf("USD = %d, %v", got, ok)

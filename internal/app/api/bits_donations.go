@@ -38,9 +38,10 @@ type bdLineField struct {
 
 var eventCardLines = map[db.MsgClass][]bdLineField{
 	db.MsgClassDonation: {{db.EventLineDonation, "no message"}},
+	db.MsgClassBits:     {{db.EventLineBits, "no message"}},
 	db.MsgClassSub:      {{db.EventLineSub, "new sub"}, {db.EventLineResub, "resub"}, {db.EventLineGift, "gift subs"}},
 	db.MsgClassRaid:     {{db.EventLineRaid, ""}},
-	db.MsgClassStreak:   {{db.EventLineStreak, ""}},
+	db.MsgClassStreak:   {{db.EventLineStreak, "no message"}},
 	db.MsgClassFollow:   {{db.EventLineFollow, ""}},
 }
 

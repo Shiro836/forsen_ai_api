@@ -86,6 +86,7 @@ type EventMeta struct {
 	Provider    string  `json:"provider,omitempty"`
 	ProviderID  string  `json:"provider_id,omitempty"`
 	AmountMinor int64   `json:"amount_minor,omitempty"`
+	AmountText  string  `json:"amount_text,omitempty"`
 	Currency    string  `json:"currency,omitempty"`
 	Rate        float64 `json:"rate,omitempty"`
 }

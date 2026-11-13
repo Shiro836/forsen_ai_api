@@ -294,6 +294,7 @@ func (m *Manager) enqueue(ctx context.Context, key Key, event Event) bool {
 			Provider:    event.Provider,
 			ProviderID:  event.ProviderID,
 			AmountMinor: event.AmountMinor,
+			AmountText:  FormatAmount(event.AmountMinor, event.Currency),
 			Currency:    event.Currency,
 			Rate:        rate,
 			USD:         float64(usdMinor) / 100,

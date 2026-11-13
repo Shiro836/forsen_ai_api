@@ -1,6 +1,7 @@
 package donations
 
 import (
+	"fmt"
 	"math"
 	"strings"
 )
@@ -33,6 +34,21 @@ func MinorUnits(amount float64, currency string) int64 {
 	}
 	scale := math.Pow10(currencyExponentFor(normalizeCurrency(currency)))
 	return int64(math.Round(amount * scale))
+}
+
+// FormatAmount renders a minor-unit amount for the spoken line, keeping the
+// currency's own precision.
+func FormatAmount(amountMinor int64, currency string) string {
+	if amountMinor <= 0 {
+		return ""
+	}
+	currency = normalizeCurrency(currency)
+	if currency == "" {
+		return ""
+	}
+	exp := currencyExponentFor(currency)
+	major := float64(amountMinor) / math.Pow10(exp)
+	return fmt.Sprintf("%.*f %s", exp, major, currency)
 }
 
 // USDMinor converts a minor-unit amount at units-per-USD. ok is false when the

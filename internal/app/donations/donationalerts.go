@@ -458,7 +458,7 @@ func parseDonationAlertsEvent(data []byte) (Event, bool, string) {
 	if err := json.Unmarshal(data, &donation); err != nil {
 		return Event{}, false, "unreadable payload"
 	}
-	if donation.Name != "" && donation.Name != "donation" {
+	if name := strings.ToLower(strings.TrimSpace(donation.Name)); name != "" && name != "donation" && name != "donations" {
 		return Event{}, false, "not a donation"
 	}
 	if donation.ID <= 0 {
