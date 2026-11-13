@@ -61,6 +61,11 @@ func (s *streamElements) Run(ctx context.Context, creds Credentials, session Ses
 		return fmt.Errorf("%w: %v", ErrAuth, err)
 	}
 
+	currency, err := s.tippingCurrency(ctx, channel, creds.AccessToken)
+	if err != nil {
+		s.logger.Warn("streamelements channel currency lookup failed", "err", err)
+	}
+
 	if since, ok := backfillSince(creds); ok {
 		s.logger.Info("backfilling tips", "since", since)
 		if err := s.backfillTips(ctx, channel, creds.AccessToken, since, session); err != nil {
@@ -70,7 +75,46 @@ func (s *streamElements) Run(ctx context.Context, creds Credentials, session Ses
 		}
 	}
 
-	return s.serve(ctx, channel, creds.AccessToken, session)
+	return s.serve(ctx, channel, creds.AccessToken, currency, session)
+}
+
+// tippingCurrency is the channel's configured tip currency. Socket activities
+// can omit currency, and that must not turn a real or mock tip into a drop.
+func (s *streamElements) tippingCurrency(ctx context.Context, channel, token string) (string, error) {
+	endpoint := fmt.Sprintf("%s/kappa/v2/tipping/%s", s.apiBase, url.PathEscape(channel))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("tipping settings: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+		return "", fmt.Errorf("tipping settings: status %d", resp.StatusCode)
+	}
+
+	var body struct {
+		Currency struct {
+			Code string `json:"code"`
+		} `json:"currency"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
+		return "", fmt.Errorf("tipping settings: %w", err)
+	}
+
+	currency := normalizeCurrency(body.Currency.Code)
+	if len(currency) != 3 {
+		return "", fmt.Errorf("tipping settings: no currency")
+	}
+	return currency, nil
 }
 
 type astroMessage struct {
@@ -83,7 +127,7 @@ type astroMessage struct {
 	Data  json.RawMessage `json:"data"`
 }
 
-func (s *streamElements) serve(ctx context.Context, channel, token string, session Session) error {
+func (s *streamElements) serve(ctx context.Context, channel, token, fallbackCurrency string, session Session) error {
 	conn, err := s.dial(ctx, astroEndpoint)
 	if err != nil {
 		return err
@@ -165,10 +209,13 @@ func (s *streamElements) serve(ctx context.Context, channel, token string, sessi
 			}
 			s.logger.Info("donation event", "provider", db.ProviderStreamElements, "raw", string(msg.Data))
 
-			event, ok, reason := parseStreamElementsActivity(msg.Data)
+			event, ok, reason, usedFallback := parseStreamElementsActivity(msg.Data, fallbackCurrency)
 			if !ok {
 				s.logger.Info("donation event not queued", "provider", db.ProviderStreamElements, "reason", reason)
 				continue
+			}
+			if usedFallback {
+				s.logger.Warn("streamelements activity had no currency, using the channel's", "currency", event.Currency)
 			}
 			markConnected()
 			session.Emit(event)
@@ -251,13 +298,13 @@ type streamElementsActivity struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
-func parseStreamElementsActivity(raw json.RawMessage) (Event, bool, string) {
+func parseStreamElementsActivity(raw json.RawMessage, fallbackCurrency string) (Event, bool, string, bool) {
 	var activity streamElementsActivity
 	if err := json.Unmarshal(raw, &activity); err != nil {
-		return Event{}, false, "unreadable payload"
+		return Event{}, false, "unreadable payload", false
 	}
 	if activity.Type != "tip" {
-		return Event{}, false, "not a tip"
+		return Event{}, false, "not a tip", false
 	}
 
 	id := activity.ActivityID
@@ -265,16 +312,21 @@ func parseStreamElementsActivity(raw json.RawMessage) (Event, bool, string) {
 		id = activity.ID
 	}
 	if id == "" {
-		return Event{}, false, "no activity id"
+		return Event{}, false, "no activity id", false
 	}
 
 	currency := normalizeCurrency(activity.Data.Currency)
+	usedFallback := false
 	if len(currency) != 3 {
-		return Event{}, false, "no currency"
+		currency = normalizeCurrency(fallbackCurrency)
+		usedFallback = len(currency) == 3
+	}
+	if len(currency) != 3 {
+		return Event{}, false, "no currency", false
 	}
 	amount := MinorUnits(activity.Data.Amount, currency)
 	if amount <= 0 {
-		return Event{}, false, "no amount"
+		return Event{}, false, "no amount", false
 	}
 
 	from := strings.TrimSpace(activity.Data.DisplayName)
@@ -302,7 +354,7 @@ func parseStreamElementsActivity(raw json.RawMessage) (Event, bool, string) {
 		Currency:    currency,
 		CreatedAt:   createdAt,
 		Mock:        activity.IsMock,
-	}, true, ""
+	}, true, "", usedFallback
 }
 
 func parseProviderTime(value string) time.Time {
