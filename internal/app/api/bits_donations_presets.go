@@ -26,7 +26,7 @@ var bdPresets = []bdPreset{
 		db.EventLineRaid:     "Ara ara, {user} san is raiding with {viewers} nakama",
 		db.EventLineStreak:   "{user} kun came back {streak} streams in a row! Ganbatte",
 		db.EventLineFollow:   "{user} chan followed! Yoroshiku",
-		db.EventLineDonation: "{user} chan donated {amount}! Arigato, nya",
+		db.EventLineDonation: "{user} chan donated {amount} {currency}! Arigato, nya",
 		db.EventLineBits:     "{user} chan cheered {bits} bits! Arigato, nya",
 	}},
 	{Name: "gachi", Lines: map[db.EventLine]string{
@@ -36,7 +36,7 @@ var bdPresets = []bdPreset{
 		db.EventLineRaid:     "{user} and {viewers} leathermen are entering the dungeon",
 		db.EventLineStreak:   "{user} came to the gym {streak} streams in a row. Deep dark fantasies",
 		db.EventLineFollow:   "{user} wants to join the leather club",
-		db.EventLineDonation: "{user} put {amount} in the jar. Good boy",
+		db.EventLineDonation: "{user} put {amount} {currency} in the jar. Good boy",
 		db.EventLineBits:     "{user} cheered {bits} bits. Good boy",
 	}},
 	{Name: "forsen", Lines: map[db.EventLine]string{
@@ -46,7 +46,7 @@ var bdPresets = []bdPreset{
 		db.EventLineRaid:     "{viewers} stream snipers from {user} are here",
 		db.EventLineStreak:   "{user} has not missed {streak} streams. Go outside, baj",
 		db.EventLineFollow:   "{user} followed. New baj spotted",
-		db.EventLineDonation: "{user} donated {amount}. Snus for the bajs",
+		db.EventLineDonation: "{user} donated {amount} {currency}. Snus for the bajs",
 		db.EventLineBits:     "{user} cheered {bits} bits. Snus for the bajs",
 	}},
 }

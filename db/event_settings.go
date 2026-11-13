@@ -123,7 +123,7 @@ var eventLineSpecs = map[EventLine]eventLineSpec{
 	EventLineRaid:     {"{user} is raiding with {viewers} viewers", []string{"user", "viewers"}},
 	EventLineStreak:   {"{user} watched {streak} streams in a row", []string{"user", "streak"}},
 	EventLineFollow:   {"{user} followed", []string{"user"}},
-	EventLineDonation: {"{user} donated {amount}", []string{"user", "amount", "currency"}},
+	EventLineDonation: {"{user} donated {amount} {currency}", []string{"user", "amount", "currency"}},
 	EventLineBits:     {"{user} cheered {bits} bits", []string{"user", "bits"}},
 }
 
