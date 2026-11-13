@@ -203,6 +203,62 @@ func TestDonationProviderHandlersValidateProvider(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestValidateStreamElementsToken(t *testing.T) {
+	ok := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		assert.Equal(t, "Bearer fake", r.Header.Get("Authorization"))
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Body:       io.NopCloser(strings.NewReader(`{}`)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+	assert.NoError(t, validateStreamElementsToken(context.Background(), ok, "fake"))
+
+	bad := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusUnauthorized,
+			Status:     "401 Unauthorized",
+			Body:       io.NopCloser(strings.NewReader(`{"message":"Not allowed to perform this operation"}`)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+	err := validateStreamElementsToken(context.Background(), bad, "fake")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Not allowed to perform this operation")
+	assert.Contains(t, err.Error(), "401")
+}
+
+func TestStreamElementsRejectsTokenBeforeSave(t *testing.T) {
+	const fake = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjaGFubmVsIjoiMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwIiwicHJvdmlkZXJfaWQiOiIwIiwiZXhwIjoxODkzNDU2MDAwfQ.ZmFrZXNpZw"
+
+	api := &API{providerHTTP: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusUnauthorized,
+			Status:     "401 Unauthorized",
+			Body:       io.NopCloser(strings.NewReader(`{"message":"Not allowed to perform this operation"}`)),
+			Header:     make(http.Header),
+		}, nil
+	})}}
+
+	form := url.Values{"token": {fake}}
+	req := httptest.NewRequest(http.MethodPost, "/streamelements", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = req.WithContext(ctxstore.WithUser(req.Context(), &db.User{ID: uuid.New()}))
+
+	rec := httptest.NewRecorder()
+	api.streamElementsConnect(rec, req)
+
+	body := rec.Body.String()
+	assert.Contains(t, body, "Not allowed to perform this operation")
+	assert.Contains(t, body, "401")
+	assert.NotContains(t, body, ">connected<")
+}
+
 func TestProviderEndpoints(t *testing.T) {
 	assert.Equal(t, "https://streamlabs.com/api/v2.0/authorize", streamlabsAuthorizeURL)
 	assert.Equal(t, "https://streamlabs.com/api/v2.0/token", streamlabsTokenURL)

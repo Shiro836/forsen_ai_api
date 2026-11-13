@@ -33,6 +33,8 @@ const (
 	streamlabsTokenURL     = "https://streamlabs.com/api/v2.0/token"
 	streamlabsScope        = "socket.token donations.read"
 
+	streamElementsValidateURL = "https://api.streamelements.com/kappa/v2/channels/me"
+
 	donationAlertsAuthorizeURL = "https://www.donationalerts.com/oauth/authorize"
 	donationAlertsTokenURL     = "https://www.donationalerts.com/oauth/token"
 
@@ -178,6 +180,15 @@ func (api *API) streamElementsConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateStreamElementsToken(r.Context(), api.providerHTTP, token); err != nil {
+		if api.logger != nil {
+			api.logger.Warn("streamelements token rejected", "err", err, "user", user.ID)
+		}
+		block.Error = err.Error()
+		_ = html.ExecuteTemplate(w, "bd-provider", block)
+		return
+	}
+
 	var expires *time.Time
 	if !expiresAt.IsZero() {
 		expires = &expiresAt
@@ -194,6 +205,39 @@ func (api *API) streamElementsConnect(w http.ResponseWriter, r *http.Request) {
 	block.Token = false
 	block.Live = true
 	_ = html.ExecuteTemplate(w, "bd-provider", block)
+}
+
+// validateStreamElementsToken asks the provider now, so a wrong paste is
+// rejected in the form instead of being stored and failing on the socket.
+func validateStreamElementsToken(ctx context.Context, client *http.Client, token string) error {
+	if client == nil {
+		return fmt.Errorf("StreamElements: no HTTP client")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, streamElementsValidateURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("StreamElements: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	var parsed struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &parsed) == nil && parsed.Message != "" {
+		return fmt.Errorf("StreamElements: %s (status %d)", parsed.Message, resp.StatusCode)
+	}
+	return fmt.Errorf("StreamElements: status %d", resp.StatusCode)
 }
 
 func (api *API) donationProviderBlock(w http.ResponseWriter, r *http.Request) {
