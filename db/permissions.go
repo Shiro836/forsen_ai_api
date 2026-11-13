@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -104,28 +105,31 @@ func (db *DB) GetUsersPermissions(ctx context.Context, permission Permission, pe
 }
 
 type IngestUser struct {
-	ID                uuid.UUID
-	TwitchLogin       string
-	TwitchUserID      int
-	IngestAllMessages bool
-	HasRewardButton   bool
+	ID              uuid.UUID
+	TwitchLogin     string
+	TwitchUserID    int
+	Settings        UserSettings
+	HasRewardButton bool
+	TokenScopes     []string
 }
 
 func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
-	rows, err := db.Query(ctx, `
-		SELECT
-			u.id,
-			u.twitch_login,
-			u.twitch_user_id,
-			coalesce((u.data->>'ingest_all_messages')::boolean, false),
-			exists(SELECT 1 FROM reward_buttons AS rb WHERE rb.user_id = u.id)
-		FROM permissions AS p
-		JOIN users AS u ON p.twitch_user_id = u.twitch_user_id
-		WHERE
-			p.status = $1
-		AND
-			p.permission = $2
-	`, PermissionStatusGranted, PermissionStreamer)
+	hasRewardButton := sq.Select("1").From("reward_buttons rb").Where("rb.user_id = u.id")
+	tokenScopes := sq.Select("t.scopes").From("twitch_tokens t").Where("t.user_id = u.id")
+
+	query, args, err := psql.
+		Select("u.id", "u.twitch_login", "u.twitch_user_id", "u.data").
+		Column(sq.Expr("exists(?)", hasRewardButton)).
+		Column(sq.Expr("coalesce((?), '{}')", tokenScopes)).
+		From("permissions p").
+		Join("users u on p.twitch_user_id = u.twitch_user_id").
+		Where(sq.Eq{"p.status": PermissionStatusGranted, "p.permission": PermissionStreamer}).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build ingest users query: %w", err)
+	}
+
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ingest users: %w", err)
 	}
@@ -134,7 +138,7 @@ func (db *DB) GetIngestUsers(ctx context.Context) ([]*IngestUser, error) {
 	var users []*IngestUser
 	for rows.Next() {
 		var u IngestUser
-		if err := rows.Scan(&u.ID, &u.TwitchLogin, &u.TwitchUserID, &u.IngestAllMessages, &u.HasRewardButton); err != nil {
+		if err := rows.Scan(&u.ID, &u.TwitchLogin, &u.TwitchUserID, &u.Settings, &u.HasRewardButton, &u.TokenScopes); err != nil {
 			return nil, fmt.Errorf("failed to scan ingest user: %w", err)
 		}
 		users = append(users, &u)

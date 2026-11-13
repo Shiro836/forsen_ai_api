@@ -1017,13 +1017,12 @@ func (api *API) emotesSettings(w http.ResponseWriter, r *http.Request) {
 
 	if err := api.emotes.PutSettings(r.Context(), settings); err != nil {
 		api.logger.Error("failed to update emote settings", "err", err, "streamer", scope.Target.TwitchLogin)
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte("failed to update settings"))
+		writeSaveError(w, r, "emote_settings_save_result", "", http.StatusBadGateway, "failed to update settings")
 
 		return
 	}
 
-	_, _ = w.Write([]byte("saved"))
+	writeSaved(w, r, "emote_settings_save_result", "")
 }
 
 func (api *API) emotesSettingsReset(w http.ResponseWriter, r *http.Request) {
@@ -1070,8 +1069,7 @@ func (api *API) emotesPlatformSettings(w http.ResponseWriter, r *http.Request) {
 
 	if err := api.emotes.PutPlatformSettings(r.Context(), blocked); err != nil {
 		api.logger.Error("failed to update platform emote settings", "err", err, "actor", scope.Caller.TwitchLogin)
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte("failed to update platform defaults"))
+		writeSaveError(w, r, "emote_platform_save_result", "", http.StatusBadGateway, "failed to update platform defaults")
 
 		return
 	}
@@ -1079,7 +1077,7 @@ func (api *API) emotesPlatformSettings(w http.ResponseWriter, r *http.Request) {
 	api.logger.Info("platform emote defaults updated",
 		"blocked", blocked, "actor", scope.Caller.TwitchLogin, "actor_id", scope.Caller.ID)
 
-	_, _ = w.Write([]byte("saved"))
+	writeSaved(w, r, "emote_platform_save_result", "")
 }
 
 func (api *API) emotesReclassify(w http.ResponseWriter, r *http.Request) {

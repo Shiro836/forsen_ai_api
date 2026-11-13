@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	ErrNoRows        = &dbErr{Code: ErrCodeNoRows}
-	ErrAlreadyExists = &dbErr{Code: ErrCodeAlreadyExists}
+	ErrNoRows        = &dbErr{Code: ErrCodeNoRows, Err: errors.New("no rows in result set")}
+	ErrAlreadyExists = &dbErr{Code: ErrCodeAlreadyExists, Err: errors.New("already exists")}
 )
 
 type dbErr struct {
@@ -18,6 +18,9 @@ type dbErr struct {
 }
 
 func (e *dbErr) Error() string {
+	if e.Err == nil {
+		return fmt.Sprintf("%d", e.Code)
+	}
 	return fmt.Sprintf("%d: %s", e.Code, e.Err.Error())
 }
 

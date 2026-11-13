@@ -52,10 +52,11 @@ type API struct {
 
 	cfg *Config
 
-	ttsHandler       processor.InteractionHandler
-	aiHandler        processor.InteractionHandler
-	universalHandler processor.InteractionHandler
-	agenticHandler   processor.InteractionHandler
+	ttsHandler         processor.InteractionHandler
+	aiHandler          processor.InteractionHandler
+	universalHandler   processor.InteractionHandler
+	universalAIHandler processor.InteractionHandler
+	agenticHandler     processor.InteractionHandler
 
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 
@@ -65,6 +66,10 @@ type API struct {
 	ffmpeg       *ffmpeg.Client
 	variants     *VariantCache
 	voiceSamples *VoiceSampleCache
+
+	streamlabs     ProviderApp
+	donationAlerts ProviderApp
+	providerHTTP   *http.Client
 
 	bitsDetector *bitsDetector
 
@@ -81,8 +86,8 @@ type API struct {
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservice.Config, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client, ffmpegClient *ffmpeg.Client,
-	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
-	voiceSampler VoiceSampler, singer *ai.SingerClient, historyReader *history.Reader) *API {
+	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, universalAIHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
+	voiceSampler VoiceSampler, singer *ai.SingerClient, historyReader *history.Reader, streamlabs, donationAlerts ProviderApp) *API {
 	api := &API{
 		cfg: cfg,
 
@@ -96,13 +101,23 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservi
 
 		s3: s3,
 
-		ttsHandler:       ttsHandler,
-		aiHandler:        aiHandler,
-		universalHandler: universalHandler,
-		agenticHandler:   agenticHandler,
+		ttsHandler:         ttsHandler,
+		aiHandler:          aiHandler,
+		universalHandler:   universalHandler,
+		universalAIHandler: universalAIHandler,
+		agenticHandler:     agenticHandler,
 
 		voiceSamples: NewVoiceSampleCache(voiceSampler, db),
 		singer:       singer,
+
+		streamlabs:     streamlabs,
+		donationAlerts: donationAlerts,
+		providerHTTP: &http.Client{
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 
 		bitsDetector: newBitsDetector(logger),
 
@@ -165,6 +180,9 @@ func (api *API) NewRouter() *chi.Mux {
 		router.Get("/twitch_redirect_handler", http.HandlerFunc(api.twitchRedirectHandler))
 
 		router.Post("/request_permissions/{permission}", http.HandlerFunc(api.requestPermissions))
+
+		router.Post("/form/changes", http.HandlerFunc(api.formChanges))
+		router.Post("/form/file-hash", http.HandlerFunc(api.formFileHash))
 
 		// Images embed page (upload + serve routes are public, registered below)
 		router.Get("/images", api.navPublic(api.imagesPage))
@@ -251,6 +269,9 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/universal-tts/try", api.nav(api.tryUniversalTTS))
 			router.Get("/ws/universal-tts/try", api.tryUniversalTTSWS)
 
+			router.Get("/universal-ai/try", api.nav(api.tryUniversalAI))
+			router.Get("/ws/universal-ai/try", api.tryUniversalAIWS)
+
 			router.Get("/agentic/try", api.nav(api.tryAgentic))
 			router.Get("/ws/agentic/try", api.tryAgenticWS)
 
@@ -263,6 +284,10 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/universal-tts/reward", api.nav(api.universalTTSRewardChoose))
 			router.Post("/universal-tts/reward_existing", http.HandlerFunc(api.universalTTSRewardExisting))
 
+			router.Post("/universal-ai/reward", http.HandlerFunc(api.universalAIReward))
+			router.Get("/universal-ai/reward", api.nav(api.universalAIRewardChoose))
+			router.Post("/universal-ai/reward_existing", http.HandlerFunc(api.universalAIRewardExisting))
+
 			router.Post("/agentic/reward", http.HandlerFunc(api.agenticReward))
 			router.Get("/agentic/reward", api.nav(api.agenticRewardChoose))
 			router.Post("/agentic/reward_existing", http.HandlerFunc(api.agenticRewardExisting))
@@ -273,6 +298,21 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/filters", api.nav(api.filters))
 			router.Post("/filters", api.updateFilters)
 			router.Post("/token/regenerate", http.HandlerFunc(api.regenerateToken))
+
+			router.Get("/bits-donations", api.nav(api.bitsDonations))
+			router.Post("/bits-donations", http.HandlerFunc(api.bitsDonationsSave))
+			router.Post("/bits-donations/edit", http.HandlerFunc(api.bitsDonationsEdit))
+			router.Get("/bits-donations/{event}/characters", http.HandlerFunc(api.bitsDonationsPicker))
+
+			router.Get("/donation-providers/{provider}", http.HandlerFunc(api.donationProviderBlock))
+			router.Get("/donation-providers/{provider}/status", http.HandlerFunc(api.donationProviderStatus))
+			router.Post("/donation-providers/{provider}/disconnect", http.HandlerFunc(api.donationProviderDisconnect))
+
+			router.Post("/streamelements", http.HandlerFunc(api.streamElementsConnect))
+			router.Get("/streamlabs/connect", http.HandlerFunc(api.streamlabsConnect))
+			router.Get("/streamlabs/callback", http.HandlerFunc(api.streamlabsCallback))
+			router.Get("/donationalerts/connect", http.HandlerFunc(api.donationAlertsConnect))
+			router.Get("/donationalerts/callback", http.HandlerFunc(api.donationAlertsCallback))
 		})
 
 		router.Group(func(router chi.Router) {

@@ -3,6 +3,27 @@
 {{ define "ui-border-clr" }}border-slate-900/10 dark:border-slate-50/[0.06]{{ end }}
 {{ define "input-class" }}focus:ring-2 focus:outline-none bg-gray-50 border border-gray-300 text-gray-900 dark:text-white rounded focus:ring-slate-700 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:focus:ring-twitch-light{{ end }}
 {{ define "tab-content" }}<div id="tab-content" class="flex flex-grow pl-10 pt-6">{{ . }}</div>{{ end }}
+{{ define "save-bar-pinned" }}sticky bottom-0 z-20 flex items-center gap-4 border-t {{template "ui-border-clr"}} bg-white py-3 dark:bg-slate-900{{ end }}
+{{ define "save-bar-inline" }}flex items-center gap-4 pt-2{{ end }}
+{{ define "save-button" }}<button type="submit" class="{{template "button-2"}} px-6 py-2 font-bold">{{ . }}</button>{{ end }}
+{{/* htmx wires listeners onto swapped-in content only after the settle delay; with the default 20ms the status would miss whatever happens right after it is replaced */}}
+{{ define "save-status-swap" }}outerHTML settle:0ms{{ end }}
+{{ define "save-status" }}
+<span id="{{ .ID }}" class="text-sm"
+    hx-post="/form/changes" hx-target="this" hx-swap="{{template "save-status-swap"}}" hx-sync="this:replace"
+    {{ if .Skip }}hx-params="not {{ .Skip }}"{{ end }}
+    hx-trigger="{{ if .Check }}load, {{ end }}input from:closest form delay:300ms, change from:closest form">
+    <input type="hidden" name="_baseline" value="{{ .Baseline }}">
+    <input type="hidden" name="_skip" value="{{ .Skip }}">
+    {{ if .Saved }}<input type="hidden" name="_saved" value="1">{{ end }}
+    {{ if .Error }}<span class="text-amber-600 dark:text-amber-400">{{ .Error }}</span>
+    {{ else if .Dirty }}<span class="text-amber-600 dark:text-amber-400">unsaved changes</span>
+    {{ else if .Saved }}<span class="text-emerald-600 dark:text-emerald-400">saved</span>{{ end }}
+</span>
+{{ end }}
+{{ define "file-hash" }}<input type="hidden" id="{{ .Field }}__hash" name="{{ .Field }}__hash" value="{{ .Hash }}"
+    {{ if .Check }}hx-post="/form/changes" hx-trigger="load" hx-target="#{{ .StatusID }}" hx-swap="{{template "save-status-swap"}}" hx-sync="#{{ .StatusID }}:replace" hx-params="not {{ .Skip }}"{{ end }}>{{ end }}
+{{ define "file-hash-attrs" }}hx-post="/form/file-hash" hx-trigger="change" hx-params="{{ .Field }},_file_field,_file_original,_file_status,_file_skip" hx-vals='{"_file_field": "{{ .Field }}", "_file_original": "{{ .Hash }}", "_file_status": "{{ .StatusID }}", "_file_skip": "{{ .Skip }}"}' hx-target="#{{ .Field }}__hash" hx-swap="outerHTML"{{ end }}
 {{ define "beta-pill" }}<span class="ml-2 rounded border {{template "ui-border-clr"}} px-1.5 py-0.5 text-xs font-normal uppercase tracking-wide opacity-70">beta</span>{{ end }}
 {{ define "help-tip" }}
 <div class="has-tooltip relative flex items-center pl-2">

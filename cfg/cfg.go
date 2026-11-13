@@ -3,6 +3,7 @@ package cfg
 import (
 	"app/db"
 	"app/internal/app/api"
+	"app/internal/app/ingest"
 	"app/internal/emoteservice"
 	"app/pkg/ai"
 	"app/pkg/clickhouse"
@@ -54,6 +55,9 @@ type Config struct {
 
 	Twitch twitch.Config `yaml:"twitch"`
 
+	Streamlabs     StreamlabsConfig     `yaml:"streamlabs"`
+	DonationAlerts DonationAlertsConfig `yaml:"donationalerts"`
+
 	DB db.Config `yaml:"db"`
 
 	InfluxDB InfluxConfig `yaml:"influx"`
@@ -68,9 +72,21 @@ type Config struct {
 	ClickHouse clickhouse.Config `yaml:"clickhouse"`
 }
 
+type StreamlabsConfig struct {
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+}
+
+type DonationAlertsConfig struct {
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+}
+
 type IngestConfig struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
+
+	EventSub ingest.EventSubConfig `yaml:"eventsub"`
 }
 
 type InfluxConfig struct {

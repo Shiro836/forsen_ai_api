@@ -180,6 +180,8 @@ type characterPage struct {
 	CharacterID     uuid.UUID
 	Card            *db.Card
 	MessageExamples *msgExamples
+	VoiceRefHash    fileHash
+	ImageHash       fileHash
 }
 
 func (api *API) character(r *http.Request) template.HTML {
@@ -232,11 +234,19 @@ func (api *API) character(r *http.Request) template.HTML {
 		}
 	}
 
-	return getHtml("character.html", &characterPage{
+	page := &characterPage{
 		CharacterID:     characterID,
 		Card:            card,
 		MessageExamples: msgExamples,
-	})
+		VoiceRefHash:    newFileHash(characterSaveStatusID, characterSaveSkip, "voice_ref", nil),
+		ImageHash:       newFileHash(characterSaveStatusID, characterSaveSkip, "image", nil),
+	}
+	if card != nil {
+		page.VoiceRefHash.Hash = hashBytes(card.Data.VoiceReference)
+		page.ImageHash.Hash = hashBytes(card.Data.Image)
+	}
+
+	return getHtml("character.html", page)
 }
 
 type entry struct {
@@ -347,15 +357,22 @@ func (api *API) extractImage(r *http.Request) ([]byte, error) {
 	return image, nil
 }
 
+const (
+	characterSaveStatusID = "character_save_result"
+	// the form's file inputs
+	characterSaveSkip = "voice_ref,image"
+)
+
+func characterSaveError(w http.ResponseWriter, r *http.Request, message string) {
+	writeSaveError(w, r, characterSaveStatusID, characterSaveSkip, http.StatusUnprocessableEntity, message)
+}
+
 func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWriter, r *http.Request) {
 	var voiceRef []byte
 	if _, ok := r.MultipartForm.File["voice_ref"]; !ok {
 		oldCard, err := api.db.GetCharCardByID(r.Context(), user.ID, card.ID)
 		if err != nil {
-			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-				ErrorCode:    http.StatusInternalServerError,
-				ErrorMessage: err.Error(),
-			})
+			characterSaveError(w, r, err.Error())
 			return
 		}
 
@@ -364,10 +381,7 @@ func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWri
 		var err error
 		voiceRef, err = api.extractVoiceRef(r)
 		if err != nil {
-			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-				ErrorCode:    http.StatusInternalServerError,
-				ErrorMessage: err.Error(),
-			})
+			characterSaveError(w, r, err.Error())
 			return
 		}
 	}
@@ -377,10 +391,7 @@ func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWri
 	if _, ok := r.MultipartForm.File["image"]; !ok {
 		oldCard, err := api.db.GetCharCardByID(r.Context(), user.ID, card.ID)
 		if err != nil {
-			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-				ErrorCode:    http.StatusInternalServerError,
-				ErrorMessage: err.Error(),
-			})
+			characterSaveError(w, r, err.Error())
 			return
 		}
 
@@ -389,60 +400,32 @@ func (api *API) updateCharacter(user *db.User, card *db.Card, w http.ResponseWri
 		var err error
 		image, err = api.extractImage(r)
 		if err != nil {
-			_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-				ErrorCode:    http.StatusInternalServerError,
-				ErrorMessage: err.Error(),
-			})
+			characterSaveError(w, r, err.Error())
 			return
 		}
 	}
 	card.Data.Image = image
 
 	if err := api.db.UpdateCharCard(r.Context(), user.ID, card); err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "UpdateCharCard: " + err.Error(),
-		})
+		characterSaveError(w, r, "UpdateCharCard: "+err.Error())
 		return
 	}
 
 	api.imageCache.Invalidate(card.ID)
 
-	_, _ = w.Write([]byte("Success"))
+	writeSaved(w, r, characterSaveStatusID, characterSaveSkip)
 }
 
 func (api *API) insertCharacter(user *db.User, card *db.Card, w http.ResponseWriter, r *http.Request) {
 	voiceRef, err := api.extractVoiceRef(r)
-	if err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "extractVoiceRef: " + err.Error(),
-		})
-		return
-	}
-
-	if len(voiceRef) == 0 {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "No Voice Reference Provided",
-		})
+	if err != nil || len(voiceRef) == 0 {
+		characterSaveError(w, r, "voice reference is required")
 		return
 	}
 
 	image, err := api.extractImage(r)
-	if err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "extractImage: " + err.Error(),
-		})
-		return
-	}
-
-	if len(image) == 0 {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "No Image Provided",
-		})
+	if err != nil || len(image) == 0 {
+		characterSaveError(w, r, "image is required")
 		return
 	}
 
@@ -452,15 +435,12 @@ func (api *API) insertCharacter(user *db.User, card *db.Card, w http.ResponseWri
 
 	cardID, err := api.db.InsertCharCard(r.Context(), card)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "InsertCharCard: " + err.Error(),
-		})
+		characterSaveError(w, r, "InsertCharCard: "+err.Error())
 		return
 	}
 
 	w.Header().Add("hx-redirect", "/characters/"+cardID.String())
-	_, _ = w.Write([]byte("Success"))
+	writeSaved(w, r, characterSaveStatusID, characterSaveSkip)
 }
 
 func (api *API) upsertCharacter(w http.ResponseWriter, r *http.Request) {
@@ -468,18 +448,12 @@ func (api *API) upsertCharacter(w http.ResponseWriter, r *http.Request) {
 
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusUnauthorized,
-			ErrorMessage: "not authorized",
-		})
+		characterSaveError(w, r, "not authorized")
 		return
 	}
 
 	if err := r.ParseMultipartForm(20 * 1024 * 1024); err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "r.ParseMultipartForm(): " + err.Error(),
-		})
+		characterSaveError(w, r, "failed to read the form: "+err.Error())
 		return
 	}
 
@@ -487,19 +461,13 @@ func (api *API) upsertCharacter(w http.ResponseWriter, r *http.Request) {
 
 	card, err := formToCard(r.Form)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "formToCard: " + err.Error(),
-		})
+		characterSaveError(w, r, err.Error())
 		return
 	}
 
 	characterID, err := uuid.Parse(characterIDStr)
 	if err != nil {
-		_ = html.ExecuteTemplate(w, "error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "{character_id} is not valid uuid: " + err.Error(),
-		})
+		characterSaveError(w, r, "invalid character id")
 		return
 	}
 
@@ -827,6 +795,93 @@ func (api *API) universalTTSRewardExisting(w http.ResponseWriter, r *http.Reques
 	_, _ = w.Write([]byte("success"))
 }
 
+func (api *API) universalAIReward(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		submitTab(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+		return
+	}
+
+	prompt := "Name a character first: forsen: tell me a joke. Characters: " + r.Host + "/voices"
+
+	if err := api.createRewardAndUpsert(r.Context(), user, nil, "", db.TwitchRewardUniversalAI, prompt); err != nil {
+		submitTab(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: err.Error(),
+		})
+		return
+	}
+
+	w.Header().Add("hx-redirect", "/characters")
+	_, _ = w.Write([]byte("success"))
+}
+
+func (api *API) universalAIRewardChoose(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+	}
+
+	return getHtml("reward_choose_special.html", &rewardChooseSpecialData{
+		Subtitle:        "Universal AI",
+		CreatePostURL:   "/universal-ai/reward",
+		ExistingPostURL: "/universal-ai/reward_existing",
+	})
+}
+
+func (api *API) universalAIRewardExisting(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		submitTab(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
+			Subtitle:        "Universal AI",
+			CreatePostURL:   "/universal-ai/reward",
+			ExistingPostURL: "/universal-ai/reward_existing",
+			Error:           "failed to parse form",
+		})
+		return
+	}
+
+	existingID := strings.TrimSpace(r.Form.Get("twitch_reward_id"))
+	if existingID == "" {
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
+			Subtitle:         "Universal AI",
+			CreatePostURL:    "/universal-ai/reward",
+			ExistingPostURL:  "/universal-ai/reward_existing",
+			Error:            "Reward ID is required",
+			ExistingRewardID: existingID,
+		})
+		return
+	}
+
+	if err := api.db.UpsertUniversalAIReward(r.Context(), user.ID, existingID); err != nil {
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
+			Subtitle:         "Universal AI",
+			CreatePostURL:    "/universal-ai/reward",
+			ExistingPostURL:  "/universal-ai/reward_existing",
+			Error:            err.Error(),
+			ExistingRewardID: existingID,
+		})
+		return
+	}
+
+	w.Header().Add("hx-redirect", "/characters")
+	_, _ = w.Write([]byte("success"))
+}
+
 func (api *API) agenticRewardChoose(r *http.Request) template.HTML {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
@@ -891,10 +946,11 @@ func (api *API) agenticRewardExisting(w http.ResponseWriter, r *http.Request) {
 }
 
 type tryPageData struct {
-	CharacterID   string
-	CharacterName string
-	AgenticMode   bool
-	UniversalMode bool
+	CharacterID     string
+	CharacterName   string
+	AgenticMode     bool
+	UniversalMode   bool
+	UniversalAIMode bool
 	// The toggles' initial state: the user's live settings at the time the
 	// page opens.
 	LLMFilter   bool
@@ -1262,5 +1318,37 @@ func (api *API) tryUniversalTTSWS(w http.ResponseWriter, r *http.Request) {
 
 	api.serveTryWS(w, r, dummyCard, map[string]TryHandler{
 		"universal_tts": api.universalHandler,
+	})
+}
+
+func (api *API) tryUniversalAI(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not logged in",
+		})
+	}
+
+	return api.tryPage(r, user, tryPageData{
+		CharacterName:   "Universal AI",
+		UniversalAIMode: true,
+	})
+}
+
+func (api *API) tryUniversalAIWS(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("not authorized"))
+		return
+	}
+
+	dummyCard := &db.Card{
+		OwnerUserID: user.ID,
+	}
+
+	api.serveTryWS(w, r, dummyCard, map[string]TryHandler{
+		"universal_ai": api.universalAIHandler,
 	})
 }

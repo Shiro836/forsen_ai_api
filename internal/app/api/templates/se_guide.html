@@ -1,0 +1,61 @@
+{{ define "se-copy-icon" }}<svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.2"/><path d="M10.5 5.5V3.7c0-.66-.54-1.2-1.2-1.2H3.7c-.66 0-1.2.54-1.2 1.2v5.6c0 .66.54 1.2 1.2 1.2H5.5"/></svg>{{ end }}
+
+{{ define "se-arrow" }}<span class="absolute -top-9 left-0 z-10 whitespace-nowrap rounded-md border border-twitch-dark bg-white px-2 py-1 text-xs font-bold text-slate-900 shadow-lg dark:border-twitch-light dark:bg-slate-800 dark:text-white">{{ . }}<span class="absolute -bottom-[5px] left-4 h-2.5 w-2.5 rotate-45 border-b border-r border-twitch-dark bg-white dark:border-twitch-light dark:bg-slate-800" aria-hidden="true"></span></span>{{ end }}
+
+<section id="guide" class="w-full">
+    <div class="mb-3 flex items-center justify-between gap-2">
+        <h1 class="flex items-center gap-2 text-lg font-bold text-slate-900 dark:text-white"><svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">{{ template "bd-se-mark" }}</svg>StreamElements</h1>
+        <div class="shrink-0 text-xs font-bold text-slate-600 dark:text-slate-300">Step {{.Step.Number}} of 3</div>
+    </div>
+
+    <ol class="mb-3 grid grid-cols-3 gap-2" aria-label="StreamElements progress">
+        <li>
+            <a class="block rounded border px-2 py-1 {{if eq .Step.Number 1}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 1}}border-green-500/40 text-slate-700 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 dark:text-slate-400{{end}}" href="/guide/streamelements" hx-get="/guide/streamelements" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-sync="closest #guide:abort" {{if eq .Step.Number 1}}aria-current="step"{{end}}>
+                <span class="block text-[10px] font-bold">01</span>
+                <span class="block text-sm font-semibold">Open</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded border px-2 py-1 {{if eq .Step.Number 2}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else if gt .Step.Number 2}}border-green-500/40 text-slate-700 dark:text-slate-200{{else}}{{template "ui-border-clr"}} text-slate-500 dark:text-slate-400{{end}}" href="/guide/streamelements/copy" hx-get="/guide/streamelements/copy" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-sync="closest #guide:abort" {{if eq .Step.Number 2}}aria-current="step"{{end}}>
+                <span class="block text-[10px] font-bold">02</span>
+                <span class="block text-sm font-semibold">Copy</span>
+            </a>
+        </li>
+        <li>
+            <a class="block rounded border px-2 py-1 {{if eq .Step.Number 3}}border-twitch-dark text-slate-900 dark:border-twitch-light dark:text-white{{else}}{{template "ui-border-clr"}} text-slate-500 dark:text-slate-400{{end}}" href="/guide/streamelements/connect" hx-get="/guide/streamelements/connect" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-sync="closest #guide:abort" {{if eq .Step.Number 3}}aria-current="step"{{end}}>
+                <span class="block text-[10px] font-bold">03</span>
+                <span class="block text-sm font-semibold">Paste</span>
+            </a>
+        </li>
+    </ol>
+
+    <h2 class="text-base font-bold text-slate-900 dark:text-white">{{.Step.Title}}</h2>
+
+    {{if eq .Step.Number 1}}
+    <a class="mt-2 block rounded border-2 border-twitch-dark px-3 py-1 text-center text-sm font-bold" href="https://streamelements.com/dashboard/account/channels" target="_blank" rel="noopener">Channels</a>
+    {{else if eq .Step.Number 2}}
+    <p class="mt-2 text-sm">There is no show button. Press the copy icon on <strong>JWT Token</strong>. <strong>Overlay Token</strong> is the next field. Same dots, same icon. Leave it.</p>
+    <div class="relative mt-10 flex flex-col gap-2 rounded border {{template "ui-border-clr"}} bg-slate-50 p-2 text-xs dark:bg-slate-800">
+        <div class="relative rounded border-2 border-twitch-dark p-2">
+            {{ template "se-arrow" "Copy this" }}
+            <div class="text-slate-500 dark:text-slate-400">JWT Token</div>
+            <div class="mt-1 flex items-center gap-1"><span>••••••••</span><span class="flex h-6 w-6 items-center justify-center rounded border-2 border-twitch-dark">{{ template "se-copy-icon" }}</span></div>
+        </div>
+        <div class="rounded border {{template "ui-border-clr"}} p-2">
+            <div class="text-slate-500 dark:text-slate-400">Overlay Token</div>
+            <div class="mt-1 flex items-center gap-1"><span>••••••••</span><span class="flex h-6 w-6 items-center justify-center rounded border {{template "ui-border-clr"}}">{{ template "se-copy-icon" }}</span></div>
+        </div>
+    </div>
+    {{else}}
+    <p class="mt-2 text-sm">Paste the token in the StreamElements field and press <strong>connect</strong>.</p>
+    {{end}}
+
+    <div class="mt-3 flex items-center gap-2">
+        {{if .Step.PreviousPath}}
+        <a class="{{template "button-2"}} px-3 py-1 text-sm font-bold" href="{{.Step.PreviousPath}}" hx-get="{{.Step.PreviousPath}}" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-sync="closest #guide:abort">← Previous</a>
+        {{end}}
+        {{if .Step.NextPath}}
+        <a class="ml-auto rounded border-2 border-twitch-dark px-3 py-1 text-sm font-bold" href="{{.Step.NextPath}}" hx-get="{{.Step.NextPath}}" hx-select="#guide" hx-target="#guide" hx-swap="outerHTML" hx-sync="closest #guide:abort">Next →</a>
+        {{end}}
+    </div>
+</section>

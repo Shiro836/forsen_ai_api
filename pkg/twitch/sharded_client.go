@@ -15,6 +15,7 @@ type ShardedClient struct {
 	lock              sync.RWMutex
 	logger            *slog.Logger
 	onMessage         func(gempir.PrivateMessage)
+	onUserNotice      func(gempir.UserNoticeMessage)
 	onShardConnect    func()
 	onShardDisconnect func()
 	onJoinFailure     func(channel, reason string)
@@ -24,6 +25,7 @@ type ShardedClient struct {
 func NewShardedClient(
 	logger *slog.Logger,
 	onMessage func(gempir.PrivateMessage),
+	onUserNotice func(gempir.UserNoticeMessage),
 	onShardConnect func(),
 	onShardDisconnect func(),
 	onJoinFailure func(channel, reason string),
@@ -32,6 +34,7 @@ func NewShardedClient(
 		shards:            make([]*Shard, 0),
 		logger:            logger,
 		onMessage:         onMessage,
+		onUserNotice:      onUserNotice,
 		onShardConnect:    onShardConnect,
 		onShardDisconnect: onShardDisconnect,
 		onJoinFailure:     onJoinFailure,
@@ -59,7 +62,7 @@ func (c *ShardedClient) Join(channel string) {
 
 	shardID := c.nextShardID
 	c.nextShardID++
-	newShard := NewShard(shardID, c.logger, c.onMessage, c.onShardConnect, c.onShardDisconnect, c.onJoinFailure)
+	newShard := NewShard(shardID, c.logger, c.onMessage, c.onUserNotice, c.onShardConnect, c.onShardDisconnect, c.onJoinFailure)
 	newShard.Connect()
 	newShard.Join(channel)
 	c.shards = append(c.shards, newShard)

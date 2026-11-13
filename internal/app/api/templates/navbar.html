@@ -10,13 +10,18 @@
         {{ if .IsStreamer }}
         <div class="pt-1 pb-1 w-full">
             <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
-                data-path="/characters,/universal-tts,/agentic" hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                data-path="/characters,/universal-tts,/universal-ai,/agentic" hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
                 hx-push-url="true" hx-sync="closest #tabs:abort">Characters</button>
         </div>
         <div class="pt-1 pb-1 w-full">
             <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4"
                 data-path="/filters" hx-get="/filters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
                 hx-push-url="true" hx-sync="closest #tabs:abort">Settings</button>
+        </div>
+        <div class="pt-1 pb-1 w-full">
+            <button class="flex justify-start text-xl {{template "button-1"}} w-full font-bold py-2 px-4 whitespace-nowrap"
+                data-path="/bits-donations" hx-get="/bits-donations" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content"
+                hx-push-url="true" hx-sync="closest #tabs:abort">Bits &amp; Donos</button>
         </div>
         {{ end }}
         {{ if .IsMod }}
