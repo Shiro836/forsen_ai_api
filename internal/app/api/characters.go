@@ -795,6 +795,93 @@ func (api *API) universalTTSRewardExisting(w http.ResponseWriter, r *http.Reques
 	_, _ = w.Write([]byte("success"))
 }
 
+func (api *API) universalAIReward(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		submitTab(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+		return
+	}
+
+	prompt := "Name a character first: forsen: tell me a joke. Characters: " + r.Host + "/voices"
+
+	if err := api.createRewardAndUpsert(r.Context(), user, nil, "", db.TwitchRewardUniversalAI, prompt); err != nil {
+		submitTab(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: err.Error(),
+		})
+		return
+	}
+
+	w.Header().Add("hx-redirect", "/characters")
+	_, _ = w.Write([]byte("success"))
+}
+
+func (api *API) universalAIRewardChoose(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+	}
+
+	return getHtml("reward_choose_special.html", &rewardChooseSpecialData{
+		Subtitle:        "Universal AI",
+		CreatePostURL:   "/universal-ai/reward",
+		ExistingPostURL: "/universal-ai/reward_existing",
+	})
+}
+
+func (api *API) universalAIRewardExisting(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		submitTab(w, "error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not authorized",
+		})
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
+			Subtitle:        "Universal AI",
+			CreatePostURL:   "/universal-ai/reward",
+			ExistingPostURL: "/universal-ai/reward_existing",
+			Error:           "failed to parse form",
+		})
+		return
+	}
+
+	existingID := strings.TrimSpace(r.Form.Get("twitch_reward_id"))
+	if existingID == "" {
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
+			Subtitle:         "Universal AI",
+			CreatePostURL:    "/universal-ai/reward",
+			ExistingPostURL:  "/universal-ai/reward_existing",
+			Error:            "Reward ID is required",
+			ExistingRewardID: existingID,
+		})
+		return
+	}
+
+	if err := api.db.UpsertUniversalAIReward(r.Context(), user.ID, existingID); err != nil {
+		submitTab(w, "reward_choose_special.html", &rewardChooseSpecialData{
+			Subtitle:         "Universal AI",
+			CreatePostURL:    "/universal-ai/reward",
+			ExistingPostURL:  "/universal-ai/reward_existing",
+			Error:            err.Error(),
+			ExistingRewardID: existingID,
+		})
+		return
+	}
+
+	w.Header().Add("hx-redirect", "/characters")
+	_, _ = w.Write([]byte("success"))
+}
+
 func (api *API) agenticRewardChoose(r *http.Request) template.HTML {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
@@ -859,10 +946,11 @@ func (api *API) agenticRewardExisting(w http.ResponseWriter, r *http.Request) {
 }
 
 type tryPageData struct {
-	CharacterID   string
-	CharacterName string
-	AgenticMode   bool
-	UniversalMode bool
+	CharacterID     string
+	CharacterName   string
+	AgenticMode     bool
+	UniversalMode   bool
+	UniversalAIMode bool
 	// The toggles' initial state: the user's live settings at the time the
 	// page opens.
 	LLMFilter   bool
@@ -1230,5 +1318,37 @@ func (api *API) tryUniversalTTSWS(w http.ResponseWriter, r *http.Request) {
 
 	api.serveTryWS(w, r, dummyCard, map[string]TryHandler{
 		"universal_tts": api.universalHandler,
+	})
+}
+
+func (api *API) tryUniversalAI(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusUnauthorized,
+			ErrorMessage: "not logged in",
+		})
+	}
+
+	return api.tryPage(r, user, tryPageData{
+		CharacterName:   "Universal AI",
+		UniversalAIMode: true,
+	})
+}
+
+func (api *API) tryUniversalAIWS(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("not authorized"))
+		return
+	}
+
+	dummyCard := &db.Card{
+		OwnerUserID: user.ID,
+	}
+
+	api.serveTryWS(w, r, dummyCard, map[string]TryHandler{
+		"universal_ai": api.universalAIHandler,
 	})
 }

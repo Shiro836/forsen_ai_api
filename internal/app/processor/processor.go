@@ -38,25 +38,27 @@ type Processor struct {
 	twitchClient *twitch.Client
 
 	// Handlers
-	aiHandler        InteractionHandler
-	ttsHandler       InteractionHandler
-	universalHandler InteractionHandler
-	agenticHandler   InteractionHandler
-	chatTTSHandler   InteractionHandler
+	aiHandler          InteractionHandler
+	ttsHandler         InteractionHandler
+	universalHandler   InteractionHandler
+	universalAIHandler InteractionHandler
+	agenticHandler     InteractionHandler
+	chatTTSHandler     InteractionHandler
 }
 
-func NewProcessor(logger *slog.Logger, db *db.DB, queue *queue.Queue, connManager *conns.Manager, twitchClient *twitch.Client, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, agenticHandler InteractionHandler, chatTTSHandler InteractionHandler) *Processor {
+func NewProcessor(logger *slog.Logger, db *db.DB, queue *queue.Queue, connManager *conns.Manager, twitchClient *twitch.Client, aiHandler InteractionHandler, ttsHandler InteractionHandler, universalHandler InteractionHandler, universalAIHandler InteractionHandler, agenticHandler InteractionHandler, chatTTSHandler InteractionHandler) *Processor {
 	return &Processor{
-		logger:           logger,
-		db:               db,
-		queue:            queue,
-		connManager:      connManager,
-		twitchClient:     twitchClient,
-		aiHandler:        aiHandler,
-		ttsHandler:       ttsHandler,
-		universalHandler: universalHandler,
-		agenticHandler:   agenticHandler,
-		chatTTSHandler:   chatTTSHandler,
+		logger:             logger,
+		db:                 db,
+		queue:              queue,
+		connManager:        connManager,
+		twitchClient:       twitchClient,
+		aiHandler:          aiHandler,
+		ttsHandler:         ttsHandler,
+		universalHandler:   universalHandler,
+		universalAIHandler: universalAIHandler,
+		agenticHandler:     agenticHandler,
+		chatTTSHandler:     chatTTSHandler,
 	}
 }
 
@@ -383,6 +385,11 @@ func (p *Processor) processNextMessage(ctx context.Context, eventWriter conns.Ev
 		if err := p.aiHandler.Handle(ctx, input, eventWriter); err != nil {
 			recordHandlerError(ctx, "ai")
 			return fmt.Errorf("ai handler error: %w", err)
+		}
+	case db.TwitchRewardUniversalAI:
+		if err := p.universalAIHandler.Handle(ctx, input, eventWriter); err != nil {
+			recordHandlerError(ctx, "universal_ai")
+			return fmt.Errorf("universal ai handler error: %w", err)
 		}
 	case db.TwitchRewardAgentic:
 		if err := p.agenticHandler.Handle(ctx, input, eventWriter); err != nil {

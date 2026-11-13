@@ -52,10 +52,11 @@ type API struct {
 
 	cfg *Config
 
-	ttsHandler       processor.InteractionHandler
-	aiHandler        processor.InteractionHandler
-	universalHandler processor.InteractionHandler
-	agenticHandler   processor.InteractionHandler
+	ttsHandler         processor.InteractionHandler
+	aiHandler          processor.InteractionHandler
+	universalHandler   processor.InteractionHandler
+	universalAIHandler processor.InteractionHandler
+	agenticHandler     processor.InteractionHandler
 
 	workersLock sync.Mutex // lock because we don't want to have a situation when both "add permission" and "create user" are called at the same time, and user worker is not started
 
@@ -85,7 +86,7 @@ type API struct {
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservice.Config, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client, ffmpegClient *ffmpeg.Client,
-	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
+	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, universalAIHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
 	voiceSampler VoiceSampler, singer *ai.SingerClient, historyReader *history.Reader, streamlabs, donationAlerts ProviderApp) *API {
 	api := &API{
 		cfg: cfg,
@@ -100,10 +101,11 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservi
 
 		s3: s3,
 
-		ttsHandler:       ttsHandler,
-		aiHandler:        aiHandler,
-		universalHandler: universalHandler,
-		agenticHandler:   agenticHandler,
+		ttsHandler:         ttsHandler,
+		aiHandler:          aiHandler,
+		universalHandler:   universalHandler,
+		universalAIHandler: universalAIHandler,
+		agenticHandler:     agenticHandler,
 
 		voiceSamples: NewVoiceSampleCache(voiceSampler, db),
 		singer:       singer,
@@ -267,6 +269,9 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/universal-tts/try", api.nav(api.tryUniversalTTS))
 			router.Get("/ws/universal-tts/try", api.tryUniversalTTSWS)
 
+			router.Get("/universal-ai/try", api.nav(api.tryUniversalAI))
+			router.Get("/ws/universal-ai/try", api.tryUniversalAIWS)
+
 			router.Get("/agentic/try", api.nav(api.tryAgentic))
 			router.Get("/ws/agentic/try", api.tryAgenticWS)
 
@@ -278,6 +283,10 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Post("/universal-tts/reward", http.HandlerFunc(api.universalTTSReward))
 			router.Get("/universal-tts/reward", api.nav(api.universalTTSRewardChoose))
 			router.Post("/universal-tts/reward_existing", http.HandlerFunc(api.universalTTSRewardExisting))
+
+			router.Post("/universal-ai/reward", http.HandlerFunc(api.universalAIReward))
+			router.Get("/universal-ai/reward", api.nav(api.universalAIRewardChoose))
+			router.Post("/universal-ai/reward_existing", http.HandlerFunc(api.universalAIRewardExisting))
 
 			router.Post("/agentic/reward", http.HandlerFunc(api.agenticReward))
 			router.Get("/agentic/reward", api.nav(api.agenticRewardChoose))

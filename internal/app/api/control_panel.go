@@ -372,6 +372,9 @@ loop:
 					case db.TwitchRewardAgentic:
 						rewardTypeStr = rewardType.String()
 						charName = "-"
+					case db.TwitchRewardUniversalAI:
+						rewardTypeStr = rewardType.String()
+						charName = "-"
 					case db.TwitchRewardTTS:
 						if cardID == nil {
 							logger.Error("tts reward has no card mapping; skipping")

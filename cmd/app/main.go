@@ -135,6 +135,7 @@ func main() {
 	aiHandler := processor.NewAIHandler(logger.WithGroup("ai_handler"), characterLlm, imageLlm, cfg.NativeImages, db, s3, procService)
 	ttsHandler := processor.NewTTSHandler(logger.WithGroup("tts_handler"), db, procService)
 	universalHandler := processor.NewUniversalHandler(logger.WithGroup("universal_handler"), db, procService)
+	universalAIHandler := processor.NewUniversalAIHandler(logger.WithGroup("universal_ai_handler"), db, procService, aiHandler)
 
 	agenticDetector := agentic.NewDetector(oaiClient)
 	agenticPlanner := agentic.NewPlanner(oaiClient)
@@ -143,11 +144,11 @@ func main() {
 
 	twitchClient := twitch.New(httpClient, &cfg.Twitch)
 
-	proc := processor.NewProcessor(logger.WithGroup("processor"), db, queue.New(db), connManager, twitchClient, aiHandler, ttsHandler, universalHandler, agenticHandler, chatTTSHandler)
+	proc := processor.NewProcessor(logger.WithGroup("processor"), db, queue.New(db), connManager, twitchClient, aiHandler, ttsHandler, universalHandler, universalAIHandler, agenticHandler, chatTTSHandler)
 
 	conns.SetProcessor(connManager, proc)
 
-	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, agenticHandler, procService, singerClient, historyReader, api.ProviderApp{
+	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, universalAIHandler, agenticHandler, procService, singerClient, historyReader, api.ProviderApp{
 		ClientID:     cfg.Streamlabs.ClientID,
 		ClientSecret: cfg.Streamlabs.ClientSecret,
 	}, api.ProviderApp{

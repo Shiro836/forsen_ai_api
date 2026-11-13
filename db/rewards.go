@@ -14,6 +14,7 @@ const (
 	TwitchRewardAI
 	TwitchRewardUniversalTTS
 	TwitchRewardAgentic
+	TwitchRewardUniversalAI
 )
 
 func (t TwitchRewardType) String() string {
@@ -26,6 +27,8 @@ func (t TwitchRewardType) String() string {
 		return "BAJ TTS"
 	case TwitchRewardAgentic:
 		return "Agent BAJ"
+	case TwitchRewardUniversalAI:
+		return "BAJ AI"
 	default:
 		return "unknown"
 	}
@@ -104,6 +107,10 @@ func (db *DB) UpsertUniversalTTSReward(ctx context.Context, userID uuid.UUID, tw
 
 func (db *DB) UpsertAgenticReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) error {
 	return db.UpsertTwitchReward(ctx, userID, nil, twitchRewardID, TwitchRewardAgentic)
+}
+
+func (db *DB) UpsertUniversalAIReward(ctx context.Context, userID uuid.UUID, twitchRewardID string) error {
+	return db.UpsertTwitchReward(ctx, userID, nil, twitchRewardID, TwitchRewardUniversalAI)
 }
 
 // IsRewardBound reports whether a twitch reward id is already linked to a

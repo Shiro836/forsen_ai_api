@@ -333,6 +333,8 @@ func (api *API) createRewardAndUpsert(ctx context.Context, user *db.User, cardID
 		err = api.db.UpsertUniversalTTSReward(ctx, user.ID, rewardID)
 	case db.TwitchRewardAgentic:
 		err = api.db.UpsertAgenticReward(ctx, user.ID, rewardID)
+	case db.TwitchRewardUniversalAI:
+		err = api.db.UpsertUniversalAIReward(ctx, user.ID, rewardID)
 	default:
 		err = api.db.UpsertTwitchReward(ctx, user.ID, cardID, rewardID, rewardType)
 	}

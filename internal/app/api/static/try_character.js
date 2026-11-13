@@ -1,4 +1,4 @@
-// Try page (character / agentic / universal TTS) on the overlay-v2 protocol.
+// Try page (character / agentic / universal TTS / universal AI) on the overlay-v2 protocol.
 // Audio arrives as raw binary frames on the same websocket that carries the
 // JSON envelope; the first byte tells them apart ('{' vs frame type 1/2/3).
 // Playback and karaoke are the same OverlayPlayer the OBS overlay uses.
@@ -57,7 +57,7 @@
     }
 
     function setButtonsEnabled(enabled) {
-        for (const id of ["tts_button", "universal_tts_button", "ai_button", "agentic_button"]) {
+        for (const id of ["tts_button", "universal_tts_button", "universal_ai_button", "ai_button", "agentic_button"]) {
             const btn = document.getElementById(id);
             if (btn) btn.disabled = !enabled;
         }
@@ -143,8 +143,8 @@
         }
     }
 
-    function connect(agenticMode, universalMode) {
-        if (!characterID && !agenticMode && !universalMode) return;
+    function connect(agenticMode, universalMode, universalAIMode) {
+        if (!characterID && !agenticMode && !universalMode && !universalAIMode) return;
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         let wsUrl;
@@ -152,6 +152,8 @@
             wsUrl = `${protocol}//${window.location.host}/ws/agentic/try`;
         } else if (universalMode) {
             wsUrl = `${protocol}//${window.location.host}/ws/universal-tts/try`;
+        } else if (universalAIMode) {
+            wsUrl = `${protocol}//${window.location.host}/ws/universal-ai/try`;
         } else {
             wsUrl = `${protocol}//${window.location.host}/ws/characters/${characterID}/try`;
         }
@@ -178,11 +180,13 @@
             if (!currentContainer) return;
 
             if (agenticMode && currentContainer.dataset.agenticMode === "true") {
-                setTimeout(() => connect(true, false), 1000);
+                setTimeout(() => connect(true, false, false), 1000);
             } else if (universalMode && currentContainer.dataset.universalMode === "true") {
-                setTimeout(() => connect(false, true), 1000);
+                setTimeout(() => connect(false, true, false), 1000);
+            } else if (universalAIMode && currentContainer.dataset.universalAiMode === "true") {
+                setTimeout(() => connect(false, false, true), 1000);
             } else if (currentContainer.dataset.characterId === characterID) {
-                setTimeout(() => connect(false, false), 1000);
+                setTimeout(() => connect(false, false, false), 1000);
             }
         };
 
@@ -218,13 +222,15 @@
 
         const agenticMode = tryContainer.dataset.agenticMode === "true";
         const universalMode = tryContainer.dataset.universalMode === "true";
+        const universalAIMode = tryContainer.dataset.universalAiMode === "true";
         characterID = tryContainer.dataset.characterId;
 
-        if (!characterID && !agenticMode && !universalMode) return;
+        if (!characterID && !agenticMode && !universalMode && !universalAIMode) return;
 
         const bindings = [
             ["tts_button", 'tts'],
             ["universal_tts_button", 'universal_tts'],
+            ["universal_ai_button", 'universal_ai'],
             ["ai_button", 'ai'],
             ["agentic_button", 'agentic'],
         ];
@@ -246,7 +252,7 @@
         }
 
         setButtonsEnabled(false);
-        connect(agenticMode, universalMode);
+        connect(agenticMode, universalMode, universalAIMode);
     }
 
     if (document.readyState === 'loading') {

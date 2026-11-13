@@ -1,11 +1,13 @@
 <div class="flex flex-col h-full p-6 gap-4" data-try-page="true" data-character-id="{{ .CharacterID }}"
-    data-agentic-mode="{{ .AgenticMode }}" data-universal-mode="{{ .UniversalMode }}">
+    data-agentic-mode="{{ .AgenticMode }}" data-universal-mode="{{ .UniversalMode }}" data-universal-ai-mode="{{ .UniversalAIMode }}">
     <div class="flex items-center gap-4 border-b pb-4">
         <h1 class="text-2xl font-bold">
             {{ if .AgenticMode }}
             Try Agent Baj
             {{ else if .UniversalMode }}
             Try Universal TTS
+            {{ else if .UniversalAIMode }}
+            Try Universal AI
             {{ else }}
             Try Character: {{ .CharacterName }}
             {{ end }}
@@ -38,6 +40,9 @@
         {{ else if .UniversalMode }}
         <img id="char_image" src="/static/doctorWTF.png"
             style="position: absolute; left: 1rem; bottom: 0; max-height: 70%; max-width: 40%; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0,0,0,.5));" alt="Character">
+        {{ else if .UniversalAIMode }}
+        <img id="char_image" src="/static/doctorWTF.png"
+            style="position: absolute; left: 1rem; bottom: 0; max-height: 70%; max-width: 40%; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0,0,0,.5));" alt="Character">
         {{ else }}
         <img id="char_image" src="/characters/{{ .CharacterID }}/image"
             style="position: absolute; left: 1rem; bottom: 0; max-height: 70%; max-width: 40%; object-fit: contain; filter: drop-shadow(0 10px 24px rgba(0,0,0,.5));" alt="Character">
@@ -56,6 +61,10 @@
         {{ else if .UniversalMode }}
         <button id="universal_tts_button" class="px-6 py-2 border-2 {{template "button-2"}} font-semibold">
             Universal TTS
+        </button>
+        {{ else if .UniversalAIMode }}
+        <button id="universal_ai_button" class="px-6 py-2 border-2 {{template "button-2"}} font-semibold">
+            Universal AI
         </button>
         {{ else }}
         <button id="tts_button" class="px-6 py-2 border-2 {{template "button-2"}} font-semibold">

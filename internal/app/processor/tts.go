@@ -346,8 +346,10 @@ func timingTextPrefixes(msg string, timings []whisperx.Timiing) []string {
 	return prefixes
 }
 
-func (s *Service) lexUniversal(ctx context.Context, userSettings *db.UserSettings, msg string) []ttsprocessor.Token {
-	checkVoice := func(voice string) bool {
+// universalVoiceCheck reports whether a short name selects a public character
+// the streamer has not switched off.
+func (s *Service) universalVoiceCheck(ctx context.Context, userSettings *db.UserSettings) func(string) bool {
+	return func(voice string) bool {
 		name := strings.TrimSpace(voice)
 		if len(name) == 0 {
 			return false
@@ -357,6 +359,10 @@ func (s *Service) lexUniversal(ctx context.Context, userSettings *db.UserSetting
 
 		return err == nil && !userSettings.CardDisabled(id)
 	}
+}
+
+func (s *Service) lexUniversal(ctx context.Context, userSettings *db.UserSettings, msg string) []ttsprocessor.Token {
+	checkVoice := s.universalVoiceCheck(ctx, userSettings)
 
 	checkFilter := func(filter string) bool {
 		if filter == "." {
