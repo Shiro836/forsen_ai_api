@@ -225,6 +225,36 @@ func (api *API) donationProviderBlock(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (api *API) donationProviderStatus(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	provider := chi.URLParam(r, "provider")
+	if !validDonationProvider(provider) {
+		http.Error(w, "unknown provider", http.StatusBadRequest)
+		return
+	}
+
+	links, err := api.db.ConnectedDonationProviders(r.Context(), user.ID)
+	if err != nil {
+		api.logger.Error("load donation providers failed", "err", err, "user", user.ID)
+		http.Error(w, "failed to load providers", http.StatusInternalServerError)
+		return
+	}
+
+	block := bdProviderFor(provider, links)
+	if state := r.URL.Query().Get("state"); state != "" && state == block.State {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if err := html.ExecuteTemplate(w, "bd-provider-status", block); err != nil {
+		api.logger.Error("render donation provider status failed", "err", err, "provider", provider, "user", user.ID)
+	}
+}
+
 func (api *API) donationProviderDisconnect(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {

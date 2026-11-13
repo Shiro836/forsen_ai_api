@@ -296,6 +296,7 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/bits-donations/{event}/characters", http.HandlerFunc(api.bitsDonationsPicker))
 
 			router.Get("/donation-providers/{provider}", http.HandlerFunc(api.donationProviderBlock))
+			router.Get("/donation-providers/{provider}/status", http.HandlerFunc(api.donationProviderStatus))
 			router.Post("/donation-providers/{provider}/disconnect", http.HandlerFunc(api.donationProviderDisconnect))
 
 			router.Post("/streamelements", http.HandlerFunc(api.streamElementsConnect))

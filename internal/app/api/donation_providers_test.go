@@ -96,7 +96,8 @@ func TestBDProvidersStayOutOfTheSaveForm(t *testing.T) {
 	assert.NotContains(t, body, "socket")
 
 	for _, provider := range []string{"streamlabs", "donationalerts"} {
-		assert.Contains(t, body, `hx-get="/donation-providers/`+provider+`?state=`)
+		assert.Contains(t, body, `id="bd-`+provider+`-status"`)
+		assert.Contains(t, body, `hx-get="/donation-providers/`+provider+`/status?state=`)
 		assert.Contains(t, body, `hx-trigger="visibilitychange from:document, every 5s"`)
 	}
 	assert.NotContains(t, body, `hx-get="/donation-providers/streamelements"`)
@@ -117,6 +118,20 @@ func TestBDProvidersStayOutOfTheSaveForm(t *testing.T) {
 	for _, provider := range []string{"streamelements", "streamlabs", "donationalerts"} {
 		assert.Contains(t, body, `hx-post="/donation-providers/`+provider+`/disconnect"`)
 	}
+}
+
+func TestBDProviderStatusRenders(t *testing.T) {
+	page := getString("bd-provider-status", &bdProvider{
+		ID: "streamlabs", Live: true, Status: "expired", State: "s",
+	})
+	assert.Contains(t, page, `id="bd-streamlabs-status"`)
+	assert.Contains(t, page, "connect again")
+	assert.Contains(t, page, `hx-get="/donation-providers/streamlabs/status?state=s"`)
+	assert.NotContains(t, page, "listening")
+	assert.NotContains(t, page, "connecting")
+
+	off := getString("bd-provider-status", &bdProvider{ID: "streamelements", Connected: true, Status: "connected"})
+	assert.NotContains(t, off, "hx-get=", "a card that is not live has nothing to poll")
 }
 
 func TestBDProviderState(t *testing.T) {
