@@ -13,7 +13,7 @@ func TestDonationProviderSQLKeepsTokensBound(t *testing.T) {
 	id := uuid.MustParse("0199f2b3-73f6-78a3-b3aa-ddb84b848502")
 	refresh := "refresh-me"
 
-	sql, args, err := upsertDonationProviderSQL(id, ProviderStreamlabs, "access-me", &refresh, []string{"socket.token"})
+	sql, args, err := upsertDonationProviderSQL(id, ProviderStreamlabs, "access-me", &refresh, []string{"socket.token"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestDonationProviderSQLKeepsTokensBound(t *testing.T) {
 	if strings.Contains(sql, "access_token") || strings.Contains(sql, "refresh_token") {
 		t.Fatalf("list query reads tokens: %s", sql)
 	}
-	if sql != "SELECT provider FROM donation_providers WHERE user_id = $1" {
+	if sql != "SELECT provider, status, status_error, expires_at FROM donation_providers WHERE user_id = $1" {
 		t.Fatalf("sql: %s", sql)
 	}
 }
@@ -47,10 +47,10 @@ func TestUpsertDonationProviderRejectsBadInput(t *testing.T) {
 	database := &DB{}
 	id := uuid.MustParse("0199f2b3-73f6-78a3-b3aa-ddb84b848502")
 
-	if err := database.UpsertDonationProvider(context.Background(), id, "twitch", "tok", nil, nil); err == nil {
+	if err := database.UpsertDonationProvider(context.Background(), id, "twitch", "tok", nil, nil, nil); err == nil {
 		t.Fatal("unknown provider")
 	}
-	if err := database.UpsertDonationProvider(context.Background(), id, ProviderStreamElements, "  ", nil, nil); err == nil {
+	if err := database.UpsertDonationProvider(context.Background(), id, ProviderStreamElements, "  ", nil, nil, nil); err == nil {
 		t.Fatal("blank token")
 	}
 }

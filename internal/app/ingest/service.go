@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"app/db"
+	"app/internal/app/donations"
 	"app/pkg/imagetag"
 	"app/pkg/twitch"
 
@@ -40,13 +41,16 @@ type Service struct {
 	chatClient *twitch.ShardedClient
 	eventSub   *eventSub
 	cheermotes *cheermotes
+	donations  *donations.Manager
 
 	activeUsers     map[string]*ingestUserConfig
 	activeUsersLock sync.RWMutex
 }
 
-func NewService(logger *slog.Logger, database *db.DB, cfg *twitch.Config, eventSubCfg EventSubConfig) *Service {
+func NewService(logger *slog.Logger, database *db.DB, cfg *twitch.Config, eventSubCfg EventSubConfig, donationApp donations.DonationAlertsApp) *Service {
 	app := newAppClient(cfg)
+
+	donationLogger := logger.WithGroup("donations")
 
 	s := &Service{
 		logger:      logger,
@@ -54,6 +58,13 @@ func NewService(logger *slog.Logger, database *db.DB, cfg *twitch.Config, eventS
 		cfg:         cfg,
 		cheermotes:  newCheermotes(logger, app),
 		activeUsers: make(map[string]*ingestUserConfig),
+		donations: donations.NewManager(
+			donationLogger,
+			database,
+			donations.NewStreamElements(donationLogger.WithGroup("streamelements")),
+			donations.NewStreamlabs(donationLogger.WithGroup("streamlabs")),
+			donations.NewDonationAlerts(donationLogger.WithGroup("donationalerts"), database, donationApp),
+		),
 	}
 
 	if eventSubCfg.Callback != "" {
@@ -79,6 +90,12 @@ func (s *Service) Run(ctx context.Context) error {
 	s.logger.Info("starting ingest service")
 
 	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.donations.Run(ctx)
+	}()
 
 	wg.Add(1)
 	go func() {
@@ -146,6 +163,7 @@ func (s *Service) syncUsers(ctx context.Context) error {
 	}
 
 	metrics.TotalGrantedChannels.Set(float64(len(users)))
+	s.syncDonations(ctx, users)
 
 	desiredUsers := make(map[string]*ingestUserConfig, len(users))
 	desiredSubs := make(map[subKey]struct{})

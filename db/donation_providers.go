@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
@@ -20,13 +22,34 @@ type DonationProviderLinks struct {
 	StreamElements bool
 	Streamlabs     bool
 	DonationAlerts bool
+
+	// State is keyed by provider; a provider with no saved row has no entry.
+	State map[string]DonationProviderState
 }
 
-func upsertDonationProviderSQL(userID uuid.UUID, provider, accessToken string, refreshToken *string, scopes []string) (string, []any, error) {
+// DonationProviderState is what the streamer's page shows about a saved row.
+type DonationProviderState struct {
+	Connected bool
+	Status    string
+	Error     string
+	ExpiresAt *time.Time
+}
+
+// DonationProviderToken is one saved credential, as the ingest service reads it.
+type DonationProviderToken struct {
+	UserID       uuid.UUID
+	Provider     string
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    *time.Time
+	UpdatedAt    time.Time
+}
+
+func upsertDonationProviderSQL(userID uuid.UUID, provider, accessToken string, refreshToken *string, scopes []string, expiresAt *time.Time) (string, []any, error) {
 	return psql.Insert("donation_providers").
-		Columns("user_id", "provider", "access_token", "refresh_token", "scopes", "updated_at").
-		Values(userID, provider, accessToken, refreshToken, scopes, sq.Expr("now()")).
-		Suffix("on conflict (user_id, provider) do update set access_token = excluded.access_token, refresh_token = excluded.refresh_token, scopes = excluded.scopes, updated_at = now()").
+		Columns("user_id", "provider", "access_token", "refresh_token", "scopes", "expires_at", "updated_at").
+		Values(userID, provider, accessToken, refreshToken, scopes, expiresAt, sq.Expr("now()")).
+		Suffix("on conflict (user_id, provider) do update set access_token = excluded.access_token, refresh_token = excluded.refresh_token, scopes = excluded.scopes, expires_at = excluded.expires_at, updated_at = now()").
 		ToSql()
 }
 
@@ -38,7 +61,7 @@ func validDonationProvider(provider string) bool {
 	return false
 }
 
-func (db *DB) UpsertDonationProvider(ctx context.Context, userID uuid.UUID, provider, accessToken string, refreshToken *string, scopes []string) error {
+func (db *DB) UpsertDonationProvider(ctx context.Context, userID uuid.UUID, provider, accessToken string, refreshToken *string, scopes []string, expiresAt *time.Time) error {
 	if !validDonationProvider(provider) {
 		return fmt.Errorf("upsert donation provider: unknown provider")
 	}
@@ -49,7 +72,7 @@ func (db *DB) UpsertDonationProvider(ctx context.Context, userID uuid.UUID, prov
 		scopes = []string{}
 	}
 
-	query, args, err := upsertDonationProviderSQL(userID, provider, accessToken, refreshToken, scopes)
+	query, args, err := upsertDonationProviderSQL(userID, provider, accessToken, refreshToken, scopes, expiresAt)
 	if err != nil {
 		return fmt.Errorf("upsert donation provider: %w", err)
 	}
@@ -81,14 +104,14 @@ func (db *DB) DeleteDonationProvider(ctx context.Context, userID uuid.UUID, prov
 }
 
 func connectedDonationProvidersSQL(userID uuid.UUID) (string, []any, error) {
-	return psql.Select("provider").
+	return psql.Select("provider", "status", "status_error", "expires_at").
 		From("donation_providers").
 		Where(sq.Eq{"user_id": userID}).
 		ToSql()
 }
 
 func (db *DB) ConnectedDonationProviders(ctx context.Context, userID uuid.UUID) (DonationProviderLinks, error) {
-	var links DonationProviderLinks
+	links := DonationProviderLinks{State: make(map[string]DonationProviderState)}
 
 	query, args, err := connectedDonationProvidersSQL(userID)
 	if err != nil {
@@ -102,10 +125,20 @@ func (db *DB) ConnectedDonationProviders(ctx context.Context, userID uuid.UUID) 
 	defer rows.Close()
 
 	for rows.Next() {
-		var provider string
-		if err := rows.Scan(&provider); err != nil {
+		var (
+			state     DonationProviderState
+			provider  string
+			expiresAt sql.NullTime
+		)
+		if err := rows.Scan(&provider, &state.Status, &state.Error, &expiresAt); err != nil {
 			return links, fmt.Errorf("connected donation providers: %w", err)
 		}
+		if expiresAt.Valid {
+			state.ExpiresAt = &expiresAt.Time
+		}
+		state.Connected = true
+		links.State[provider] = state
+
 		switch provider {
 		case ProviderStreamElements:
 			links.StreamElements = true
@@ -119,4 +152,99 @@ func (db *DB) ConnectedDonationProviders(ctx context.Context, userID uuid.UUID) 
 		return links, fmt.Errorf("connected donation providers: %w", err)
 	}
 	return links, nil
+}
+
+func listDonationProviderTokensSQL() (string, []any, error) {
+	return psql.Select("user_id", "provider", "access_token", "coalesce(refresh_token, '')", "expires_at", "updated_at").
+		From("donation_providers").
+		ToSql()
+}
+
+// ListDonationProviderTokens returns every saved credential. The ingest service
+// intersects this with the users it may act for; it does not filter here.
+func (db *DB) ListDonationProviderTokens(ctx context.Context) ([]DonationProviderToken, error) {
+	query, args, err := listDonationProviderTokensSQL()
+	if err != nil {
+		return nil, fmt.Errorf("list donation provider tokens: %w", err)
+	}
+
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list donation provider tokens: %w", err)
+	}
+	defer rows.Close()
+
+	var tokens []DonationProviderToken
+	for rows.Next() {
+		var (
+			token     DonationProviderToken
+			expiresAt sql.NullTime
+		)
+		if err := rows.Scan(&token.UserID, &token.Provider, &token.AccessToken, &token.RefreshToken, &expiresAt, &token.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("list donation provider tokens: %w", err)
+		}
+		if expiresAt.Valid {
+			token.ExpiresAt = &expiresAt.Time
+		}
+		tokens = append(tokens, token)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list donation provider tokens: %w", err)
+	}
+	return tokens, nil
+}
+
+func updateDonationProviderTokensSQL(userID uuid.UUID, provider, accessToken, refreshToken string, expiresAt *time.Time) (string, []any, error) {
+	return psql.Update("donation_providers").
+		Set("access_token", accessToken).
+		Set("refresh_token", sq.Expr("nullif(?, '')", refreshToken)).
+		Set("expires_at", expiresAt).
+		// updated_at is the user's action marker; a refresh must not look like
+		// the streamer reconnecting the provider.
+		Where(sq.Eq{"user_id": userID, "provider": provider}).
+		ToSql()
+}
+
+func (db *DB) UpdateDonationProviderTokens(ctx context.Context, userID uuid.UUID, provider, accessToken, refreshToken string, expiresAt *time.Time) error {
+	if !validDonationProvider(provider) {
+		return fmt.Errorf("update donation provider tokens: unknown provider")
+	}
+	if strings.TrimSpace(accessToken) == "" {
+		return fmt.Errorf("update donation provider tokens: empty access token")
+	}
+
+	query, args, err := updateDonationProviderTokensSQL(userID, provider, accessToken, refreshToken, expiresAt)
+	if err != nil {
+		return fmt.Errorf("update donation provider tokens: %w", err)
+	}
+	if _, err := db.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("update donation provider tokens: %w", err)
+	}
+	return nil
+}
+
+func setDonationProviderStatusSQL(userID uuid.UUID, provider, status, statusError string) (string, []any, error) {
+	return psql.Update("donation_providers").
+		Set("status", status).
+		Set("status_error", statusError).
+		Set("status_updated_at", sq.Expr("now()")).
+		Where(sq.Eq{"user_id": userID, "provider": provider}).
+		ToSql()
+}
+
+// SetDonationProviderStatus stores the connection outcome the streamer's page
+// reads. A disconnected provider has no row, so the update is a no-op there.
+func (db *DB) SetDonationProviderStatus(ctx context.Context, userID uuid.UUID, provider, status, statusError string) error {
+	if !validDonationProvider(provider) {
+		return fmt.Errorf("set donation provider status: unknown provider")
+	}
+
+	query, args, err := setDonationProviderStatusSQL(userID, provider, status, statusError)
+	if err != nil {
+		return fmt.Errorf("set donation provider status: %w", err)
+	}
+	if _, err := db.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("set donation provider status: %w", err)
+	}
+	return nil
 }

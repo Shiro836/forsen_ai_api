@@ -96,7 +96,7 @@ func TestBDProvidersStayOutOfTheSaveForm(t *testing.T) {
 	assert.NotContains(t, body, "socket")
 
 	for _, provider := range []string{"streamlabs", "donationalerts"} {
-		assert.Contains(t, body, `hx-get="/donation-providers/`+provider+`" hx-trigger="visibilitychange from:document"`)
+		assert.Contains(t, body, `hx-get="/donation-providers/`+provider+`" hx-trigger="visibilitychange from:document, every 5s"`)
 	}
 	assert.NotContains(t, body, `hx-get="/donation-providers/streamelements"`)
 

@@ -13,8 +13,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"app/db"
+	"app/internal/app/donations"
 	"app/pkg/ctxstore"
 
 	"github.com/go-chi/chi/v5"
@@ -50,22 +52,67 @@ type ProviderApp struct {
 }
 
 type bdProvider struct {
-	ID        string
-	Name      string
-	Connected bool
-	Token     bool
-	Live      bool
-	Href      string
-	Post      string
-	Error     string
+	ID          string
+	Name        string
+	Connected   bool
+	Token       bool
+	Live        bool
+	Href        string
+	Post        string
+	Error       string
+	Status      string
+	StatusError string
+	Expiry      string
 }
 
 func bdProviderList(links db.DonationProviderLinks) []bdProvider {
-	return []bdProvider{
-		{ID: db.ProviderStreamElements, Name: "StreamElements", Connected: links.StreamElements, Token: !links.StreamElements, Post: "/streamelements"},
-		{ID: db.ProviderStreamlabs, Name: "Streamlabs", Connected: links.Streamlabs, Live: true, Href: "/streamlabs/connect"},
-		{ID: db.ProviderDonationAlerts, Name: "DonationAlerts", Connected: links.DonationAlerts, Live: true, Href: "/donationalerts/connect"},
+	state := func(provider string) db.DonationProviderState {
+		if links.State == nil {
+			return db.DonationProviderState{}
+		}
+		return links.State[provider]
 	}
+
+	se := state(db.ProviderStreamElements)
+	sl := state(db.ProviderStreamlabs)
+	da := state(db.ProviderDonationAlerts)
+
+	return []bdProvider{
+		{
+			ID: db.ProviderStreamElements, Name: "StreamElements",
+			Connected: links.StreamElements, Token: !links.StreamElements, Post: "/streamelements",
+			// Polling while the paste form is open would wipe what is typed.
+			Live:        links.StreamElements,
+			Status:      se.Status,
+			StatusError: se.Error,
+			Expiry:      tokenExpiry(se.ExpiresAt),
+		},
+		{
+			ID: db.ProviderStreamlabs, Name: "Streamlabs",
+			Connected: links.Streamlabs, Live: true, Href: "/streamlabs/connect",
+			Status: sl.Status, StatusError: sl.Error,
+		},
+		{
+			ID: db.ProviderDonationAlerts, Name: "DonationAlerts",
+			Connected: links.DonationAlerts, Live: true, Href: "/donationalerts/connect",
+			Status: da.Status, StatusError: da.Error,
+		},
+	}
+}
+
+// tokenExpiry warns before a token that cannot be refreshed runs out.
+func tokenExpiry(expiresAt *time.Time) string {
+	if expiresAt == nil {
+		return ""
+	}
+	remaining := time.Until(*expiresAt)
+	if remaining <= 0 {
+		return "expired"
+	}
+	if days := int(remaining.Hours() / 24); days <= 14 {
+		return fmt.Sprintf("expires in %dd", days)
+	}
+	return ""
 }
 
 func validDonationProvider(provider string) bool {
@@ -107,7 +154,19 @@ func (api *API) streamElementsConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.db.UpsertDonationProvider(r.Context(), user.ID, db.ProviderStreamElements, token, nil, []string{}); err != nil {
+	expiresAt, valid := donations.ParseStreamElementsToken(token)
+	if !valid {
+		block.Error = "not a JWT"
+		_ = html.ExecuteTemplate(w, "bd-provider", block)
+		return
+	}
+
+	var expires *time.Time
+	if !expiresAt.IsZero() {
+		expires = &expiresAt
+	}
+
+	if err := api.db.UpsertDonationProvider(r.Context(), user.ID, db.ProviderStreamElements, token, nil, []string{}, expires); err != nil {
 		api.logger.Error("streamelements connect failed", "err", err, "user", user.ID)
 		block.Error = "failed to save"
 		_ = html.ExecuteTemplate(w, "bd-provider", block)
@@ -116,6 +175,7 @@ func (api *API) streamElementsConnect(w http.ResponseWriter, r *http.Request) {
 
 	block.Connected = true
 	block.Token = false
+	block.Live = true
 	_ = html.ExecuteTemplate(w, "bd-provider", block)
 }
 
@@ -279,7 +339,13 @@ func (api *API) finishProviderOAuth(w http.ResponseWriter, r *http.Request, p pr
 		return
 	}
 
-	if err := api.db.UpsertDonationProvider(r.Context(), user.ID, p.Provider, tok.AccessToken, refresh, scopesToStore(tok.Scopes, p.Scopes)); err != nil {
+	var expires *time.Time
+	if tok.ExpiresIn > 0 {
+		next := time.Now().UTC().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		expires = &next
+	}
+
+	if err := api.db.UpsertDonationProvider(r.Context(), user.ID, p.Provider, tok.AccessToken, refresh, scopesToStore(tok.Scopes, p.Scopes), expires); err != nil {
 		api.logger.Error("donation provider connect failed", "err", err, "provider", p.Provider, "user", user.ID)
 		writeErrPage(w, r, http.StatusInternalServerError, "failed to save")
 		return
@@ -294,11 +360,13 @@ type providerToken struct {
 	AccessToken  string
 	RefreshToken string
 	Scopes       []string
+	ExpiresIn    int64
 }
 
 type oauthTokenResponse struct {
 	AccessToken  string          `json:"access_token"`
 	RefreshToken string          `json:"refresh_token"`
+	ExpiresIn    int64           `json:"expires_in"`
 	Scope        json.RawMessage `json:"scope"`
 	Scopes       json.RawMessage `json:"scopes"`
 }
@@ -333,7 +401,12 @@ func fetchProviderToken(ctx context.Context, client *http.Client, tokenURL strin
 	if len(scopes) == 0 {
 		scopes = parseScopeList(parsed.Scopes)
 	}
-	return providerToken{AccessToken: parsed.AccessToken, RefreshToken: parsed.RefreshToken, Scopes: scopes}, nil
+	return providerToken{
+		AccessToken:  parsed.AccessToken,
+		RefreshToken: parsed.RefreshToken,
+		Scopes:       scopes,
+		ExpiresIn:    parsed.ExpiresIn,
+	}, nil
 }
 
 func refreshPointer(refresh string) *string {

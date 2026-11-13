@@ -285,11 +285,16 @@ rounded-md bg-[#F26600] text-[#09161D]
 
 {{ define "bd-provider" -}}
 <div id="bd-{{ .ID }}" class="flex flex-wrap items-center gap-x-6 gap-y-2"
-    {{- if .Live }} hx-get="/donation-providers/{{ .ID }}" hx-trigger="visibilitychange from:document" hx-swap="outerHTML" hx-sync="this:replace"{{ end }}>
-    <div class="flex min-w-0 flex-1 items-center gap-2">
+    {{- if .Live }} hx-get="/donation-providers/{{ .ID }}" hx-trigger="visibilitychange from:document, every 5s" hx-swap="outerHTML" hx-sync="this:replace"{{ end }}>
+    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         {{ template "bd-mark" .ID }}
         <span class="text-lg font-bold">{{ .Name }}</span>
         {{ if .Connected }}<span class="inline-flex w-max items-center px-2 py-0.5 text-xs font-bold {{ template "bd-provider-chip" .ID }}">connected</span>{{ end }}
+        {{ if eq .Status "connected" }}<span class="text-xs text-emerald-600 dark:text-emerald-400">listening</span>
+        {{ else if eq .Status "connecting" }}<span class="text-xs text-gray-600 dark:text-gray-300">connecting…</span>
+        {{ else if eq .Status "expired" }}<span class="text-xs text-amber-600 dark:text-amber-400">connect again</span>
+        {{ else if eq .Status "error" }}<span class="text-xs text-amber-600 dark:text-amber-400">offline — retrying</span>{{ end }}
+        {{ if .Expiry }}<span class="text-xs text-amber-600 dark:text-amber-400">{{ .Expiry }}</span>{{ end }}
     </div>
     {{ if .Connected }}
     <button type="button" class="shrink-0 text-sm font-bold underline underline-offset-2 hover:text-slate-900 dark:hover:text-white"

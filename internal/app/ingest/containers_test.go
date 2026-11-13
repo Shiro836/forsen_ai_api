@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"app/db"
+	"app/internal/app/donations"
 	"app/pkg/twitch"
 
 	"github.com/google/uuid"
@@ -89,7 +90,7 @@ func newFixture(t *testing.T) *fixture {
 		settings.SetLaneEnabled(lane, true)
 	}
 
-	service := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)), database, &twitch.Config{}, EventSubConfig{})
+	service := NewService(slog.New(slog.NewTextHandler(io.Discard, nil)), database, &twitch.Config{}, EventSubConfig{}, donations.DonationAlertsApp{})
 	service.activeUsers[streamerLogin] = &ingestUserConfig{id: userID, twitchUserID: 1, settings: settings}
 
 	return &fixture{t: t, db: database, service: service, userID: userID}
@@ -292,7 +293,7 @@ func TestContainersLiveChatEvents(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	service := NewService(logger, database, &twitch.Config{}, EventSubConfig{})
+	service := NewService(logger, database, &twitch.Config{}, EventSubConfig{}, donations.DonationAlertsApp{})
 	go func() {
 		if err := service.Run(ctx); err != nil {
 			t.Error(err)

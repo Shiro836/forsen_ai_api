@@ -65,6 +65,7 @@ const (
 	EventKindRaid          EventKind = "raid"
 	EventKindStreak        EventKind = "streak"
 	EventKindFollow        EventKind = "follow"
+	EventKindDonation      EventKind = "donation"
 )
 
 const BitsPerUSD = 100
@@ -81,6 +82,12 @@ type EventMeta struct {
 	GiftCount    int       `json:"gift_count,omitempty"`
 	Viewers      int       `json:"viewers,omitempty"`
 	Streak       int       `json:"streak,omitempty"`
+
+	Provider    string  `json:"provider,omitempty"`
+	ProviderID  string  `json:"provider_id,omitempty"`
+	AmountMinor int64   `json:"amount_minor,omitempty"`
+	Currency    string  `json:"currency,omitempty"`
+	Rate        float64 `json:"rate,omitempty"`
 }
 
 type MsgClass string
@@ -108,6 +115,7 @@ var eventLanes = []struct {
 	{EventKindRaid, MsgClassRaid},
 	{EventKindStreak, MsgClassStreak},
 	{EventKindFollow, MsgClassFollow},
+	{EventKindDonation, MsgClassDonation},
 }
 
 // EventLane is the class of a message that came from an event with no reward

@@ -15,6 +15,7 @@ import (
 
 	"app/cfg"
 	"app/db"
+	"app/internal/app/donations"
 	"app/internal/app/ingest"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,7 +46,16 @@ func main() {
 	}
 	defer database.Close()
 
-	svc := ingest.NewService(logger.WithGroup("ingest"), database, &cfg.Twitch, cfg.Ingest.EventSub)
+	svc := ingest.NewService(
+		logger.WithGroup("ingest"),
+		database,
+		&cfg.Twitch,
+		cfg.Ingest.EventSub,
+		donations.DonationAlertsApp{
+			ClientID:     cfg.DonationAlerts.ClientID,
+			ClientSecret: cfg.DonationAlerts.ClientSecret,
+		},
+	)
 
 	reg := prometheus.NewRegistry()
 	ingest.RegisterMetrics(reg)
