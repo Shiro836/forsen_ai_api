@@ -328,10 +328,9 @@ rounded-md bg-[#F26600] text-[#09161D]
 {{- end }}
 
 {{ define "bd-provider-status" -}}
-<span id="bd-{{ .ID }}-status" class="inline-flex items-center gap-2"
+<span id="bd-{{ .ID }}-status" class="inline-flex flex-wrap items-center gap-2"
     {{- if .Live }} hx-get="/donation-providers/{{ .ID }}/status?state={{ .State }}&amp;card={{ .Connected }}" hx-trigger="visibilitychange from:document, every 5s" hx-swap="outerHTML" hx-sync="this:replace"{{ end }}>
-    {{ if eq .Status "expired" }}<span class="text-xs text-amber-600 dark:text-amber-400">connect again</span>
-    {{ else if eq .Status "error" }}<span class="text-xs text-amber-600 dark:text-amber-400">offline — retrying</span>{{ end }}
+    {{ if .StatusError }}<span class="text-xs text-amber-600 dark:text-amber-400">{{ .StatusError }}</span>{{ end }}
     {{ if .Expiry }}<span class="text-xs text-amber-600 dark:text-amber-400">{{ .Expiry }}</span>{{ end }}
 </span>
 {{- end }}

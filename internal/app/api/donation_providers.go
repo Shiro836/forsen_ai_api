@@ -70,12 +70,12 @@ type bdProvider struct {
 // bdProviderState is what the page polls on. The healthy states look the same
 // to the reader, so they must look the same here or every transition swaps the
 // card for no visible reason.
-func bdProviderState(connected bool, status, expiry string) string {
+func bdProviderState(connected bool, status, expiry, statusError string) string {
 	switch status {
 	case "", donations.StatusConnecting, donations.StatusConnected:
 		status = "ok"
 	}
-	return fmt.Sprintf("%t|%s|%s", connected, status, expiry)
+	return fmt.Sprintf("%t|%s|%s|%s", connected, status, expiry, statusError)
 }
 
 func bdProviderList(links db.DonationProviderLinks) []bdProvider {
@@ -100,19 +100,19 @@ func bdProviderList(links db.DonationProviderLinks) []bdProvider {
 			Status:      se.Status,
 			StatusError: se.Error,
 			Expiry:      seExpiry,
-			State:       bdProviderState(links.StreamElements, se.Status, seExpiry),
+			State:       bdProviderState(links.StreamElements, se.Status, seExpiry, se.Error),
 		},
 		{
 			ID: db.ProviderStreamlabs, Name: "Streamlabs",
 			Connected: links.Streamlabs, Live: true, Href: "/streamlabs/connect",
 			Status: sl.Status, StatusError: sl.Error,
-			State: bdProviderState(links.Streamlabs, sl.Status, ""),
+			State: bdProviderState(links.Streamlabs, sl.Status, "", sl.Error),
 		},
 		{
 			ID: db.ProviderDonationAlerts, Name: "DonationAlerts",
 			Connected: links.DonationAlerts, Live: true, Href: "/donationalerts/connect",
 			Status: da.Status, StatusError: da.Error,
-			State: bdProviderState(links.DonationAlerts, da.Status, ""),
+			State: bdProviderState(links.DonationAlerts, da.Status, "", da.Error),
 		},
 	}
 }

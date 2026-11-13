@@ -123,9 +123,12 @@ func TestBDProvidersStayOutOfTheSaveForm(t *testing.T) {
 func TestBDProviderStatusRenders(t *testing.T) {
 	page := getString("bd-provider-status", &bdProvider{
 		ID: "streamlabs", Live: true, Status: "expired", State: "s",
+		StatusError: "donation provider rejected the credential: err_unauthorized",
 	})
 	assert.Contains(t, page, `id="bd-streamlabs-status"`)
-	assert.Contains(t, page, "connect again")
+	assert.Contains(t, page, "err_unauthorized")
+	assert.NotContains(t, page, "connect again")
+	assert.NotContains(t, page, "offline")
 	assert.Contains(t, page, `hx-get="/donation-providers/streamlabs/status?state=s`)
 	assert.Contains(t, page, `card=false`)
 	assert.NotContains(t, page, "listening")
@@ -143,13 +146,16 @@ func TestBDProviderStatusRenders(t *testing.T) {
 }
 
 func TestBDProviderState(t *testing.T) {
-	healthy := bdProviderState(true, "connected", "")
-	assert.Equal(t, healthy, bdProviderState(true, "connecting", ""))
-	assert.Equal(t, healthy, bdProviderState(true, "", ""))
-	assert.NotEqual(t, healthy, bdProviderState(true, "expired", ""))
-	assert.NotEqual(t, healthy, bdProviderState(true, "error", ""))
-	assert.NotEqual(t, healthy, bdProviderState(false, "connected", ""))
-	assert.NotEqual(t, healthy, bdProviderState(true, "connected", "expires in 3d"))
+	healthy := bdProviderState(true, "connected", "", "")
+	assert.Equal(t, healthy, bdProviderState(true, "connecting", "", ""))
+	assert.Equal(t, healthy, bdProviderState(true, "", "", ""))
+	assert.NotEqual(t, healthy, bdProviderState(true, "expired", "", ""))
+	assert.NotEqual(t, healthy, bdProviderState(true, "error", "", ""))
+	assert.NotEqual(t, healthy, bdProviderState(false, "connected", "", ""))
+	assert.NotEqual(t, healthy, bdProviderState(true, "connected", "expires in 3d", ""))
+	assert.NotEqual(t,
+		bdProviderState(true, "error", "", "err_unauthorized"),
+		bdProviderState(true, "error", "", "timeout"))
 }
 
 func TestBDProviderFor(t *testing.T) {
