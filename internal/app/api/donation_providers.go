@@ -63,6 +63,18 @@ type bdProvider struct {
 	Status      string
 	StatusError string
 	Expiry      string
+	State       string
+}
+
+// bdProviderState is what the page polls on. The healthy states look the same
+// to the reader, so they must look the same here or every transition swaps the
+// card for no visible reason.
+func bdProviderState(connected bool, status, expiry string) string {
+	switch status {
+	case "", donations.StatusConnecting, donations.StatusConnected:
+		status = "ok"
+	}
+	return fmt.Sprintf("%t|%s|%s", connected, status, expiry)
 }
 
 func bdProviderList(links db.DonationProviderLinks) []bdProvider {
@@ -76,6 +88,7 @@ func bdProviderList(links db.DonationProviderLinks) []bdProvider {
 	se := state(db.ProviderStreamElements)
 	sl := state(db.ProviderStreamlabs)
 	da := state(db.ProviderDonationAlerts)
+	seExpiry := tokenExpiry(se.ExpiresAt)
 
 	return []bdProvider{
 		{
@@ -85,17 +98,20 @@ func bdProviderList(links db.DonationProviderLinks) []bdProvider {
 			Live:        links.StreamElements,
 			Status:      se.Status,
 			StatusError: se.Error,
-			Expiry:      tokenExpiry(se.ExpiresAt),
+			Expiry:      seExpiry,
+			State:       bdProviderState(links.StreamElements, se.Status, seExpiry),
 		},
 		{
 			ID: db.ProviderStreamlabs, Name: "Streamlabs",
 			Connected: links.Streamlabs, Live: true, Href: "/streamlabs/connect",
 			Status: sl.Status, StatusError: sl.Error,
+			State: bdProviderState(links.Streamlabs, sl.Status, ""),
 		},
 		{
 			ID: db.ProviderDonationAlerts, Name: "DonationAlerts",
 			Connected: links.DonationAlerts, Live: true, Href: "/donationalerts/connect",
 			Status: da.Status, StatusError: da.Error,
+			State: bdProviderState(links.DonationAlerts, da.Status, ""),
 		},
 	}
 }
@@ -198,7 +214,13 @@ func (api *API) donationProviderBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := html.ExecuteTemplate(w, "bd-provider", bdProviderFor(provider, links)); err != nil {
+	block := bdProviderFor(provider, links)
+	if state := r.URL.Query().Get("state"); state != "" && state == block.State {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if err := html.ExecuteTemplate(w, "bd-provider", block); err != nil {
 		api.logger.Error("render donation provider failed", "err", err, "provider", provider, "user", user.ID)
 	}
 }

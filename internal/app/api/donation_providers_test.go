@@ -96,7 +96,8 @@ func TestBDProvidersStayOutOfTheSaveForm(t *testing.T) {
 	assert.NotContains(t, body, "socket")
 
 	for _, provider := range []string{"streamlabs", "donationalerts"} {
-		assert.Contains(t, body, `hx-get="/donation-providers/`+provider+`" hx-trigger="visibilitychange from:document, every 5s"`)
+		assert.Contains(t, body, `hx-get="/donation-providers/`+provider+`?state=`)
+		assert.Contains(t, body, `hx-trigger="visibilitychange from:document, every 5s"`)
 	}
 	assert.NotContains(t, body, `hx-get="/donation-providers/streamelements"`)
 
@@ -116,6 +117,16 @@ func TestBDProvidersStayOutOfTheSaveForm(t *testing.T) {
 	for _, provider := range []string{"streamelements", "streamlabs", "donationalerts"} {
 		assert.Contains(t, body, `hx-post="/donation-providers/`+provider+`/disconnect"`)
 	}
+}
+
+func TestBDProviderState(t *testing.T) {
+	healthy := bdProviderState(true, "connected", "")
+	assert.Equal(t, healthy, bdProviderState(true, "connecting", ""))
+	assert.Equal(t, healthy, bdProviderState(true, "", ""))
+	assert.NotEqual(t, healthy, bdProviderState(true, "expired", ""))
+	assert.NotEqual(t, healthy, bdProviderState(true, "error", ""))
+	assert.NotEqual(t, healthy, bdProviderState(false, "connected", ""))
+	assert.NotEqual(t, healthy, bdProviderState(true, "connected", "expires in 3d"))
 }
 
 func TestBDProviderFor(t *testing.T) {
