@@ -24,10 +24,11 @@ func (db *DB) GetDonationRates(ctx context.Context) (*DonationRates, error) {
 	)
 	err := db.QueryRow(ctx, `select rates, fetched_at from donation_rates where id = 1`).Scan(&raw, &fetchedAt)
 	if err != nil {
+		err = parseErr(err)
 		if errors.Is(err, ErrNoRows) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get donation rates: %w", parseErr(err))
+		return nil, fmt.Errorf("get donation rates: %w", err)
 	}
 
 	var rates map[string]float64
