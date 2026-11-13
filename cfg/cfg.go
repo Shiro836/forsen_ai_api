@@ -55,6 +55,9 @@ type Config struct {
 
 	Twitch twitch.Config `yaml:"twitch"`
 
+	Streamlabs     StreamlabsConfig     `yaml:"streamlabs"`
+	DonationAlerts DonationAlertsConfig `yaml:"donationalerts"`
+
 	DB db.Config `yaml:"db"`
 
 	InfluxDB InfluxConfig `yaml:"influx"`
@@ -67,6 +70,16 @@ type Config struct {
 	// disables the exporter and the history views; the queue purge then
 	// ignores the export watermark.
 	ClickHouse clickhouse.Config `yaml:"clickhouse"`
+}
+
+type StreamlabsConfig struct {
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+}
+
+type DonationAlertsConfig struct {
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
 }
 
 type IngestConfig struct {

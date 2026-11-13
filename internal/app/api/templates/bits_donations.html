@@ -219,29 +219,128 @@
 </section>
 {{ end }}
 
-{{ define "bd-page" }}
-<form id="bd-page" class="flex flex-col gap-10" hx-post="/bits-donations" hx-target="#bd-page" hx-swap="outerHTML" hx-sync="this:drop">
-    <input type="hidden" name="order" value="{{ .Order.Value }}">
+{{ define "bd-se-mark" }}
+<circle cx="12" cy="12" r="11.15" fill="#05070d"/>
+<circle cx="12" cy="12" r="9.5" fill="none" stroke="#1858FF" stroke-width="1.65"/>
+<path d="M12 2.5a9.5 9.5 0 0 1 8.15 4.6" fill="none" stroke="#00C2FF" stroke-width="1.65" stroke-linecap="round"/>
+<path fill="#FF4B00" d="M4.2 13.8c1.3 1.9 2.6 2.9 4.1 3.05.75.08 1.2-.6 1.75-1.35.4.85.9 1.6 1.95 1.6s1.55-.75 1.95-1.6c.55.75 1 1.43 1.75 1.35 1.5-.15 2.8-1.15 4.1-3.05-1.2 3.5-3.6 5.5-7.8 5.5s-6.6-2-7.8-5.5z"/>
+<path fill="#FFE03A" d="M5.2 12.5c1.05 1.6 2.15 2.5 3.4 2.7.65.08 1-.55 1.5-1.2.35.75.85 1.4 1.9 1.4s1.55-.65 1.9-1.4c.5.65.85 1.28 1.5 1.2 1.25-.2 2.35-1.1 3.4-2.7-.9 2.85-3.1 4.45-6.8 4.45s-5.9-1.6-6.8-4.45z"/>
+<path fill="#F4F6F8" d="M12 4.05c.4 0 .7.2.86.6l1.9 5.2c.28.78.16 1.62-.3 2.25l-.9 1.45h-3.12l-.9-1.45c-.46-.63-.58-1.47-.3-2.25l1.9-5.2c.16-.4.46-.6.86-.6z"/>
+<path fill="#FF5A12" d="M10.45 12.15 9.05 15.2 11.4 14.1z"/>
+<path fill="#FF5A12" d="M13.55 12.15 14.95 15.2 12.6 14.1z"/>
+{{ end }}
 
-    <div class="flex w-[26rem] flex-col gap-3">
+{{ define "bd-sl-mark" }}
+<path fill-rule="evenodd" d="M4.73 8.64A4.94 4.94 0 0 1 5 6.53a2 2 0 0 1 .87-.87 4.94 4.94 0 0 1 2.11-.22h1.6a4.94 4.94 0 0 1 2.11.22 2 2 0 0 1 .87.87 4.94 4.94 0 0 1 .22 2.11V9.1a4.94 4.94 0 0 1-.22 2.11 2 2 0 0 1-.87.87 4.94 4.94 0 0 1-2.11.22h-3a2.77 2.77 0 0 1-1.21-.13 1.13 1.13 0 0 1-.5-.49 3 3 0 0 1-.12-1.21Zm2.86.23a.57.57 0 0 1 .57-.57.58.58 0 0 1 .57.57V10a.58.58 0 0 1-.57.58.57.57 0 0 1-.57-.58Zm2.85-.57a.58.58 0 0 0-.57.57V10a.58.58 0 0 0 .57.58.57.57 0 0 0 .57-.58V8.87a.57.57 0 0 0-.57-.57Z"/>
+<path d="M6.72 3.72a.56.56 0 0 1-.49.63 2.26 2.26 0 0 0-.44.09 3.14 3.14 0 0 0-2.06 2.07 2.15 2.15 0 0 0-.09.43.58.58 0 0 1-.64.5.59.59 0 0 1-.5-.64 3.21 3.21 0 0 1 .14-.63 4.28 4.28 0 0 1 2.81-2.82 4 4 0 0 1 .64-.13.56.56 0 0 1 .63.5Z"/>
+{{ end }}
+
+{{ define "bd-da-mark" }}
+<path d="M12 6.2c.55 0 .98.4 1.05.93.9.28 1.7.85 2.25 1.6.4.55.65 1.2.7 1.9v1.45l.85 1.3c.25.38.25.87 0 1.25-.25.38-.67.62-1.12.62H8.27c-.45 0-.87-.24-1.12-.62a1.25 1.25 0 0 1 0-1.25l.85-1.3V10.63c.05-.7.3-1.35.7-1.9.55-.75 1.35-1.32 2.25-1.6.07-.53.5-.93 1.05-.93Zm-1.35 9.05a1.35 1.35 0 0 0 2.7 0h-2.7Z"/>
+{{ end }}
+
+{{ define "bd-mark" }}
+{{ if eq . "streamelements" }}
+<svg class="h-6 w-6 shrink-0" viewBox="0 0 24 24" aria-hidden="true">{{ template "bd-se-mark" }}</svg>
+{{ else if eq . "streamlabs" }}
+<svg class="h-6 w-6 shrink-0" viewBox="0 0 16 16" aria-hidden="true"><rect width="16" height="16" rx="3.94" fill="#80F5D2"/><g fill="#09161D">{{ template "bd-sl-mark" }}</g></svg>
+{{ else if eq . "donationalerts" }}
+<svg class="h-6 w-6 shrink-0" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6" fill="#F26600"/><g fill="#fff">{{ template "bd-da-mark" }}</g></svg>
+{{ end }}
+{{ end }}
+
+{{ define "bd-mark-btn" }}
+{{ if eq . "streamelements" }}
+<svg class="h-6 w-6 shrink-0" viewBox="0 0 24 24" aria-hidden="true">{{ template "bd-se-mark" }}</svg>
+{{ else if eq . "streamlabs" }}
+<svg class="h-6 w-6 shrink-0" viewBox="2.2 3.2 11.8 9.8" fill="currentColor" aria-hidden="true">{{ template "bd-sl-mark" }}</svg>
+{{ else if eq . "donationalerts" }}
+<svg class="h-6 w-6 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.4c.7 0 1.25.5 1.36 1.18A6.15 6.15 0 0 1 18.8 9.5v2.35l1.5 2.2a1.35 1.35 0 0 1-1.1 2.15H4.8a1.35 1.35 0 0 1-1.1-2.15l1.5-2.2V9.5A6.15 6.15 0 0 1 10.64 3.58 1.45 1.45 0 0 1 12 2.4Zm-2.05 15.15a2.05 2.05 0 0 0 4.1 0h-4.1Z"/></svg>
+{{ end }}
+{{ end }}
+
+{{ define "bd-provider-hit" -}}
+inline-flex w-full items-center justify-center gap-2 px-4 py-2 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900
+{{- end }}
+
+{{ define "bd-provider-btn" -}}
+{{- if eq . "streamelements" -}}
+rounded-full bg-[#1542FF] text-white hover:bg-[#1236D4] focus-visible:ring-[#00C2FF]
+{{- else if eq . "streamlabs" -}}
+rounded-xl bg-[#80F5D2] text-[#09161D] hover:bg-[#6BE8C3] focus-visible:ring-[#09161D]
+{{- else if eq . "donationalerts" -}}
+rounded-md bg-[#F26600] text-white hover:bg-[#D95600] focus-visible:ring-[#F59C07]
+{{- end -}}
+{{- end }}
+
+{{ define "bd-provider-chip" -}}
+{{- if eq . "streamelements" -}}
+rounded-full bg-[#1542FF] text-white
+{{- else if eq . "streamlabs" -}}
+rounded-lg bg-[#80F5D2] text-[#09161D]
+{{- else if eq . "donationalerts" -}}
+rounded-md bg-[#F26600] text-white
+{{- end -}}
+{{- end }}
+
+{{ define "bd-provider" -}}
+<div id="bd-{{ .ID }}" class="flex flex-col gap-2">
+    <h2 class="flex items-center gap-2 text-xl font-bold">{{ template "bd-mark" .ID }}<span>{{ .Name }}</span>{{ if eq .ID "streamelements" }}<button type="button" class="{{template "button-2"}} px-2 py-0.5 text-xs font-bold" onclick="var d=document.getElementById('se-how');if(!d.open)d.show()" hx-get="/guide/streamelements" hx-select="#guide" hx-target="#se-how-body" hx-swap="innerHTML">HOW</button>{{ end }}</h2>
+    {{ if .Connected }}
+    <span class="inline-flex w-max items-center px-2.5 py-0.5 text-sm font-bold {{ template "bd-provider-chip" .ID }}">connected</span>
+    {{ else if .Token }}
+    <form method="post" action="{{ .Post }}" class="flex flex-col gap-2" hx-post="{{ .Post }}" hx-target="#bd-{{ .ID }}" hx-swap="outerHTML" hx-sync="this:replace">
+        <input type="text" name="token" maxlength="4096" autocomplete="off" spellcheck="false" aria-label="{{ .Name }}" class="w-full {{template "input-class"}} px-3 py-2">
+        <button type="submit" class="{{ template "bd-provider-hit" }} {{ template "bd-provider-btn" .ID }}">{{ template "bd-mark-btn" .ID }}connect</button>
+        {{ if .Error }}<span class="text-sm text-amber-600 dark:text-amber-400">{{ .Error }}</span>{{ end }}
+    </form>
+    {{ else }}
+    <a class="{{ template "bd-provider-hit" }} {{ template "bd-provider-btn" .ID }}" target="_blank" rel="noopener noreferrer" href="{{ .Href }}">{{ template "bd-mark-btn" .ID }}connect</a>
+    {{ end }}
+</div>
+{{- end }}
+
+{{ define "bd-providers" -}}
+<div id="bd-providers" class="flex w-80 flex-col gap-6" style="grid-column:2;grid-row:1">
+{{- range . -}}
+{{ template "bd-provider" . }}
+{{- end -}}
+</div>
+<dialog id="se-how" class="fixed z-50 m-0 w-96 overflow-auto border {{template "ui-border-clr"}} bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white" style="top:6rem;left:106rem;right:auto;bottom:auto;height:auto">
+    <form method="dialog" class="flex justify-end border-b {{template "ui-border-clr"}} px-3 py-2">
+        <button class="{{template "button-2"}} px-2 py-0.5 text-xs font-bold">Close</button>
+    </form>
+    <div id="se-how-body" class="p-3"></div>
+</dialog>
+{{- end }}
+
+{{ define "bd-page" -}}
+<form id="bd-page" style="display:contents" hx-post="/bits-donations" hx-target="#bd-page" hx-swap="outerHTML" hx-sync="this:drop">
+{{- /* display:contents keeps the provider column beside play order without putting it in the form Save posts */ -}}
+    <div class="flex w-[26rem] flex-col gap-3" style="grid-column:1;grid-row:1">
+        <input type="hidden" name="order" value="{{ .Order.Value }}">
         <div class="flex items-baseline justify-between">
             <h2 class="text-xl font-bold">Play order</h2>
             <span class="text-sm text-gray-600 dark:text-gray-300">top plays first</span>
         </div>
         {{ template "bd-order" .Order }}
     </div>
-
-    <div class="flex flex-wrap items-start gap-6">
+{{- "" -}}
+    <div class="flex flex-wrap items-start gap-6" style="grid-column:1 / -1;grid-row:2">
         {{ range .Events }}
         {{ template "bd-event" . }}
         {{ end }}
     </div>
-
-    <div class="{{template "save-bar-pinned"}}">
+{{- "" -}}
+    <div class="{{template "save-bar-pinned"}}" style="grid-column:1 / -1;grid-row:3">
         {{ template "save-button" "Save" }}
         {{ template "save-status" .Save }}
     </div>
+{{- "" -}}
 </form>
-{{ end }}
+{{- end }}
 
-{{ template "bd-page" . }}
+<div class="grid min-w-0 w-full items-start gap-10" style="grid-template-columns:26rem minmax(20rem,1fr)">
+{{- template "bd-page" . -}}
+{{- template "bd-providers" .Providers -}}
+</div>

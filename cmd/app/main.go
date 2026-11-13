@@ -147,7 +147,13 @@ func main() {
 
 	conns.SetProcessor(connManager, proc)
 
-	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, agenticHandler, procService, singerClient, historyReader)
+	api := api.NewAPI(&cfg.Api, cfg.Ingest.Host, cfg.Ingest.Port, &cfg.EmoteService, logger.WithGroup("api"), connManager, twitchClient, db, s3, ffmpegClient, ttsHandler, aiHandler, universalHandler, agenticHandler, procService, singerClient, historyReader, api.ProviderApp{
+		ClientID:     cfg.Streamlabs.ClientID,
+		ClientSecret: cfg.Streamlabs.ClientSecret,
+	}, api.ProviderApp{
+		ClientID:     cfg.DonationAlerts.ClientID,
+		ClientSecret: cfg.DonationAlerts.ClientSecret,
+	})
 
 	router := api.NewRouter()
 

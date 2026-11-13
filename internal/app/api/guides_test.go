@@ -21,6 +21,11 @@ func TestObsGuideSteps(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
 
+			// These steps render se_guide.html. TestStreamElementsGuideSteps covers them.
+			if strings.HasPrefix(path, "/guide/streamelements") {
+				return
+			}
+
 			req := httptest.NewRequest("GET", "https://example.com"+path, nil)
 			req = req.WithContext(ctxstore.WithUser(req.Context(), &db.User{TwitchLogin: "streamer"}))
 
@@ -34,6 +39,66 @@ func TestObsGuideSteps(t *testing.T) {
 				t.Fatalf("response for %s does not contain overlay URL", path)
 			}
 		})
+	}
+}
+
+func TestStreamElementsGuideSteps(t *testing.T) {
+	t.Parallel()
+
+	n := 0
+	for path, step := range obsGuideSteps {
+		if !strings.HasPrefix(path, "/guide/streamelements") {
+			continue
+		}
+		n++
+
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest("GET", "https://example.com"+path, nil)
+			req = req.WithContext(ctxstore.WithUser(req.Context(), &db.User{TwitchLogin: "streamer"}))
+
+			body := string((&API{}).obsGuide(req))
+			for _, want := range []string{step.Title, "Step " + strconv.Itoa(step.Number) + " of 3", `id="guide"`} {
+				if !strings.Contains(body, want) {
+					t.Fatalf("response for %s does not contain %q", path, want)
+				}
+			}
+			if strings.Contains(body, "hx-push-url") || strings.Contains(body, `hx-target="#tab-content"`) || strings.Contains(body, "/guide/streamelements/channels") || strings.Contains(body, "Stay on Channels") || strings.Contains(body, "eyJ") || strings.Contains(body, "minmax(650px") {
+				t.Fatalf("response for %s leaves Bits & Donos, still has the Channels step, describes the token, or uses the full-page guide layout", path)
+			}
+
+			lower := strings.ToLower(body)
+			for _, banned := range []string{"oauth", "socket", "callback"} {
+				if strings.Contains(lower, banned) {
+					t.Fatalf("response for %s contains %q", path, banned)
+				}
+			}
+			if strings.Contains(strings.ReplaceAll(lower, "jwt token", ""), "jwt") {
+				t.Fatalf("response for %s uses jwt outside the field label", path)
+			}
+
+			switch path {
+			case "/guide/streamelements":
+				if !strings.Contains(body, `href="https://streamelements.com/dashboard/account/channels"`) || !strings.Contains(body, ">Channels</a>") || strings.Contains(body, "Open this") {
+					t.Fatalf("response for %s does not open the Channels page", path)
+				}
+			case "/guide/streamelements/copy":
+				for _, want := range []string{"Overlay Token", "Copy this", "no show button"} {
+					if !strings.Contains(body, want) {
+						t.Fatalf("response for %s does not contain %q", path, want)
+					}
+				}
+			case "/guide/streamelements/connect":
+				if !strings.Contains(body, "Paste the token in the StreamElements field") || !strings.Contains(body, "connect") || strings.Contains(body, "Paste here") {
+					t.Fatalf("response for %s points at the popup instead of the StreamElements field", path)
+				}
+			}
+		})
+	}
+
+	if n != 3 {
+		t.Fatalf("streamelements guide has %d steps, want 3", n)
 	}
 }
 

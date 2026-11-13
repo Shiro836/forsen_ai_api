@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -51,6 +52,22 @@ var obsGuideSteps = map[string]guideStep{
 		Number:       5,
 		Title:        "Verify the Source",
 		PreviousPath: "/guide/browser-properties",
+	},
+	"/guide/streamelements": {
+		Number:   1,
+		Title:    "Open Channels",
+		NextPath: "/guide/streamelements/copy",
+	},
+	"/guide/streamelements/copy": {
+		Number:       2,
+		Title:        "Copy JWT Token",
+		PreviousPath: "/guide/streamelements",
+		NextPath:     "/guide/streamelements/connect",
+	},
+	"/guide/streamelements/connect": {
+		Number:       3,
+		Title:        "Paste and Connect",
+		PreviousPath: "/guide/streamelements/copy",
 	},
 }
 
@@ -131,6 +148,10 @@ func (api *API) obsGuide(r *http.Request) template.HTML {
 			ErrorCode:    http.StatusNotFound,
 			ErrorMessage: "guide step not found",
 		})
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/guide/streamelements") {
+		return getHtml("se_guide.html", &guidePage{Step: step})
 	}
 
 	return getHtml("obs_guide.html", &guidePage{

@@ -306,9 +306,10 @@ type bdEvent struct {
 const bdSaveStatusID = "bd_save_result"
 
 type bdPage struct {
-	Order  bdOrder
-	Events []*bdEvent
-	Save   saveStatus
+	Order     bdOrder
+	Events    []*bdEvent
+	Providers []bdProvider
+	Save      saveStatus
 }
 
 func newBDOrder(state *bdState) bdOrder {
@@ -448,6 +449,12 @@ func (api *API) bitsDonations(r *http.Request) template.HTML {
 	if err != nil {
 		return getHtml("error.html", &htmlErr{ErrorCode: http.StatusInternalServerError, ErrorMessage: "failed to load characters: " + err.Error()})
 	}
+
+	links, err := api.db.ConnectedDonationProviders(r.Context(), user.ID)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{ErrorCode: http.StatusInternalServerError, ErrorMessage: "failed to load providers: " + err.Error()})
+	}
+	page.Providers = bdProviderList(links)
 
 	return getHtml("bits_donations.html", page)
 }
