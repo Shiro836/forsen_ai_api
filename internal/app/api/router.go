@@ -295,6 +295,9 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Post("/bits-donations/edit", http.HandlerFunc(api.bitsDonationsEdit))
 			router.Get("/bits-donations/{event}/characters", http.HandlerFunc(api.bitsDonationsPicker))
 
+			router.Get("/donation-providers/{provider}", http.HandlerFunc(api.donationProviderBlock))
+			router.Post("/donation-providers/{provider}/disconnect", http.HandlerFunc(api.donationProviderDisconnect))
+
 			router.Post("/streamelements", http.HandlerFunc(api.streamElementsConnect))
 			router.Get("/streamlabs/connect", http.HandlerFunc(api.streamlabsConnect))
 			router.Get("/streamlabs/callback", http.HandlerFunc(api.streamlabsCallback))

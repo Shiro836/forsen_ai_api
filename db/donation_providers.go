@@ -30,10 +30,16 @@ func upsertDonationProviderSQL(userID uuid.UUID, provider, accessToken string, r
 		ToSql()
 }
 
-func (db *DB) UpsertDonationProvider(ctx context.Context, userID uuid.UUID, provider, accessToken string, refreshToken *string, scopes []string) error {
+func validDonationProvider(provider string) bool {
 	switch provider {
 	case ProviderStreamElements, ProviderStreamlabs, ProviderDonationAlerts:
-	default:
+		return true
+	}
+	return false
+}
+
+func (db *DB) UpsertDonationProvider(ctx context.Context, userID uuid.UUID, provider, accessToken string, refreshToken *string, scopes []string) error {
+	if !validDonationProvider(provider) {
 		return fmt.Errorf("upsert donation provider: unknown provider")
 	}
 	if strings.TrimSpace(accessToken) == "" {
@@ -49,6 +55,27 @@ func (db *DB) UpsertDonationProvider(ctx context.Context, userID uuid.UUID, prov
 	}
 	if _, err := db.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("upsert donation provider: %w", err)
+	}
+	return nil
+}
+
+func deleteDonationProviderSQL(userID uuid.UUID, provider string) (string, []any, error) {
+	return psql.Delete("donation_providers").
+		Where(sq.Eq{"user_id": userID, "provider": provider}).
+		ToSql()
+}
+
+func (db *DB) DeleteDonationProvider(ctx context.Context, userID uuid.UUID, provider string) error {
+	if !validDonationProvider(provider) {
+		return fmt.Errorf("delete donation provider: unknown provider")
+	}
+
+	query, args, err := deleteDonationProviderSQL(userID, provider)
+	if err != nil {
+		return fmt.Errorf("delete donation provider: %w", err)
+	}
+	if _, err := db.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("delete donation provider: %w", err)
 	}
 	return nil
 }

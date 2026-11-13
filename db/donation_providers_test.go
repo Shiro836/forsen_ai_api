@@ -54,3 +54,22 @@ func TestUpsertDonationProviderRejectsBadInput(t *testing.T) {
 		t.Fatal("blank token")
 	}
 }
+
+func TestDeleteDonationProviderKeepsUserBound(t *testing.T) {
+	database := &DB{}
+	id := uuid.MustParse("0199f2b3-73f6-78a3-b3aa-ddb84b848502")
+
+	sql, args, err := deleteDonationProviderSQL(id, ProviderStreamlabs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ToLower(sql) != "delete from donation_providers where provider = $1 and user_id = $2" {
+		t.Fatalf("sql: %s", sql)
+	}
+	if !slices.Contains(args, any(ProviderStreamlabs)) || !slices.Contains(args, any(id.String())) {
+		t.Fatalf("args: %#v", args)
+	}
+	if err := database.DeleteDonationProvider(context.Background(), id, "twitch"); err == nil {
+		t.Fatal("unknown provider")
+	}
+}

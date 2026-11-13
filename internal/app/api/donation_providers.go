@@ -16,6 +16,8 @@ import (
 
 	"app/db"
 	"app/pkg/ctxstore"
+
+	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -52,6 +54,7 @@ type bdProvider struct {
 	Name      string
 	Connected bool
 	Token     bool
+	Live      bool
 	Href      string
 	Post      string
 	Error     string
@@ -59,10 +62,27 @@ type bdProvider struct {
 
 func bdProviderList(links db.DonationProviderLinks) []bdProvider {
 	return []bdProvider{
-		{ID: "streamelements", Name: "StreamElements", Connected: links.StreamElements, Token: !links.StreamElements, Post: "/streamelements"},
-		{ID: "streamlabs", Name: "Streamlabs", Connected: links.Streamlabs, Href: "/streamlabs/connect"},
-		{ID: "donationalerts", Name: "DonationAlerts", Connected: links.DonationAlerts, Href: "/donationalerts/connect"},
+		{ID: db.ProviderStreamElements, Name: "StreamElements", Connected: links.StreamElements, Token: !links.StreamElements, Post: "/streamelements"},
+		{ID: db.ProviderStreamlabs, Name: "Streamlabs", Connected: links.Streamlabs, Live: true, Href: "/streamlabs/connect"},
+		{ID: db.ProviderDonationAlerts, Name: "DonationAlerts", Connected: links.DonationAlerts, Live: true, Href: "/donationalerts/connect"},
 	}
+}
+
+func validDonationProvider(provider string) bool {
+	switch provider {
+	case db.ProviderStreamElements, db.ProviderStreamlabs, db.ProviderDonationAlerts:
+		return true
+	}
+	return false
+}
+
+func bdProviderFor(provider string, links db.DonationProviderLinks) bdProvider {
+	for _, p := range bdProviderList(links) {
+		if p.ID == provider {
+			return p
+		}
+	}
+	return bdProvider{}
 }
 
 func (api *API) streamElementsConnect(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +117,53 @@ func (api *API) streamElementsConnect(w http.ResponseWriter, r *http.Request) {
 	block.Connected = true
 	block.Token = false
 	_ = html.ExecuteTemplate(w, "bd-provider", block)
+}
+
+func (api *API) donationProviderBlock(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	provider := chi.URLParam(r, "provider")
+	if !validDonationProvider(provider) {
+		http.Error(w, "unknown provider", http.StatusBadRequest)
+		return
+	}
+
+	links, err := api.db.ConnectedDonationProviders(r.Context(), user.ID)
+	if err != nil {
+		api.logger.Error("load donation providers failed", "err", err, "user", user.ID)
+		http.Error(w, "failed to load providers", http.StatusInternalServerError)
+		return
+	}
+
+	if err := html.ExecuteTemplate(w, "bd-provider", bdProviderFor(provider, links)); err != nil {
+		api.logger.Error("render donation provider failed", "err", err, "provider", provider, "user", user.ID)
+	}
+}
+
+func (api *API) donationProviderDisconnect(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	provider := chi.URLParam(r, "provider")
+	if !validDonationProvider(provider) {
+		http.Error(w, "unknown provider", http.StatusBadRequest)
+		return
+	}
+
+	if err := api.db.DeleteDonationProvider(r.Context(), user.ID, provider); err != nil {
+		api.logger.Error("delete donation provider failed", "err", err, "provider", provider, "user", user.ID)
+		http.Error(w, "failed to disconnect", http.StatusInternalServerError)
+		return
+	}
+
+	if err := html.ExecuteTemplate(w, "bd-provider", bdProviderFor(provider, db.DonationProviderLinks{})); err != nil {
+		api.logger.Error("render donation provider failed", "err", err, "provider", provider, "user", user.ID)
+	}
 }
 
 func (api *API) streamlabsConnect(w http.ResponseWriter, r *http.Request) {

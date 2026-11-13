@@ -260,7 +260,7 @@
 {{ end }}
 
 {{ define "bd-provider-hit" -}}
-inline-flex w-full items-center justify-center gap-2 px-4 py-2 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900
+inline-flex items-center justify-center gap-2 px-4 py-2 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900
 {{- end }}
 
 {{ define "bd-provider-btn" -}}
@@ -269,7 +269,7 @@ rounded-full bg-[#1542FF] text-white hover:bg-[#1236D4] focus-visible:ring-[#00C
 {{- else if eq . "streamlabs" -}}
 rounded-xl bg-[#80F5D2] text-[#09161D] hover:bg-[#6BE8C3] focus-visible:ring-[#09161D]
 {{- else if eq . "donationalerts" -}}
-rounded-md bg-[#F26600] text-white hover:bg-[#D95600] focus-visible:ring-[#F59C07]
+rounded-md bg-[#F26600] text-[#09161D] hover:bg-[#D95600] focus-visible:ring-[#09161D] dark:focus-visible:ring-[#F59C07]
 {{- end -}}
 {{- end }}
 
@@ -279,39 +279,55 @@ rounded-full bg-[#1542FF] text-white
 {{- else if eq . "streamlabs" -}}
 rounded-lg bg-[#80F5D2] text-[#09161D]
 {{- else if eq . "donationalerts" -}}
-rounded-md bg-[#F26600] text-white
+rounded-md bg-[#F26600] text-[#09161D]
 {{- end -}}
 {{- end }}
 
 {{ define "bd-provider" -}}
-<div id="bd-{{ .ID }}" class="flex flex-col gap-2">
-    <h2 class="flex items-center gap-2 text-xl font-bold">{{ template "bd-mark" .ID }}<span>{{ .Name }}</span>{{ if eq .ID "streamelements" }}<button type="button" class="{{template "button-2"}} px-2 py-0.5 text-xs font-bold" onclick="var d=document.getElementById('se-how');if(!d.open)d.show()" hx-get="/guide/streamelements" hx-select="#guide" hx-target="#se-how-body" hx-swap="innerHTML">HOW</button>{{ end }}</h2>
+<div id="bd-{{ .ID }}" class="flex flex-wrap items-center gap-x-6 gap-y-2"
+    {{- if .Live }} hx-get="/donation-providers/{{ .ID }}" hx-trigger="visibilitychange from:document" hx-swap="outerHTML" hx-sync="this:replace"{{ end }}>
+    <div class="flex min-w-0 flex-1 items-center gap-2">
+        {{ template "bd-mark" .ID }}
+        <span class="text-lg font-bold">{{ .Name }}</span>
+        {{ if .Connected }}<span class="inline-flex w-max items-center px-2 py-0.5 text-xs font-bold {{ template "bd-provider-chip" .ID }}">connected</span>{{ end }}
+    </div>
     {{ if .Connected }}
-    <span class="inline-flex w-max items-center px-2.5 py-0.5 text-sm font-bold {{ template "bd-provider-chip" .ID }}">connected</span>
+    <button type="button" class="shrink-0 text-sm font-bold underline underline-offset-2 hover:text-slate-900 dark:hover:text-white"
+        hx-post="/donation-providers/{{ .ID }}/disconnect" hx-target="#bd-{{ .ID }}" hx-swap="outerHTML" hx-sync="this:replace">disconnect</button>
     {{ else if .Token }}
-    <form method="post" action="{{ .Post }}" class="flex flex-col gap-2" hx-post="{{ .Post }}" hx-target="#bd-{{ .ID }}" hx-swap="outerHTML" hx-sync="this:replace">
-        <input type="text" name="token" maxlength="4096" autocomplete="off" spellcheck="false" aria-label="{{ .Name }}" class="w-full {{template "input-class"}} px-3 py-2">
-        <button type="submit" class="{{ template "bd-provider-hit" }} {{ template "bd-provider-btn" .ID }}">{{ template "bd-mark-btn" .ID }}connect</button>
+    <form method="post" action="{{ .Post }}" class="flex w-full min-w-0 basis-full flex-col gap-1" hx-post="{{ .Post }}" hx-target="#bd-{{ .ID }}" hx-swap="outerHTML" hx-sync="this:replace">
+        <div class="flex items-baseline gap-2">
+            <span class="text-xs text-gray-600 dark:text-gray-300">JWT token</span>
+            <button type="button" popovertarget="se-how" class="text-xs font-bold underline underline-offset-2 hover:text-slate-900 dark:hover:text-white"
+                hx-get="/guide/streamelements" hx-select="#guide" hx-target="#se-how-body" hx-swap="innerHTML" hx-trigger="click once">how</button>
+        </div>
+        <div class="flex min-w-0 items-center gap-2">
+            <input type="text" name="token" maxlength="4096" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-label="JWT token" placeholder="paste token" class="min-w-0 flex-1 {{template "input-class"}} px-3 py-1.5 select-all [&:not(:placeholder-shown)]:blur-sm">
+            <button type="submit" class="{{ template "bd-provider-hit" }} {{ template "bd-provider-btn" .ID }} w-36 shrink-0">{{ template "bd-mark-btn" .ID }}connect</button>
+        </div>
         {{ if .Error }}<span class="text-sm text-amber-600 dark:text-amber-400">{{ .Error }}</span>{{ end }}
     </form>
     {{ else }}
-    <a class="{{ template "bd-provider-hit" }} {{ template "bd-provider-btn" .ID }}" target="_blank" rel="noopener noreferrer" href="{{ .Href }}">{{ template "bd-mark-btn" .ID }}connect</a>
+    <a class="{{ template "bd-provider-hit" }} {{ template "bd-provider-btn" .ID }} w-36 shrink-0" target="_blank" rel="noopener noreferrer" href="{{ .Href }}">{{ template "bd-mark-btn" .ID }}connect</a>
     {{ end }}
 </div>
 {{- end }}
 
 {{ define "bd-providers" -}}
-<div id="bd-providers" class="flex w-80 flex-col gap-6" style="grid-column:2;grid-row:1">
-{{- range . -}}
-{{ template "bd-provider" . }}
-{{- end -}}
+<div id="bd-providers" class="flex min-w-0 flex-col gap-3" style="grid-column:2;grid-row:1">
+    <h2 class="text-xl font-bold">Donation providers</h2>
+    <div id="bd-provider-card" class="flex flex-col gap-4 rounded border-2 {{template "ui-border-clr"}} p-5" style="anchor-name:--bd-providers">
+        {{- range . -}}
+        {{ template "bd-provider" . }}
+        {{- end -}}
+    </div>
+    <div id="se-how" popover class="w-96 max-w-[calc(100vw-2rem)] overflow-auto border {{template "ui-border-clr"}} bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white" style="position-anchor:--bd-providers;top:anchor(bottom);right:anchor(--bd-page right);left:auto;bottom:auto;margin:0.75rem 0 0 0;max-height:calc(100vh - 22rem);position-try-fallbacks:flip-block">
+        <div class="flex justify-end border-b {{template "ui-border-clr"}} px-3 py-2">
+            <button type="button" popovertarget="se-how" popovertargetaction="hide" class="{{template "button-2"}} px-2 py-0.5 text-xs font-bold">close</button>
+        </div>
+        <div id="se-how-body" class="p-3"></div>
+    </div>
 </div>
-<dialog id="se-how" class="fixed z-50 m-0 w-96 overflow-auto border {{template "ui-border-clr"}} bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white" style="top:6rem;left:106rem;right:auto;bottom:auto;height:auto">
-    <form method="dialog" class="flex justify-end border-b {{template "ui-border-clr"}} px-3 py-2">
-        <button class="{{template "button-2"}} px-2 py-0.5 text-xs font-bold">Close</button>
-    </form>
-    <div id="se-how-body" class="p-3"></div>
-</dialog>
 {{- end }}
 
 {{ define "bd-page" -}}
@@ -340,7 +356,7 @@ rounded-md bg-[#F26600] text-white
 </form>
 {{- end }}
 
-<div class="grid min-w-0 w-full items-start gap-10" style="grid-template-columns:26rem minmax(20rem,1fr)">
+<div class="grid min-w-0 w-full items-start gap-6" style="grid-template-columns:26rem 26rem minmax(0,1fr);anchor-name:--bd-page">
 {{- template "bd-page" . -}}
 {{- template "bd-providers" .Providers -}}
 </div>
