@@ -202,7 +202,7 @@ func TestSpokenText(t *testing.T) {
 		{"raid", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindRaid, Viewers: 40}}, "a is raiding with 40 viewers"},
 		{"streak", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindStreak, Streak: 7}}, "a watched 7 streams in a row"},
 		{"follow", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindFollow}}, "a followed"},
-		{"donation without a message", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindDonation, AmountText: "4.20 USD"}}, "a donated 4.20 USD"},
+		{"donation without a message", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindDonation, AmountText: "4.20", Currency: "USD"}}, "a donated 4.20"},
 		{"cheer without a message", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindCheer, Bits: 100}}, "a cheered 100 bits"},
 		{"a value the event lacks renders empty", TwitchMessage{TwitchLogin: "a", Event: &EventMeta{Kind: EventKindGiftSubs, GiftCount: 5}}, "a dropped 5 tier  subs"},
 	}
@@ -210,6 +210,20 @@ func TestSpokenText(t *testing.T) {
 		if got := settings.SpokenText(&tc.msg); got != tc.want {
 			t.Errorf("%s: SpokenText = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestSpokenTextDonationCurrency(t *testing.T) {
+	settings := &UserSettings{}
+	if err := settings.SetEventLine(EventLineDonation, "{user} donated {amount} {currency}"); err != nil {
+		t.Fatal(err)
+	}
+	msg := TwitchMessage{
+		TwitchLogin: "a",
+		Event:       &EventMeta{Kind: EventKindDonation, AmountText: "4.20", Currency: "USD"},
+	}
+	if got := settings.SpokenText(&msg); got != "a donated 4.20 USD" {
+		t.Fatalf("SpokenText = %q", got)
 	}
 }
 

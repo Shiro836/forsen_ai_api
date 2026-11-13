@@ -37,7 +37,7 @@ func MinorUnits(amount float64, currency string) int64 {
 }
 
 // FormatAmount renders a minor-unit amount for the spoken line, keeping the
-// currency's own precision.
+// currency's own precision. The currency code is a separate placeholder.
 func FormatAmount(amountMinor int64, currency string) string {
 	if amountMinor <= 0 {
 		return ""
@@ -48,7 +48,7 @@ func FormatAmount(amountMinor int64, currency string) string {
 	}
 	exp := currencyExponentFor(currency)
 	major := float64(amountMinor) / math.Pow10(exp)
-	return fmt.Sprintf("%.*f %s", exp, major, currency)
+	return fmt.Sprintf("%.*f", exp, major)
 }
 
 // USDMinor converts a minor-unit amount at units-per-USD. ok is false when the

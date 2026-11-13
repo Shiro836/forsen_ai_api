@@ -121,7 +121,7 @@ func TestContainersStreamElementsAstro(t *testing.T) {
 	if event.Provider != db.ProviderStreamElements || event.ProviderID == "" {
 		t.Fatalf("event: %+v", event)
 	}
-	if event.AmountMinor != 420 || event.AmountText != "4.20 USD" || event.Currency != "USD" || event.USD != 4.2 {
+	if event.AmountMinor != 420 || event.AmountText != "4.20" || event.Currency != "USD" || event.USD != 4.2 {
 		t.Fatalf("money: %+v", event)
 	}
 	if donation.TwitchMessage.Message != "containers probe" || donation.TwitchMessage.TwitchLogin != "ContainersProbe" {

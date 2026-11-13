@@ -28,9 +28,9 @@ func TestFormatAmount(t *testing.T) {
 		currency    string
 		want        string
 	}{
-		{420, "USD", "4.20 USD"},
-		{500, "JPY", "500 JPY"},
-		{1234, "KWD", "1.234 KWD"},
+		{420, "USD", "4.20"},
+		{500, "JPY", "500"},
+		{1234, "KWD", "1.234"},
 		{0, "USD", ""},
 	}
 	for _, tc := range cases {

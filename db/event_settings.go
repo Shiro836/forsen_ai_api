@@ -123,7 +123,7 @@ var eventLineSpecs = map[EventLine]eventLineSpec{
 	EventLineRaid:     {"{user} is raiding with {viewers} viewers", []string{"user", "viewers"}},
 	EventLineStreak:   {"{user} watched {streak} streams in a row", []string{"user", "streak"}},
 	EventLineFollow:   {"{user} followed", []string{"user"}},
-	EventLineDonation: {"{user} donated {amount}", []string{"user", "amount"}},
+	EventLineDonation: {"{user} donated {amount}", []string{"user", "amount", "currency"}},
 	EventLineBits:     {"{user} cheered {bits} bits", []string{"user", "bits"}},
 }
 
@@ -181,14 +181,15 @@ func (s *UserSettings) SpokenText(msg *TwitchMessage) string {
 		return strconv.Itoa(n)
 	}
 	values := map[string]string{
-		"user":    msg.TwitchLogin,
-		"tier":    number(msg.Event.Tier),
-		"months":  number(msg.Event.Months),
-		"count":   number(msg.Event.GiftCount),
-		"viewers": number(msg.Event.Viewers),
-		"streak":  number(msg.Event.Streak),
-		"amount":  msg.Event.AmountText,
-		"bits":    number(msg.Event.Bits),
+		"user":     msg.TwitchLogin,
+		"tier":     number(msg.Event.Tier),
+		"months":   number(msg.Event.Months),
+		"count":    number(msg.Event.GiftCount),
+		"viewers":  number(msg.Event.Viewers),
+		"streak":   number(msg.Event.Streak),
+		"amount":   msg.Event.AmountText,
+		"currency": msg.Event.Currency,
+		"bits":     number(msg.Event.Bits),
 	}
 
 	return eventLinePlaceholder.ReplaceAllStringFunc(s.EventLine(line), func(placeholder string) string {
