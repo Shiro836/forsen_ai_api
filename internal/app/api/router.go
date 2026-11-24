@@ -189,6 +189,7 @@ func (api *API) NewRouter() *chi.Mux {
 
 		// Public voices list (short names with images)
 		router.Get("/voices", api.navPublic(api.voicesPublic))
+		router.Get("/voices/{twitch_login}", api.navPublic(api.voicesStreamer))
 		router.Get("/voices/{voice}/sample", http.HandlerFunc(api.voiceSample))
 		router.Get("/sounds/{id}", http.HandlerFunc(api.soundGet))
 		router.Get("/filters/{id}/sample", http.HandlerFunc(api.filterSample))

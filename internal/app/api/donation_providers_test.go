@@ -263,18 +263,16 @@ func TestProviderEndpoints(t *testing.T) {
 	assert.Equal(t, "https://streamlabs.com/api/v2.0/authorize", streamlabsAuthorizeURL)
 	assert.Equal(t, "https://streamlabs.com/api/v2.0/token", streamlabsTokenURL)
 	assert.NotContains(t, streamlabsTokenURL, "/socket/token")
-	assert.Equal(t, "https://beta2.forsen.fun/streamlabs/callback", streamlabsRedirectURI)
-	assert.NotContains(t, streamlabsRedirectURI, "donationalerts")
 	assert.Equal(t, "https://www.donationalerts.com/oauth/authorize", donationAlertsAuthorizeURL)
 	assert.Equal(t, "https://www.donationalerts.com/oauth/token", donationAlertsTokenURL)
-	assert.Equal(t, "https://beta2.forsen.fun/donationalerts/callback", donationAlertsRedirectURI)
-	assert.NotEqual(t, "https://forsen.fun/donationalerts/callback", donationAlertsRedirectURI)
 	assert.Equal(t, []string{"oauth-user-show", "oauth-donation-subscribe", "oauth-donation-index"}, donationAlertsScopes)
 }
 
-func TestStreamlabsStartUsesBetaRedirect(t *testing.T) {
+func TestStreamlabsStartUsesCurrentHost(t *testing.T) {
+	const redirectURI = "https://forsen.fun/streamlabs/callback"
 	api := &API{streamlabs: ProviderApp{ClientID: "cid", ClientSecret: "topsecret"}}
 	req := httptest.NewRequest(http.MethodGet, "/streamlabs/connect", nil)
+	req.Host = "forsen.fun"
 	rec := httptest.NewRecorder()
 	api.streamlabsConnect(rec, req)
 
@@ -288,7 +286,7 @@ func TestStreamlabsStartUsesBetaRedirect(t *testing.T) {
 	q := loc.Query()
 	assert.Equal(t, "code", q.Get("response_type"))
 	assert.Equal(t, "cid", q.Get("client_id"))
-	assert.Equal(t, streamlabsRedirectURI, q.Get("redirect_uri"))
+	assert.Equal(t, redirectURI, q.Get("redirect_uri"))
 	assert.Equal(t, streamlabsScope, q.Get("scope"))
 	assert.NotContains(t, rec.Header().Get("Location"), "topsecret")
 
@@ -305,9 +303,11 @@ func TestStreamlabsStartUsesBetaRedirect(t *testing.T) {
 	assert.Equal(t, http.SameSiteLaxMode, state.SameSite)
 }
 
-func TestDonationAlertsStartUsesBetaRedirect(t *testing.T) {
+func TestDonationAlertsStartUsesCurrentHost(t *testing.T) {
+	const redirectURI = "https://forsen.fun/donationalerts/callback"
 	api := &API{donationAlerts: ProviderApp{ClientID: "cid", ClientSecret: "topsecret"}}
 	req := httptest.NewRequest(http.MethodGet, "/donationalerts/connect", nil)
+	req.Host = "forsen.fun"
 	rec := httptest.NewRecorder()
 	api.donationAlertsConnect(rec, req)
 
@@ -318,10 +318,9 @@ func TestDonationAlertsStartUsesBetaRedirect(t *testing.T) {
 	assert.Equal(t, "/oauth/authorize", loc.Path)
 	q := loc.Query()
 	assert.Equal(t, "code", q.Get("response_type"))
-	assert.Equal(t, donationAlertsRedirectURI, q.Get("redirect_uri"))
+	assert.Equal(t, redirectURI, q.Get("redirect_uri"))
 	assert.Equal(t, strings.Join(donationAlertsScopes, " "), q.Get("scope"))
 	assert.NotContains(t, rec.Header().Get("Location"), "topsecret")
-	assert.NotEqual(t, "https://forsen.fun/donationalerts/callback", q.Get("redirect_uri"))
 }
 
 func TestProviderStartWithoutApp(t *testing.T) {
@@ -413,7 +412,7 @@ func TestFetchProviderTokenPostsForm(t *testing.T) {
 	form.Set("grant_type", "authorization_code")
 	form.Set("client_id", "cid")
 	form.Set("client_secret", "topsecret")
-	form.Set("redirect_uri", streamlabsRedirectURI)
+	form.Set("redirect_uri", "https://forsen.fun/streamlabs/callback")
 	form.Set("code", "the-code")
 
 	tok, err := fetchProviderToken(context.Background(), srv.Client(), srv.URL+"/token", form)
@@ -426,7 +425,7 @@ func TestFetchProviderTokenPostsForm(t *testing.T) {
 	assert.Equal(t, "authorization_code", parsed.Get("grant_type"))
 	assert.Equal(t, "cid", parsed.Get("client_id"))
 	assert.Equal(t, "topsecret", parsed.Get("client_secret"))
-	assert.Equal(t, streamlabsRedirectURI, parsed.Get("redirect_uri"))
+	assert.Equal(t, "https://forsen.fun/streamlabs/callback", parsed.Get("redirect_uri"))
 	assert.Equal(t, "the-code", parsed.Get("code"))
 	assert.Equal(t, "atk", tok.AccessToken)
 	assert.Equal(t, "rtk", tok.RefreshToken)

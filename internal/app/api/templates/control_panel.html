@@ -236,6 +236,20 @@
                 return div;
             }
 
+            function renderType(cell, type, bits) {
+                cell.replaceChildren();
+                if (bits > 0) {
+                    const paid = document.createElement('span');
+                    paid.className = 'inline-flex items-center gap-1 mr-1';
+                    paid.innerHTML = '{{template "bits-diamond"}}';
+                    const amount = document.createElement('span');
+                    amount.textContent = bits;
+                    paid.appendChild(amount);
+                    cell.appendChild(paid);
+                }
+                cell.appendChild(document.createTextNode(type));
+            }
+
             // Helper function to render images into a cell
             function renderImages(cell, imageUrls, useAbsolute) {
                 cell.innerHTML = '';
@@ -296,7 +310,7 @@
                             row.id = id;
 
                             row.insertCell(-1).appendChild(textDiv(data['requested_by'], data['requester_filtered']));
-                            row.insertCell(-1).textContent = data['type'];
+                            renderType(row.insertCell(-1), data['type'], data['bits']);
                             row.insertCell(-1).textContent = data['char_name'];
                             row.insertCell(-1).appendChild(textDiv(data['request'], data['request_filtered']));
                             row.insertCell(-1).appendChild(textDiv(data['response'], data['filtered_text']));
@@ -319,7 +333,7 @@
                         }
                         else {
                             row.cells[0].replaceChildren(textDiv(data['requested_by'], data['requester_filtered']));
-                            row.cells[1].textContent = data['type'];
+                            renderType(row.cells[1], data['type'], data['bits']);
                             row.cells[2].textContent = data['char_name'];
                             row.cells[3].replaceChildren(textDiv(data['request'], data['request_filtered']));
                             row.cells[4].replaceChildren(textDiv(data['response'], data['filtered_text']));

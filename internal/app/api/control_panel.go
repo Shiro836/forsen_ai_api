@@ -411,6 +411,11 @@ loop:
 
 				logger.Info("image urls", "image_urls", imageURLs)
 
+				var paidBits int
+				if ev := dbMessage.TwitchMessage.Event; ev != nil && (ev.Kind == db.EventKindCustomPowerUp || ev.Kind == db.EventKindCheer) {
+					paidBits = ev.Bits
+				}
+
 				data, err = json.Marshal(&msgUpsert{
 					ID: dbMessage.ID.String(),
 
@@ -418,6 +423,7 @@ loop:
 
 					Type:     rewardTypeStr,
 					CharName: charName,
+					Bits:     paidBits,
 
 					Request:  request,
 					Response: msgData.AIResponse,
@@ -482,6 +488,10 @@ type msgUpsert struct {
 
 	Type     string `json:"type"`
 	CharName string `json:"char_name"`
+
+	// Bits is what a power-up or cheer cost; zero for redemptions paid with
+	// channel points.
+	Bits int `json:"bits,omitempty"`
 
 	Request  string `json:"request"`
 	Response string `json:"response"`

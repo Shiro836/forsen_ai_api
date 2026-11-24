@@ -12,6 +12,8 @@ window.OverlayPlayer = class OverlayPlayer {
         this.textEl = opts.textEl;
         this.onTrackFinished = opts.onTrackFinished || null;
         this.onTrackActivated = opts.onTrackActivated || null;
+        this.onChunk = opts.onChunk || null;
+        this.onTrackDone = opts.onTrackDone || null;
 
         this.masterGain = this.audioContext.createGain();
         this.analyser = this.audioContext.createAnalyser();
@@ -71,6 +73,7 @@ window.OverlayPlayer = class OverlayPlayer {
             const track = this._ensureTrack(header.track_id, header.msg_id);
             track.done = true;
             track.totalDurMs = header.total_dur_ms || 0;
+            if (this.onTrackDone) this.onTrackDone(header);
             return true;
         }
 
@@ -82,6 +85,8 @@ window.OverlayPlayer = class OverlayPlayer {
             words: header.words || [],
             mp3: buf.slice(5 + headerLen),
         };
+
+        if (this.onChunk) this.onChunk(header, chunk.mp3);
 
         const track = this._ensureTrack(header.track_id, header.msg_id);
 

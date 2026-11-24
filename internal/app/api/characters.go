@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -662,6 +663,47 @@ func (api *API) voicesPublic(r *http.Request) template.HTML {
 		})
 	}
 
+	return api.renderVoices(r, items)
+}
+
+// voicesStreamer renders the voices page for one streamer's channel: every
+// public voice universal TTS/AI accepts there, minus the characters the
+// streamer switched off.
+func (api *API) voicesStreamer(r *http.Request) template.HTML {
+	streamer, err := api.db.GetUserByTwitchLogin(r.Context(), chi.URLParam(r, "twitch_login"))
+	if err != nil {
+		code := http.StatusInternalServerError
+		message := err.Error()
+		if errors.Is(err, db.ErrNoRows) {
+			code = http.StatusNotFound
+			message = "unknown streamer"
+		}
+
+		return getHtml("error.html", &htmlErr{ErrorCode: code, ErrorMessage: message})
+	}
+
+	settings, err := api.db.GetUserSettings(r.Context(), streamer.ID)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: err.Error(),
+		})
+	}
+
+	items, err := api.db.GetPublicShortNamedCards(r.Context())
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: err.Error(),
+		})
+	}
+
+	items = slices.DeleteFunc(items, func(it db.PublicShortName) bool { return settings.CardDisabled(it.ID) })
+
+	return api.renderVoices(r, items)
+}
+
+func (api *API) renderVoices(r *http.Request, items []db.PublicShortName) template.HTML {
 	list := make([]voiceItem, 0, len(items))
 	for _, it := range items {
 		list = append(list, voiceItem{ID: it.ID, Name: it.ShortCharName})
@@ -669,9 +711,11 @@ func (api *API) voicesPublic(r *http.Request) template.HTML {
 
 	var melodies []ai.Melody
 	if api.singer != nil {
-		melodies, err = api.singer.Melodies(r.Context())
+		m, err := api.singer.Melodies(r.Context())
 		if err != nil {
 			api.logger.Warn("failed to list melodies", "err", err)
+		} else {
+			melodies = m
 		}
 	}
 
@@ -688,7 +732,7 @@ func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt := "Voices: " + r.Host + "/voices"
+	prompt := "Voices: " + r.Host + "/voices/" + user.TwitchLogin
 
 	if err := api.createRewardAndUpsert(r.Context(), user, nil, "", db.TwitchRewardUniversalTTS, prompt); err != nil {
 		submitTab(w, "error.html", &htmlErr{
@@ -805,7 +849,7 @@ func (api *API) universalAIReward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prompt := "Name a character first: forsen: tell me a joke. Characters: " + r.Host + "/voices"
+	prompt := "Name a character first: forsen: tell me a joke. Characters: " + r.Host + "/voices/" + user.TwitchLogin
 
 	if err := api.createRewardAndUpsert(r.Context(), user, nil, "", db.TwitchRewardUniversalAI, prompt); err != nil {
 		submitTab(w, "error.html", &htmlErr{

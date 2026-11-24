@@ -23,12 +23,6 @@ import (
 )
 
 const (
-	// Registered on the beta apps. Streamlabs also has
-	// https://forsen.fun/donationalerts/callback on file; that URI is a
-	// different DonationAlerts app and is not this redirect.
-	streamlabsRedirectURI     = "https://beta2.forsen.fun/streamlabs/callback"
-	donationAlertsRedirectURI = "https://beta2.forsen.fun/donationalerts/callback"
-
 	streamlabsAuthorizeURL = "https://streamlabs.com/api/v2.0/authorize"
 	streamlabsTokenURL     = "https://streamlabs.com/api/v2.0/token"
 	streamlabsScope        = "socket.token donations.read"
@@ -336,18 +330,18 @@ func (api *API) donationProviderDisconnect(w http.ResponseWriter, r *http.Reques
 }
 
 func (api *API) streamlabsConnect(w http.ResponseWriter, r *http.Request) {
-	api.beginProviderOAuth(w, r, api.streamlabs, streamlabsAuthorizeURL, streamlabsRedirectURI, streamlabsScope)
+	api.beginProviderOAuth(w, r, api.streamlabs, streamlabsAuthorizeURL, streamlabsRedirectURI(r), streamlabsScope)
 }
 
 func (api *API) donationAlertsConnect(w http.ResponseWriter, r *http.Request) {
-	api.beginProviderOAuth(w, r, api.donationAlerts, donationAlertsAuthorizeURL, donationAlertsRedirectURI, strings.Join(donationAlertsScopes, " "))
+	api.beginProviderOAuth(w, r, api.donationAlerts, donationAlertsAuthorizeURL, donationAlertsRedirectURI(r), strings.Join(donationAlertsScopes, " "))
 }
 
 func (api *API) streamlabsCallback(w http.ResponseWriter, r *http.Request) {
 	api.finishProviderOAuth(w, r, providerOAuth{
 		App:         api.streamlabs,
 		TokenURL:    streamlabsTokenURL,
-		RedirectURI: streamlabsRedirectURI,
+		RedirectURI: streamlabsRedirectURI(r),
 		Provider:    db.ProviderStreamlabs,
 		Name:        "Streamlabs",
 	})
@@ -357,12 +351,20 @@ func (api *API) donationAlertsCallback(w http.ResponseWriter, r *http.Request) {
 	api.finishProviderOAuth(w, r, providerOAuth{
 		App:         api.donationAlerts,
 		TokenURL:    donationAlertsTokenURL,
-		RedirectURI: donationAlertsRedirectURI,
+		RedirectURI: donationAlertsRedirectURI(r),
 		Provider:    db.ProviderDonationAlerts,
 		Name:        "DonationAlerts",
 		KeepRefresh: true,
 		Scopes:      donationAlertsScopes,
 	})
+}
+
+func streamlabsRedirectURI(r *http.Request) string {
+	return "https://" + r.Host + "/streamlabs/callback"
+}
+
+func donationAlertsRedirectURI(r *http.Request) string {
+	return "https://" + r.Host + "/donationalerts/callback"
 }
 
 func writeErrPage(w http.ResponseWriter, r *http.Request, code int, message string) {

@@ -9,6 +9,10 @@
     let player = null;
     let characterID = null;
 
+    // Per-track audio kept for the download links: track_id -> { msgId, text, chunks }
+    const trackBuffers = new Map();
+    let downloadEntries = [];
+
     function cleanup() {
         if (ws) {
             ws.close();
@@ -18,6 +22,7 @@
             player.destroy();
             player = null;
         }
+        clearDownloads();
     }
 
     function base64ToArrayBuffer(base64) {
@@ -42,6 +47,8 @@
                 cardEl: document.getElementById('try_caption_card'),
                 windowEl: document.getElementById('try_caption_window'),
                 textEl: document.getElementById('try_caption_text'),
+                onChunk: collectChunk,
+                onTrackDone: finishTrack,
             });
         }
         return player;
@@ -54,6 +61,101 @@
         if (!url || url.trim().length <= 1) return;
         charImg.src = url;
         charImg.style.opacity = "1";
+    }
+
+    // Each chunk is a standalone MP3 with its own ID3v2 tag; a tag in the
+    // middle of the joined file makes decoders fail at every sentence
+    // boundary, so only the first chunk keeps its tag.
+    function stripID3(bytes) {
+        if (bytes.length < 10 || bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) {
+            return bytes;
+        }
+        const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
+        const footer = (bytes[5] & 0x10) ? 10 : 0;
+        return bytes.subarray(10 + size + footer);
+    }
+
+    function collectChunk(header, mp3) {
+        if (!header || !header.track_id) return;
+        let track = trackBuffers.get(header.track_id);
+        if (!track) {
+            track = { msgId: header.msg_id, text: "", chunks: [] };
+            trackBuffers.set(header.track_id, track);
+        }
+        // decodeAudioData detaches the frame buffer the player decodes, so the
+        // page keeps its own copy for the download
+        track.chunks.push({ seq: header.seq || 0, bytes: new Uint8Array(mp3.slice(0)) });
+        if (!track.text) track.text = header.text || "";
+    }
+
+    function finishTrack(header) {
+        if (!header || !header.track_id) return;
+        const track = trackBuffers.get(header.track_id);
+        trackBuffers.delete(header.track_id);
+        if (!track || track.chunks.length === 0) return;
+
+        track.chunks.sort((a, b) => a.seq - b.seq);
+        const parts = track.chunks.map((c, i) => (i === 0 ? c.bytes : stripID3(c.bytes)));
+        addDownloadLink(new Blob(parts, { type: "audio/mpeg" }), track.text);
+    }
+
+    function dropTrackBuffers(msgId) {
+        if (!msgId) return;
+        for (const [trackId, track] of trackBuffers) {
+            if (track.msgId === msgId) trackBuffers.delete(trackId);
+        }
+    }
+
+    function downloadName(text) {
+        const slug = (text || "")
+            .replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 60)
+            .trim();
+        return "baj-" + (slug || "audio") + ".mp3";
+    }
+
+    function addDownloadLink(blob, text) {
+        const container = document.getElementById("try_downloads");
+        if (!container) return;
+
+        const row = document.createElement("div");
+        row.className = "flex min-w-0 items-center gap-3";
+
+        const label = document.createElement("span");
+        label.className = "min-w-0 flex-1 truncate text-sm opacity-70";
+        label.textContent = text || "Audio";
+        row.appendChild(label);
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.className = "shrink-0 rounded border-2 border-slate-300 px-3 py-1 text-sm hover:border-slate-700 dark:border-slate-700 dark:hover:border-twitch-light";
+        link.href = url;
+        link.download = downloadName(text);
+        link.textContent = "Download MP3";
+        row.appendChild(link);
+
+        container.appendChild(row);
+        container.classList.remove("hidden");
+
+        downloadEntries.push({ url, row });
+        while (downloadEntries.length > 20) {
+            const old = downloadEntries.shift();
+            URL.revokeObjectURL(old.url);
+            old.row.remove();
+        }
+    }
+
+    function clearDownloads() {
+        for (const entry of downloadEntries) {
+            URL.revokeObjectURL(entry.url);
+            entry.row.remove();
+        }
+        downloadEntries = [];
+        trackBuffers.clear();
+        const container = document.getElementById("try_downloads");
+        if (container) container.classList.add("hidden");
     }
 
     function setButtonsEnabled(enabled) {
@@ -109,6 +211,12 @@
                 try {
                     const meta = JSON.parse(dataStr);
                     ensurePlayer().registerMeta(meta.track_id, meta.msg_id);
+                    let track = trackBuffers.get(meta.track_id);
+                    if (!track) {
+                        track = { msgId: meta.msg_id, text: "", chunks: [] };
+                        trackBuffers.set(meta.track_id, track);
+                    }
+                    track.text = meta.text || track.text;
                 } catch (e) { }
                 break;
             }
@@ -118,6 +226,7 @@
                     const payload = JSON.parse(dataStr);
                     if (payload && payload.msg_id) msgId = payload.msg_id;
                 } catch (e) { }
+                dropTrackBuffers(msgId);
                 if (player) player.skip(msgId, true);
                 setButtonsEnabled(true);
                 break;

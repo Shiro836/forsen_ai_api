@@ -49,6 +49,10 @@ type TwitchReward struct {
 	Data *TwitchRewardData `json:"data"`
 }
 
+// UpsertTwitchReward binds a Twitch reward to a character, or with a nil card
+// to a special reward type. A character can hold a points reward and a bits
+// power-up at once, so bindings are keyed by reward id and never replace each
+// other.
 func (db *DB) UpsertTwitchReward(ctx context.Context, userID uuid.UUID, CardID *uuid.UUID, twitchRewardID string, rewardType TwitchRewardType) error {
 	var query string
 	if CardID == nil {
@@ -60,8 +64,7 @@ func (db *DB) UpsertTwitchReward(ctx context.Context, userID uuid.UUID, CardID *
 				reward_type
 			)
 			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (user_id, reward_type) WHERE card_id IS NULL DO UPDATE
-			SET twitch_reward_id = excluded.twitch_reward_id
+			ON CONFLICT (user_id, reward_type, twitch_reward_id) WHERE card_id IS NULL DO NOTHING
 		`
 	} else {
 		query = `
@@ -72,8 +75,7 @@ func (db *DB) UpsertTwitchReward(ctx context.Context, userID uuid.UUID, CardID *
 				reward_type
 			)
 			VALUES ($1, $2, $3, $4)
-			ON CONFLICT (user_id, card_id, reward_type) WHERE card_id IS NOT NULL DO UPDATE
-			SET twitch_reward_id = excluded.twitch_reward_id
+			ON CONFLICT (user_id, card_id, reward_type, twitch_reward_id) WHERE card_id IS NOT NULL DO NOTHING
 		`
 	}
 
