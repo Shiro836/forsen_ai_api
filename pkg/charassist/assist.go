@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"app/db"
 	"app/pkg/archive"
@@ -201,9 +202,10 @@ func (a *Assistant) Generate(ctx context.Context, prompt string, current Draft) 
 	}
 
 	userMsg := buildCardUserPrompt(prompt, current)
+	now := time.Now().UTC()
 	raw, err := a.callSchema(
 		archive.WithLLMKind(ctx, "char_assist"),
-		cardSystemPrompt,
+		fmt.Sprintf("Current date: %s (%s).\n\n%s", now.Format("January 2, 2006"), now.Format("2006-01-02"), cardSystemPrompt),
 		userMsg,
 		"character_card",
 		cardSchema,
@@ -240,9 +242,10 @@ func (a *Assistant) GenerateExamples(ctx context.Context, current Draft, count i
 	}
 
 	userMsg := buildExamplesUserPrompt(current, count)
+	now := time.Now().UTC()
 	raw, err := a.callSchema(
 		archive.WithLLMKind(ctx, "char_assist_examples"),
-		examplesSystemPrompt,
+		fmt.Sprintf("Current date: %s (%s).\n\n%s", now.Format("January 2, 2006"), now.Format("2006-01-02"), examplesSystemPrompt),
 		userMsg,
 		"character_examples",
 		examplesSchema,

@@ -152,8 +152,9 @@ func (a *Assistant) chatTools(webSearch bool) []llm.Tool {
 }
 
 func (a *Assistant) chatSystemPrompt(webSearch bool) string {
+	now := time.Now().UTC()
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are an interactive character-card co-editor for BAJ AI, a Twitch livestream AI text-to-speech bot. Today's date is %s.\n\n", time.Now().Format("2006-01-02"))
+	fmt.Fprintf(&b, "You are an interactive character-card co-editor for BAJ AI, a Twitch livestream AI text-to-speech bot. Current date: %s (%s).\n\n", now.Format("January 2, 2006"), now.Format("2006-01-02"))
 
 	b.WriteString("How BAJ AI actually uses each card field at runtime:\n")
 	b.WriteString("- char_name & char_description: Shown only in the character list and Twitch reward button; NOT sent to the roleplay model. Keep char_name short and recognizable, and char_description a punchy 1-sentence hook under 120 chars.\n")
@@ -177,7 +178,7 @@ func (a *Assistant) chatSystemPrompt(webSearch bool) string {
 	b.WriteString("- ONLY call edit tools when the user explicitly instructs you to make changes (e.g. \"build\", \"create\", \"fill\", \"rewrite\", \"update\", \"add\", \"remove\", \"fix\", \"make it...\", \"translate\", \"apply those\", \"do it\").\n")
 	b.WriteString("- When the user DOES ask you to edit, apply changes directly using update_fields and/or message-example tools rather than pasting rewritten fields in chat. When building a new character from scratch, populate all text fields via update_fields AND add 4-5 varied examples via set_message_examples.\n")
 	if webSearch && a.search != nil {
-		b.WriteString("- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character so facts, quotes, and recent lore are accurate instead of guessed (allowed for both edits and factual questions). Usually 1-2 focused queries are enough.\n")
+		fmt.Fprintf(&b, "- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character so facts, quotes, and recent lore are accurate instead of guessed (allowed for both edits and factual questions). When looking up recent/latest info, search up to %d instead of stopping at older years. Usually 1-2 focused queries are enough.\n", now.Year())
 	}
 	b.WriteString("- After applying edits, keep confirmation brief (1-3 sentences). When answering questions or giving improvement advice, give 3-6 short, concrete bullet points referencing the current card and offer to apply them. Match the user's language.")
 	return b.String()
@@ -282,6 +283,7 @@ func (a *Assistant) Chat(ctx context.Context, history []ChatMessage, userMessage
 
 func formatChatUserTurn(current Draft, userMessage string) string {
 	var b strings.Builder
+	fmt.Fprintf(&b, "Current time: %s\n", time.Now().UTC().Format("2006-01-02 15:04 UTC"))
 	b.WriteString("Current editor state (JSON):\n")
 	if !current.HasContent() {
 		b.WriteString("{}\n\n")

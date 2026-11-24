@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"app/pkg/archive"
 )
@@ -47,7 +48,9 @@ var (
 }`)
 )
 
-const tipsSystemPrompt = `You suggest 3-4 short next-step editing prompts for a user building a BAJ AI Twitch livestream TTS character card.
+func buildTipsSystemPrompt(now time.Time) string {
+	now = now.UTC()
+	return fmt.Sprintf(`You suggest 3-4 short next-step editing prompts for a user building a BAJ AI Twitch livestream TTS character card. Current date: %s (%s).
 
 Context on BAJ AI character cards:
 - message_examples are few-shot conversation turns and have the biggest effect on voice, cadence, humor, and length; great cards have 4-6 examples mixing in-domain prompts with random Twitch chat prompts (hot takes, roasts, life advice).
@@ -56,10 +59,12 @@ Context on BAJ AI character cards:
 
 Rules:
 - Make every suggestion concrete and specific to THIS character, its current gaps, and any recent chat messages.
-- label: ultra-short button text (2-4 words, max 28 chars), e.g. "Add Minecraft roasts", "Fix TTS formatting", "More TI 2025 lore".
+- When suggesting recent/up-to-date lore or memes, refer to %d (the current year), not outdated years.
+- label: ultra-short button text (2-4 words, max 28 chars), e.g. "Add Minecraft roasts", "Fix TTS formatting", "Add %d lore".
 - prompt: a clear 1-sentence instruction the user can review or tweak before hitting Send.
 - Match the language of the character card or conversation.
-- Return ONLY valid JSON matching the schema.`
+- Return ONLY valid JSON matching the schema.`, now.Format("January 2, 2006"), now.Format("2006-01-02"), now.Year(), now.Year())
+}
 
 // GenerateTips produces 3-4 strict-schema follow-up prompt chips tailored to
 // current and recent conversation history.
@@ -71,7 +76,7 @@ func (a *Assistant) GenerateTips(ctx context.Context, current Draft, history []C
 
 	raw, err := a.callSchema(
 		archive.WithLLMKind(ctx, "char_assist_tips"),
-		tipsSystemPrompt,
+		buildTipsSystemPrompt(time.Now()),
 		buildTipsUserPrompt(current, history, webSearch && a.search != nil),
 		"character_tips",
 		tipsSchema,
