@@ -1,5 +1,5 @@
 {{ define "char-assist-message" -}}
-<textarea id="char_assist_message" name="message" rows="2" placeholder="Describe a character or ask for edits..." autocomplete="off"{{ if .Focus }} autofocus{{ end }} class="w-full resize-none {{template "input-class"}} px-3 py-2 text-sm">{{ .Text }}</textarea>
+<textarea id="char_assist_message" name="message" rows="{{ textareaRows .Text 2 38 }}" placeholder="Describe a character or ask for edits..." autocomplete="off"{{ if .Focus }} autofocus{{ end }} class="w-full {{template "input-class"}} auto-grow min-h-[3.5rem] max-h-60 overflow-y-auto resize-y px-3 py-2 text-sm">{{ .Text }}</textarea>
 {{- end }}
 
 {{ define "char-assist-tips" -}}
@@ -24,14 +24,9 @@
 {{- end }}
 
 {{ define "char-assist-panel" -}}
-<aside id="char_assist_panel" class="sticky top-20 flex h-[calc(100vh-6.5rem)] w-[25rem] shrink-0 flex-col self-start overflow-hidden rounded border-2 {{template "ui-border-clr"}} bg-white dark:bg-slate-900">
-    <header class="flex items-center justify-between gap-2 border-b {{template "ui-border-clr"}} bg-gradient-to-br from-slate-100 to-slate-50 px-4 py-3 dark:from-zinc-900 dark:to-zinc-800">
-        <div class="flex items-center gap-2">
-            <svg class="h-4 w-4 shrink-0 text-twitch-dark dark:text-twitch-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 2l2.1 6.4L20.5 10.5l-6.4 2.1L12 19l-2.1-6.4-6.4-2.1 6.4-2.1L12 2zm7 13l.9 2.7 2.7.9-2.7.9L19 22l-.9-2.5-2.7-.9 2.7-.9.9-2.7z"/>
-            </svg>
-            <h2 class="font-bold">AI Assistant</h2>
-        </div>
+<aside id="char_assist_panel" class="sticky top-20 flex h-[calc(100vh-6.5rem)] w-[25rem] shrink-0 flex-col self-start overflow-hidden rounded border {{template "ui-border-clr"}} bg-white dark:bg-slate-900">
+    <header class="flex items-center justify-between gap-2 border-b {{template "ui-border-clr"}} px-4 py-3">
+        <h2 class="text-lg font-bold">AI Assistant</h2>
         <div class="flex items-center gap-1.5">
             {{ if .CanUndo }}
             <button type="button"
@@ -61,17 +56,17 @@
     <div class="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-4 py-4">
         <div class="flex flex-col gap-3">
             {{ if not .Turns }}
-            <p class="py-2 text-sm text-gray-600 dark:text-gray-300">Draft a character, look up lore, or edit any field.</p>
+            <p class="py-1 text-sm text-slate-500 dark:text-slate-400">Draft a character, look up lore, or edit any field.</p>
             {{ end }}
 
             {{ range .Turns }}
             <div class="flex flex-col gap-2">
-                <div class="max-w-[85%] self-end rounded-lg bg-twitch-dark px-3 py-2 text-sm text-white whitespace-pre-wrap">{{ .User }}</div>
+                <div class="max-w-[85%] self-end rounded border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-900 whitespace-pre-wrap dark:border-twitch-light/40 dark:bg-twitch-dark/20 dark:text-slate-100">{{ .User }}</div>
                 <div class="flex max-w-[92%] flex-col gap-1.5 self-start">
                     {{ if .Actions }}
                     <div class="flex flex-wrap gap-1">
                         {{ range .Actions }}
-                        <span class="inline-flex items-center gap-1 rounded border {{template "ui-border-clr"}} bg-slate-50 px-2 py-0.5 text-xs text-gray-600 dark:bg-slate-800 dark:text-gray-300">
+                        <span class="inline-flex items-center gap-1 rounded border {{template "ui-border-clr"}} px-2 py-0.5 text-xs text-slate-500 dark:text-slate-400">
                             {{ if eq .Kind "search" }}
                             <svg class="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
                             {{ else }}
@@ -83,14 +78,14 @@
                     </div>
                     {{ end }}
                     {{ if .Assistant }}
-                    <div class="rounded-lg border {{template "ui-border-clr"}} bg-gradient-to-br from-slate-100 to-slate-50 px-3 py-2 text-sm whitespace-pre-wrap dark:from-zinc-900 dark:to-zinc-800">{{ .Assistant }}</div>
+                    <div class="rounded border {{template "ui-border-clr"}} bg-slate-50 px-3 py-2 text-sm whitespace-pre-wrap dark:bg-slate-800/50">{{ .Assistant }}</div>
                     {{ end }}
                 </div>
             </div>
             {{ end }}
 
             {{ if .Error }}
-            <div class="rounded border border-amber-500/40 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">{{ .Error }}</div>
+            <div class="rounded border border-amber-500/40 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">{{ .Error }}</div>
             {{ end }}
         </div>
     </div>
@@ -115,7 +110,7 @@
                     {{ if .HasSearch }}
                     <label class="cursor-pointer select-none">
                         <input type="checkbox" name="web_search" value="1" class="peer sr-only" {{ if .SearchOn }}checked{{ end }}>
-                        <span class="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-300 px-2.5 py-1 text-xs font-medium text-gray-500 transition-colors hover:border-slate-500 peer-checked:border-twitch-dark peer-checked:bg-twitch-dark/15 peer-checked:text-twitch-dark peer-focus-visible:ring-2 peer-focus-visible:ring-twitch-light dark:border-slate-700 dark:text-gray-400 dark:hover:border-slate-500 dark:peer-checked:border-twitch-light dark:peer-checked:bg-twitch-light/15 dark:peer-checked:text-twitch-light">
+                        <span class="inline-flex items-center gap-1.5 rounded border-2 border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-500 transition-colors hover:border-slate-700 peer-checked:border-slate-700 peer-checked:text-slate-900 peer-focus-visible:ring-2 peer-focus-visible:ring-twitch-light dark:border-slate-700 dark:text-slate-400 dark:hover:border-twitch-light dark:peer-checked:border-twitch-light dark:peer-checked:text-twitch-light">
                             <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <circle cx="12" cy="12" r="10"/>
                                 <path d="M2 12h20"/>
@@ -125,7 +120,7 @@
                         </span>
                     </label>
                     {{ end }}
-                    <span id="char_assist_busy" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                    <span id="char_assist_busy" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                         <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v3a5 5 0 0 0-5 5H4z"></path>

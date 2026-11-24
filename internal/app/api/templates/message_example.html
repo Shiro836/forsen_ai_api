@@ -1,18 +1,18 @@
 {{ block "message_example" . }}
 
 {{ range .MessageExamples }}
-<div id="message_example_{{.ID}}" class="flex flex-col gap-2 rounded border {{template "ui-border-clr"}} bg-gradient-to-br from-slate-100 to-slate-50 p-3.5 dark:from-zinc-900 dark:to-zinc-800">
+<div id="message_example_{{.ID}}" class="flex flex-col gap-2 rounded border {{template "ui-border-clr"}} p-3.5">
     <div class="flex items-center justify-between gap-2">
-        <label for="request_{{.ID}}" class="text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">Request</label>
-        <button type="button" hx-get="/empty" hx-target="#message_example_{{.ID}}" hx-swap="outerHTML" aria-label="Remove example" class="{{template "button-1"}} p-1 text-gray-500 hover:text-slate-900 dark:text-gray-400 dark:hover:text-white">
+        <label for="request_{{.ID}}" class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Request</label>
+        <button type="button" hx-get="/empty" hx-target="#message_example_{{.ID}}" hx-swap="outerHTML" aria-label="Remove example" class="{{template "button-1"}} p-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M18 6 6 18M6 6l12 12"/>
             </svg>
         </button>
     </div>
-    <textarea rows="1" id="request_{{.ID}}" name="request_{{.ID}}" class="w-full {{template "input-class"}} px-3 py-2 text-sm" placeholder="Should i wash my legs?" autocomplete="off">{{ .Request }}</textarea>
-    <label for="response_{{.ID}}" class="pt-1 text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">Response</label>
-    <textarea rows="3" id="response_{{.ID}}" name="response_{{.ID}}" class="w-full {{template "input-class"}} px-3 py-2 text-sm" placeholder="Who the fuck washes their legs?" autocomplete="off">{{ .Response }}</textarea>
+    <textarea rows="{{ textareaRows .Request 1 68 }}" id="request_{{.ID}}" name="request_{{.ID}}" class="w-full {{template "input-class"}} auto-grow min-h-[2.5rem] resize-y px-3 py-2 text-sm" placeholder="Should i wash my legs?" autocomplete="off">{{ .Request }}</textarea>
+    <label for="response_{{.ID}}" class="pt-1 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Response</label>
+    <textarea rows="{{ textareaRows .Response 2 68 }}" id="response_{{.ID}}" name="response_{{.ID}}" class="w-full {{template "input-class"}} auto-grow min-h-[4.25rem] resize-y px-3 py-2 text-sm" placeholder="Who the fuck washes their legs?" autocomplete="off">{{ .Response }}</textarea>
 </div>
 {{ end }}
 

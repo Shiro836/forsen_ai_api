@@ -3,7 +3,7 @@
 {{- end }}
 
 {{ define "char-field-char-description" -}}
-<input type="text" id="char_description" name="char_description" class="w-full {{template "input-class"}} px-3 py-2" placeholder="God gamer with 140 IQ." autocomplete="off" value="{{ .Value }}"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>
+<textarea rows="{{ textareaRows .Value 1 36 }}" id="char_description" name="char_description" class="w-full {{template "input-class"}} auto-grow min-h-[2.625rem] resize-y px-3 py-2" placeholder="God gamer with 140 IQ." autocomplete="off"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>{{ .Value }}</textarea>
 {{- end }}
 
 {{ define "char-field-name" -}}
@@ -11,15 +11,15 @@
 {{- end }}
 
 {{ define "char-field-first-message" -}}
-<input type="text" id="first_message" name="first_message" class="w-full {{template "input-class"}} px-3 py-2" placeholder="Ask your stupid question." autocomplete="off" value="{{ .Value }}"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>
+<textarea rows="{{ textareaRows .Value 1 36 }}" id="first_message" name="first_message" class="w-full {{template "input-class"}} auto-grow min-h-[2.625rem] resize-y px-3 py-2" placeholder="Ask your stupid question." autocomplete="off"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>{{ .Value }}</textarea>
 {{- end }}
 
 {{ define "char-field-personality" -}}
-<textarea rows="2" id="personality" name="personality" class="w-full {{template "input-class"}} px-3 py-2" placeholder="Competitive, phlegmatic, confident, sarcastic, based, god gamer." autocomplete="off"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>{{ .Value }}</textarea>
+<textarea rows="{{ textareaRows .Value 2 72 }}" id="personality" name="personality" class="w-full {{template "input-class"}} auto-grow min-h-[3.75rem] resize-y px-3 py-2" placeholder="Competitive, phlegmatic, confident, sarcastic, based, god gamer." autocomplete="off"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>{{ .Value }}</textarea>
 {{- end }}
 
 {{ define "char-field-description" -}}
-<textarea rows="8" id="description" name="description" class="w-full {{template "input-class"}} px-3 py-2" placeholder="Forsen, real name Sebastian Fors, is a Swedish Twitch streamer..." autocomplete="off"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>{{ .Value }}</textarea>
+<textarea rows="{{ textareaRows .Value 5 72 }}" id="description" name="description" class="w-full {{template "input-class"}} auto-grow min-h-[8rem] resize-y px-3 py-2" placeholder="Forsen, real name Sebastian Fors, is a Swedish Twitch streamer..." autocomplete="off"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>{{ .Value }}</textarea>
 {{- end }}
 
 {{ define "char-examples-container" -}}
@@ -32,7 +32,7 @@
     <div class="flex-1 min-w-0">
         <form id="character_form" class="flex flex-col gap-5" hx-encoding="multipart/form-data" hx-post="/characters/{{.CharacterID}}" hx-target="#character_save_result" hx-swap="{{template "save-status-swap"}}">
 
-            <section class="flex flex-col gap-4 rounded border-2 {{template "ui-border-clr"}} p-5">
+            <section class="flex flex-col gap-4 rounded border {{template "ui-border-clr"}} p-5">
                 <div class="flex items-center justify-between gap-4">
                     <h2 class="text-lg font-bold">Card</h2>
                     <label class="inline-flex cursor-pointer items-center gap-2.5">
@@ -42,7 +42,7 @@
                     </label>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-2 items-start gap-4">
                     <div class="flex flex-col gap-1.5">
                         <div class="flex items-center">
                             <label for="char_name" class="text-sm font-medium">Character Name</label>
@@ -90,10 +90,10 @@
                 </div>
             </section>
 
-            <section class="flex flex-col gap-4 rounded border-2 {{template "ui-border-clr"}} p-5">
+            <section class="flex flex-col gap-4 rounded border {{template "ui-border-clr"}} p-5">
                 <h2 class="text-lg font-bold">Persona</h2>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-2 items-start gap-4">
                     <div class="flex flex-col gap-1.5">
                         <div class="flex items-center">
                             <label for="name" class="text-sm font-medium">Name</label>
@@ -122,7 +122,7 @@
                 </div>
             </section>
 
-            <section class="flex flex-col gap-4 rounded border-2 {{template "ui-border-clr"}} p-5">
+            <section class="flex flex-col gap-4 rounded border {{template "ui-border-clr"}} p-5">
                 <div class="flex items-center justify-between gap-4">
                     <h2 class="text-lg font-bold">Message Examples</h2>
                     {{ if .Assist }}
@@ -135,10 +135,7 @@
                         hx-sync="#char_assist_panel:drop"
                         hx-disabled-elt="this"
                         hx-indicator="#char_assist_busy"
-                        class="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-medium whitespace-nowrap {{template "button-2"}}">
-                        <svg class="h-3.5 w-3.5 shrink-0 text-twitch-dark dark:text-twitch-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M12 2l2.1 6.4L20.5 10.5l-6.4 2.1L12 19l-2.1-6.4-6.4-2.1 6.4-2.1L12 2z"/>
-                        </svg>
+                        class="px-3 py-1 text-sm font-medium whitespace-nowrap {{template "button-2"}}">
                         Add 3 with AI
                     </button>
                     {{ end }}

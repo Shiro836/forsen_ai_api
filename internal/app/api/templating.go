@@ -27,10 +27,32 @@ func init() {
 	var err error
 	html, err = web.TemplateParseFSRecursive(templateFS, ".html", true, template.FuncMap{
 		"newSaveStatus": newSaveStatus,
+		"textareaRows":  textareaRows,
 	})
 	if err != nil {
 		panic(err)
 	}
+}
+
+// textareaRows estimates a full-height row count as a fallback for browsers
+// without CSS field-sizing: content.
+func textareaRows(s string, minRows, cols int) int {
+	if cols <= 0 {
+		cols = 60
+	}
+	rows := 0
+	for _, line := range strings.Split(s, "\n") {
+		n := len([]rune(line))
+		if n == 0 {
+			rows++
+		} else {
+			rows += (n + cols - 1) / cols
+		}
+	}
+	if rows < minRows {
+		return minRows
+	}
+	return rows
 }
 
 func getString(templateName string, data any) string {
