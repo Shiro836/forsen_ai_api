@@ -25,6 +25,7 @@ import (
 	"app/internal/app/queue"
 	"app/pkg/agentic"
 	"app/pkg/ai"
+	"app/pkg/charassist"
 	"app/pkg/clickhouse"
 	"app/pkg/ffmpeg"
 	"app/pkg/llm"
@@ -72,7 +73,9 @@ func main() {
 
 	imageLlm := llm.New(httpClient, &cfg.ImageLLM)
 
-	var characterLlm processor.CharacterLLM = llm.ChatClient{Client: llm.New(httpClient, &cfg.LLM2)}
+	rpLLM := llm.New(httpClient, &cfg.LLM2)
+	var characterLlm processor.CharacterLLM = llm.ChatClient{Client: rpLLM}
+	charAssist := charassist.New(rpLLM)
 	if cfg.OAI.Timeout <= 0 {
 		log.Fatal("oai.timeout is not configured")
 	}
@@ -154,7 +157,7 @@ func main() {
 	}, api.ProviderApp{
 		ClientID:     cfg.DonationAlerts.ClientID,
 		ClientSecret: cfg.DonationAlerts.ClientSecret,
-	})
+	}, charAssist)
 
 	router := api.NewRouter()
 

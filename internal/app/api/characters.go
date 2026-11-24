@@ -183,6 +183,7 @@ type characterPage struct {
 	MessageExamples *msgExamples
 	VoiceRefHash    fileHash
 	ImageHash       fileHash
+	ShowAIAssist    bool
 }
 
 func (api *API) character(r *http.Request) template.HTML {
@@ -241,6 +242,7 @@ func (api *API) character(r *http.Request) template.HTML {
 		MessageExamples: msgExamples,
 		VoiceRefHash:    newFileHash(characterSaveStatusID, characterSaveSkip, "voice_ref", nil),
 		ImageHash:       newFileHash(characterSaveStatusID, characterSaveSkip, "image", nil),
+		ShowAIAssist:    api.charAssist != nil,
 	}
 	if card != nil {
 		page.VoiceRefHash.Hash = hashBytes(card.Data.VoiceReference)

@@ -1,5 +1,22 @@
-<div>
-    <form hx-encoding="multipart/form-data" hx-post="/characters/{{.CharacterID}}" hx-target="#character_save_result" hx-swap="{{template "save-status-swap"}}">
+<div class="w-full max-w-4xl">
+    {{ if .ShowAIAssist }}
+    <div id="ai_assist_panel" class="mb-8 p-4 rounded border-2 {{template "ui-border-clr"}} bg-slate-50 dark:bg-slate-800/40">
+        <div class="flex items-center pb-2">
+            <svg class="w-4 h-4 mr-2 shrink-0 text-twitch-dark dark:text-twitch-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 2l2.1 6.4L20.5 10.5l-6.4 2.1L12 19l-2.1-6.4-6.4-2.1 6.4-2.1L12 2zm7 13l.9 2.7 2.7.9-2.7.9L19 22l-.9-2.5-2.7-.9 2.7-.9.9-2.7z"/>
+            </svg>
+            <label for="ai_assist_prompt" class="font-medium">AI Character Assistant</label>
+            {{ template "help-tip" "Describe a character to fill out the form, or ask for changes to what you already have.\nYour uploaded voice, image, and Public toggle are never changed." }}
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+            <textarea id="ai_assist_prompt" rows="2" class="flex-grow {{template "input-class"}} py-2 px-3 text-sm" placeholder="Describe a character or what to change — e.g. 'Gordon Ramsay', 'toxic Dota 2 carry', or 'make him more sarcastic'" autocomplete="off"></textarea>
+            <button type="button" id="ai_assist_btn" class="px-5 py-2 font-medium whitespace-nowrap {{template "button-2"}}">Generate</button>
+        </div>
+        <div id="ai_assist_status" class="mt-2 hidden items-center gap-3 text-sm"></div>
+    </div>
+    {{ end }}
+
+    <form id="character_form" hx-encoding="multipart/form-data" hx-post="/characters/{{.CharacterID}}" hx-target="#character_save_result" hx-swap="{{template "save-status-swap"}}">
         <div class="flex flex-col">
 
             <div class="flex pb-10">
@@ -87,11 +104,27 @@
             </div>
 
             <div class="flex flex-col pt-6">
-                <div class="flex">
-                    Message Examples
+                <div class="flex items-center justify-between gap-4 pb-1">
+                    <div class="flex items-center">
+                        <span>Message Examples</span>
+                        {{ template "help-tip" "Sample viewer prompts and character replies that shape the character's voice and style." }}
+                    </div>
+                    {{ if .ShowAIAssist }}
+                    <div class="flex items-center gap-3">
+                        <span id="ai_assist_examples_status" class="hidden text-sm"></span>
+                        <button type="button" id="ai_assist_examples_btn" class="px-3 py-1 text-sm {{template "button-2"}} inline-flex items-center gap-1.5 whitespace-nowrap">
+                            <svg class="w-3.5 h-3.5 shrink-0 text-twitch-dark dark:text-twitch-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M12 2l2.1 6.4L20.5 10.5l-6.4 2.1L12 19l-2.1-6.4-6.4-2.1 6.4-2.1L12 2z"/>
+                            </svg>
+                            <span>Generate Examples</span>
+                        </button>
+                    </div>
+                    {{ end }}
                 </div>
 
-                {{ template "message_example" .MessageExamples }}
+                <div id="message_examples_container">
+                    {{ template "message_example" .MessageExamples }}
+                </div>
             </div>
 
             <div class="pt-4">

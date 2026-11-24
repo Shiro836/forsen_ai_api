@@ -82,12 +82,14 @@ type API struct {
 	singer *ai.SingerClient
 
 	history *history.Reader
+
+	charAssist CharacterAssistant
 }
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservice.Config, logger *slog.Logger, connManager *conns.Manager,
 	twitchClient *twitch.Client, db *db.DB, s3 *s3client.Client, ffmpegClient *ffmpeg.Client,
 	ttsHandler processor.InteractionHandler, aiHandler processor.InteractionHandler, universalHandler processor.InteractionHandler, universalAIHandler processor.InteractionHandler, agenticHandler processor.InteractionHandler,
-	voiceSampler VoiceSampler, singer *ai.SingerClient, historyReader *history.Reader, streamlabs, donationAlerts ProviderApp) *API {
+	voiceSampler VoiceSampler, singer *ai.SingerClient, historyReader *history.Reader, streamlabs, donationAlerts ProviderApp, charAssist CharacterAssistant) *API {
 	api := &API{
 		cfg: cfg,
 
@@ -124,6 +126,8 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservi
 		emotes: newEmoteClient(emoteCfg),
 
 		history: historyReader,
+
+		charAssist: charAssist,
 	}
 
 	api.imageCache = NewImageCache(db)
@@ -255,6 +259,9 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/guide/bits/detect", http.HandlerFunc(api.bitsGuideDetect))
 			router.Get("/guide/legacy", api.nav(api.legacyHome))
 			router.Get("/characters", api.nav(api.characters))
+
+			router.Post("/characters/assist", http.HandlerFunc(api.assistCharacter))
+			router.Post("/characters/assist/examples", http.HandlerFunc(api.assistCharacterExamples))
 
 			router.Get("/characters/{character_id}", api.nav(api.character))
 			router.Post("/characters/{character_id}", api.upsertCharacter)

@@ -108,6 +108,17 @@ type StructuredOutputs struct {
 	JSON json.RawMessage `json:"json,omitempty"`
 }
 
+type JSONSchemaFormat struct {
+	Name   string          `json:"name"`
+	Strict bool            `json:"strict,omitempty"`
+	Schema json.RawMessage `json:"schema"`
+}
+
+type ResponseFormat struct {
+	Type       string            `json:"type"`
+	JSONSchema *JSONSchemaFormat `json:"json_schema,omitempty"`
+}
+
 type ChatRequest struct {
 	Model             string             `json:"model"`
 	Messages          []Message          `json:"messages"`
@@ -115,6 +126,7 @@ type ChatRequest struct {
 	MinTokens         int                `json:"min_tokens"`
 	Stop              []string           `json:"stop,omitempty"`
 	StructuredOutputs *StructuredOutputs `json:"structured_outputs,omitempty"`
+	ResponseFormat    *ResponseFormat    `json:"response_format,omitempty"`
 	Temperature       *float64           `json:"temperature,omitempty"`
 	MinP              *float64           `json:"min_p,omitempty"`
 	RepetitionPenalty *float64           `json:"repetition_penalty,omitempty"`
