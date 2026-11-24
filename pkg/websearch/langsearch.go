@@ -94,7 +94,7 @@ func (c *Client) Search(ctx context.Context, query string, count int) ([]Result,
 	}
 	defer tools.DrainAndClose(resp.Body)
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if err != nil {
 		return nil, fmt.Errorf("read search response: %w", err)
 	}

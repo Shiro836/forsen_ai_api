@@ -298,3 +298,35 @@ func TestCharacterTemplate_SidePanelVisibility(t *testing.T) {
 	assert.NotContains(t, withoutAssist, `id="char_assist_panel"`)
 	assert.NotContains(t, withoutAssist, `hx-post="/characters/assist/examples"`)
 }
+
+func TestAssistSecurityHardening(t *testing.T) {
+	store := newCharAssistSessionStore()
+	u1 := uuid.New()
+	u2 := uuid.New()
+
+	// Non-UUID session IDs are rejected and replaced with a fresh UUID.
+	gotID, _ := store.getOrCreate(`evil", "x": "1`, u1)
+	_, err := uuid.Parse(gotID)
+	require.NoError(t, err)
+	assert.NotContains(t, gotID, "evil")
+
+	// Cross-user session isolation: u2 cannot read, mutate, or undo u1's session.
+	store.commitTurn(gotID, u1, charAssistTurn{User: "hi", Assistant: "secret"}, true, &charassist.Draft{Name: "orig"})
+	hist, turns, canUndo := store.snapshotState(gotID, u2)
+	assert.Empty(t, hist)
+	assert.Empty(t, turns)
+	assert.False(t, canUndo)
+
+	turns2, _ := store.commitTurn(gotID, u2, charAssistTurn{User: "hijack", Assistant: "no"}, true, nil)
+	assert.Empty(t, turns2)
+	_, turns1, canUndo1 := store.snapshotState(gotID, u1)
+	require.Len(t, turns1, 1)
+	assert.Equal(t, "secret", turns1[0].Assistant)
+	assert.True(t, canUndo1)
+
+	// Session store enforces hard cap via eviction.
+	for i := 0; i < assistMaxSessionsTotal+25; i++ {
+		store.getOrCreate("", u1)
+	}
+	assert.LessOrEqual(t, len(store.sessions), assistMaxSessionsTotal)
+}

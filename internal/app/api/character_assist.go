@@ -20,12 +20,16 @@ import (
 )
 
 const (
-	assistRequestTimeout    = 90 * time.Second
-	assistDefaultExamplesCt = 3
-	assistSessionTTL        = 2 * time.Hour
-	assistMaxUndoSnapshots  = 20
-	assistMaxDisplayTurns   = 30
-	assistMaxSessionsTotal  = 500
+	assistRequestTimeout     = 90 * time.Second
+	assistDefaultExamplesCt  = 3
+	assistSessionTTL         = 2 * time.Hour
+	assistMaxUndoSnapshots   = 20
+	assistMaxDisplayTurns    = 30
+	assistMaxHistoryMessages = 32
+	assistMaxSessionsTotal   = 500
+	assistMaxBodyBytes       = 1 << 20
+	assistMaxMessageRunes    = 8000
+	assistMaxPromptRunes     = 2000
 )
 
 // CharacterAssistant powers the interactive character-editor side panel.
@@ -124,16 +128,42 @@ func newCharAssistSessionStore() *charAssistSessionStore {
 	}
 }
 
+// sanitizeSessionID accepts only canonical UUIDs so session_id is safe inside
+// HTML attributes/hx-vals and cannot be spoofed with arbitrary strings.
+func sanitizeSessionID(raw string) string {
+	id, err := uuid.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return id.String()
+}
+
 func (s *charAssistSessionStore) getOrCreate(sessionID string, userID uuid.UUID) (string, *charAssistSession) {
+	sessionID = sanitizeSessionID(sessionID)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := time.Now()
-	if len(s.sessions) > assistMaxSessionsTotal {
+	if len(s.sessions) >= assistMaxSessionsTotal {
 		for id, sess := range s.sessions {
 			if now.Sub(sess.updatedAt) > assistSessionTTL {
 				delete(s.sessions, id)
 			}
+		}
+		for len(s.sessions) >= assistMaxSessionsTotal {
+			var oldestID string
+			var oldestTime time.Time
+			for id, sess := range s.sessions {
+				if oldestID == "" || sess.updatedAt.Before(oldestTime) {
+					oldestID = id
+					oldestTime = sess.updatedAt
+				}
+			}
+			if oldestID == "" {
+				break
+			}
+			delete(s.sessions, oldestID)
 		}
 	}
 
@@ -159,6 +189,8 @@ func (s *charAssistSessionStore) getOrCreate(sessionID string, userID uuid.UUID)
 }
 
 func (s *charAssistSessionStore) reset(sessionID string, userID uuid.UUID) string {
+	sessionID = sanitizeSessionID(sessionID)
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -169,6 +201,11 @@ func (s *charAssistSessionStore) reset(sessionID string, userID uuid.UUID) strin
 }
 
 func (s *charAssistSessionStore) snapshotState(sessionID string, userID uuid.UUID) (history []charassist.ChatMessage, turns []charAssistTurn, canUndo bool) {
+	sessionID = sanitizeSessionID(sessionID)
+	if sessionID == "" {
+		return nil, nil, false
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -182,11 +219,20 @@ func (s *charAssistSessionStore) snapshotState(sessionID string, userID uuid.UUI
 }
 
 func (s *charAssistSessionStore) commitTurn(sessionID string, userID uuid.UUID, turn charAssistTurn, pushHistory bool, undoPrev *charassist.Draft) (turns []charAssistTurn, canUndo bool) {
+	sessionID = sanitizeSessionID(sessionID)
+	if sessionID == "" {
+		return nil, false
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	sess, ok := s.sessions[sessionID]
-	if !ok || sess.userID != userID {
+	if ok && sess.userID != userID {
+		// Refuse to overwrite another user's session.
+		return nil, false
+	}
+	if !ok {
 		sess = &charAssistSession{userID: userID}
 		s.sessions[sessionID] = sess
 	}
@@ -200,6 +246,9 @@ func (s *charAssistSessionStore) commitTurn(sessionID string, userID uuid.UUID, 
 			charassist.ChatMessage{Role: "user", Content: turn.User},
 			charassist.ChatMessage{Role: "assistant", Content: turn.Assistant},
 		)
+		if len(sess.history) > assistMaxHistoryMessages {
+			sess.history = sess.history[len(sess.history)-assistMaxHistoryMessages:]
+		}
 	}
 	if undoPrev != nil {
 		sess.undoStack = append(sess.undoStack, *undoPrev)
@@ -211,6 +260,11 @@ func (s *charAssistSessionStore) commitTurn(sessionID string, userID uuid.UUID, 
 }
 
 func (s *charAssistSessionStore) popUndo(sessionID string, userID uuid.UUID) (prev *charassist.Draft, turns []charAssistTurn, canUndo bool) {
+	sessionID = sanitizeSessionID(sessionID)
+	if sessionID == "" {
+		return nil, nil, false
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -234,6 +288,14 @@ func (api *API) assistSessionStore() *charAssistSessionStore {
 	return api.charAssistSessions
 }
 
+func clipRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
+}
+
 func (api *API) assistCharacterTips(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
@@ -244,12 +306,13 @@ func (api *API) assistCharacterTips(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, assistMaxBodyBytes)
 	if err := parseAnyForm(r); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	sessionID := strings.TrimSpace(r.Form.Get("session_id"))
+	sessionID := sanitizeSessionID(r.Form.Get("session_id"))
 	history, _, _ := api.assistSessionStore().snapshotState(sessionID, user.ID)
 	hasSearch := api.charAssist.HasSearch()
 	searchOn := hasSearch && r.Form.Get("web_search") == "1"
@@ -279,7 +342,7 @@ func (api *API) assistCharacterPrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = html.ExecuteTemplate(w, "char-assist-message", charAssistMessageData{
-		Text:  r.URL.Query().Get("text"),
+		Text:  clipRunes(r.URL.Query().Get("text"), assistMaxPromptRunes),
 		Focus: true,
 	})
 }
@@ -295,18 +358,19 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, assistMaxBodyBytes)
 	if err := parseAnyForm(r); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	store := api.assistSessionStore()
-	sessionID, _ := store.getOrCreate(strings.TrimSpace(r.Form.Get("session_id")), user.ID)
+	sessionID, _ := store.getOrCreate(r.Form.Get("session_id"), user.ID)
 	history, turns, canUndo := store.snapshotState(sessionID, user.ID)
 	hasSearch := api.charAssist.HasSearch()
 	searchOn := hasSearch && r.Form.Get("web_search") == "1"
 
-	message := strings.TrimSpace(r.Form.Get("message"))
+	message := strings.TrimSpace(clipRunes(r.Form.Get("message"), assistMaxMessageRunes))
 	current := formToDraft(r.Form)
 	if message == "" {
 		api.renderAssistResponse(w, &charAssistResponseData{
@@ -386,13 +450,14 @@ func (api *API) assistCharacterExamples(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, assistMaxBodyBytes)
 	if err := parseAnyForm(r); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	store := api.assistSessionStore()
-	sessionID, _ := store.getOrCreate(strings.TrimSpace(r.Form.Get("session_id")), user.ID)
+	sessionID, _ := store.getOrCreate(r.Form.Get("session_id"), user.ID)
 	_, turns, canUndo := store.snapshotState(sessionID, user.ID)
 	hasSearch := api.charAssist.HasSearch()
 	searchOn := hasSearch && r.Form.Get("web_search") == "1"
@@ -461,13 +526,14 @@ func (api *API) assistCharacterUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, assistMaxBodyBytes)
 	if err := parseAnyForm(r); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	store := api.assistSessionStore()
-	sessionID := strings.TrimSpace(r.Form.Get("session_id"))
+	sessionID := sanitizeSessionID(r.Form.Get("session_id"))
 	prev, turns, canUndo := store.popUndo(sessionID, user.ID)
 	hasSearch := api.charAssist.HasSearch()
 	searchOn := hasSearch && r.Form.Get("web_search") == "1"
@@ -513,6 +579,7 @@ func (api *API) assistCharacterReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, assistMaxBodyBytes)
 	if err := parseAnyForm(r); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -520,7 +587,7 @@ func (api *API) assistCharacterReset(w http.ResponseWriter, r *http.Request) {
 
 	hasSearch := api.charAssist.HasSearch()
 	searchOn := hasSearch && r.Form.Get("web_search") == "1"
-	newSessionID := api.assistSessionStore().reset(strings.TrimSpace(r.Form.Get("session_id")), user.ID)
+	newSessionID := api.assistSessionStore().reset(r.Form.Get("session_id"), user.ID)
 	draft := formToDraft(r.Form)
 	api.renderAssistResponse(w, &charAssistResponseData{
 		Panel: &charAssistPanelData{
