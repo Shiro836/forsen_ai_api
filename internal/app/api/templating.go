@@ -26,8 +26,9 @@ var (
 func init() {
 	var err error
 	html, err = web.TemplateParseFSRecursive(templateFS, ".html", true, template.FuncMap{
-		"newSaveStatus": newSaveStatus,
-		"textareaRows":  textareaRows,
+		"newSaveStatus":  newSaveStatus,
+		"textareaRows":   textareaRows,
+		"renderMarkdown": renderMarkdown,
 	})
 	if err != nil {
 		panic(err)

@@ -78,7 +78,7 @@
                     </div>
                     {{ end }}
                     {{ if .Assistant }}
-                    <div class="rounded border {{template "ui-border-clr"}} bg-slate-50 px-3 py-2 text-sm whitespace-pre-wrap dark:bg-slate-800/50">{{ .Assistant }}</div>
+                    <div class="chat-md rounded border {{template "ui-border-clr"}} bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">{{ renderMarkdown .Assistant }}</div>
                     {{ end }}
                 </div>
             </div>

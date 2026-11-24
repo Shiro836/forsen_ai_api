@@ -179,7 +179,7 @@ func (a *Assistant) chatSystemPrompt(webSearch bool) string {
 	if webSearch && a.search != nil {
 		b.WriteString("- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character so facts, quotes, and recent lore are accurate instead of guessed (allowed for both edits and factual questions). Usually 1-2 focused queries are enough.\n")
 	}
-	b.WriteString("- Reply formatting: use plain text (no markdown bold/headings). After applying edits, keep confirmation brief (1-3 sentences). When answering questions or giving improvement advice, give 3-6 short, concrete bullet points referencing the current card and offer to apply them. Match the user's language.")
+	b.WriteString("- After applying edits, keep confirmation brief (1-3 sentences). When answering questions or giving improvement advice, give 3-6 short, concrete bullet points referencing the current card and offer to apply them. Match the user's language.")
 	return b.String()
 }
 
