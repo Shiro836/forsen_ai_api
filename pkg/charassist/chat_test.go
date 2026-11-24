@@ -75,7 +75,7 @@ func TestChat_SearchAndUpdateTools(t *testing.T) {
 				},
 			},
 			{
-				Content: "Looked up TI 2025 and updated the card and added an example.",
+				Content: "Looked up TI 2025 and updated the card and added an example.\n[[tip: Roast drafts | Add 2 examples roasting viewer Dota drafts.]]\n[[tip: Shorter replies | Tighten examples to 1-2 punchy sentences.]]",
 			},
 		},
 	}
@@ -109,6 +109,9 @@ func TestChat_SearchAndUpdateTools(t *testing.T) {
 	assert.Equal(t, "edit", res.Actions[1].Kind)
 	assert.Equal(t, "examples", res.Actions[2].Kind)
 	assert.Contains(t, res.Reply, "TI 2025")
+	assert.NotContains(t, res.Reply, "[[tip:", "tip directives must be stripped from visible reply")
+	require.Len(t, res.Tips, 2)
+	assert.Equal(t, "Roast drafts", res.Tips[0].Label)
 
 	require.Len(t, client.reqs, 3)
 	assert.Len(t, client.reqs[0].Tools, 5, "web_search included when searcher is configured")

@@ -27,7 +27,8 @@
             <button type="button"
                 hx-post="/characters/assist/reset"
                 hx-vals='{"session_id": "{{ .SessionID }}"}'
-                hx-include="#char_assist_form [name='web_search']"
+                hx-include="#character_form, #char_assist_form [name='web_search']"
+                hx-params="not voice_ref,image"
                 hx-target="#char_assist_panel"
                 hx-swap="outerHTML"
                 hx-sync="#char_assist_panel:drop"
@@ -74,34 +75,17 @@
     </div>
 
     <div class="flex flex-col gap-2 border-t {{template "ui-border-clr"}} p-3">
+        {{ if .Tips }}
         <div class="flex flex-wrap gap-1.5">
+            {{ range .Tips }}
             <button type="button"
-                hx-get="/characters/assist/prompt"
-                hx-vals='{"text": "Fill in any empty fields based on what is already here."}'
+                hx-get="/characters/assist/prompt?text={{ .Prompt | urlquery }}"
                 hx-target="#char_assist_message"
                 hx-swap="outerHTML"
-                class="{{template "button-2"}} px-2 py-0.5 text-xs">Fill empty fields</button>
-            <button type="button"
-                hx-get="/characters/assist/prompt"
-                hx-vals='{"text": "Add 3 varied Twitch chat message examples that nail this character\u0027s voice."}'
-                hx-target="#char_assist_message"
-                hx-swap="outerHTML"
-                class="{{template "button-2"}} px-2 py-0.5 text-xs">Add examples</button>
-            <button type="button"
-                hx-get="/characters/assist/prompt"
-                hx-vals='{"text": "Sharpen the description, personality, and examples with stronger voice and catchphrases."}'
-                hx-target="#char_assist_message"
-                hx-swap="outerHTML"
-                class="{{template "button-2"}} px-2 py-0.5 text-xs">Sharpen voice</button>
-            {{ if .HasSearch }}
-            <button type="button"
-                hx-get="/characters/assist/prompt"
-                hx-vals='{"text": "Search the web for lore, quotes, and recent facts about this character, then update the card."}'
-                hx-target="#char_assist_message"
-                hx-swap="outerHTML"
-                class="{{template "button-2"}} px-2 py-0.5 text-xs">Search lore</button>
+                class="{{template "button-2"}} px-2 py-0.5 text-xs">{{ .Label }}</button>
             {{ end }}
         </div>
+        {{ end }}
 
         <form id="char_assist_form"
             class="flex flex-col gap-2"

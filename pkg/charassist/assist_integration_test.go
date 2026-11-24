@@ -48,7 +48,9 @@ func TestLiveChatWithSearch(t *testing.T) {
 	require.NotEmpty(t, res.Reply)
 	require.NotEmpty(t, res.Draft.Name)
 	require.NotEmpty(t, res.Draft.Description)
-	t.Logf("actions=%+v reply=%q name=%q examples=%d", res.Actions, res.Reply, res.Draft.Name, len(res.Draft.MessageExamples))
+	require.NotContains(t, res.Reply, "[[tip:")
+	require.NotEmpty(t, res.Tips)
+	t.Logf("actions=%+v reply=%q name=%q examples=%d tips=%+v", res.Actions, res.Reply, res.Draft.Name, len(res.Draft.MessageExamples), res.Tips)
 }
 
 func TestLiveGenerateAndExamples(t *testing.T) {

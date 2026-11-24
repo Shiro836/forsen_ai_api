@@ -61,6 +61,7 @@ type charAssistPanelData struct {
 	HasSearch    bool
 	SearchOn     bool
 	Turns        []charAssistTurn
+	Tips         []charassist.Tip
 	CanUndo      bool
 	Error        string
 	DraftMessage string
@@ -249,6 +250,7 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 	searchOn := hasSearch && r.Form.Get("web_search") == "1"
 
 	message := strings.TrimSpace(r.Form.Get("message"))
+	current := formToDraft(r.Form)
 	if message == "" {
 		api.renderAssistResponse(w, &charAssistResponseData{
 			Panel: &charAssistPanelData{
@@ -256,14 +258,13 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 				HasSearch: hasSearch,
 				SearchOn:  searchOn,
 				Turns:     turns,
+				Tips:      charassist.ContextualTips(current, searchOn),
 				CanUndo:   canUndo,
 				Error:     "Type a message first.",
 			},
 		})
 		return
 	}
-
-	current := formToDraft(r.Form)
 
 	ctx, cancel := context.WithTimeout(r.Context(), assistRequestTimeout)
 	defer cancel()
@@ -282,6 +283,7 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 				HasSearch:    hasSearch,
 				SearchOn:     searchOn,
 				Turns:        turns,
+				Tips:         charassist.ContextualTips(current, searchOn),
 				CanUndo:      canUndo,
 				Error:        errMsg,
 				DraftMessage: message,
@@ -301,12 +303,18 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 		Actions:   res.Actions,
 	}, true, undoSnap)
 
+	tips := res.Tips
+	if len(tips) == 0 {
+		tips = charassist.ContextualTips(res.Draft, searchOn)
+	}
+
 	resp := &charAssistResponseData{
 		Panel: &charAssistPanelData{
 			SessionID: sessionID,
 			HasSearch: hasSearch,
 			SearchOn:  searchOn,
 			Turns:     newTurns,
+			Tips:      tips,
 			CanUndo:   newCanUndo,
 		},
 	}
@@ -356,6 +364,7 @@ func (api *API) assistCharacterExamples(w http.ResponseWriter, r *http.Request) 
 				HasSearch: hasSearch,
 				SearchOn:  searchOn,
 				Turns:     turns,
+				Tips:      charassist.ContextualTips(current, searchOn),
 				CanUndo:   canUndo,
 				Error:     errMsg,
 			},
@@ -379,6 +388,7 @@ func (api *API) assistCharacterExamples(w http.ResponseWriter, r *http.Request) 
 			HasSearch: hasSearch,
 			SearchOn:  searchOn,
 			Turns:     newTurns,
+			Tips:      charassist.ContextualTips(updated, searchOn),
 			CanUndo:   newCanUndo,
 		},
 	}
@@ -408,12 +418,17 @@ func (api *API) assistCharacterUndo(w http.ResponseWriter, r *http.Request) {
 	hasSearch := api.charAssist.HasSearch()
 	searchOn := hasSearch && r.Form.Get("web_search") == "1"
 
+	tipDraft := formToDraft(r.Form)
+	if prev != nil {
+		tipDraft = *prev
+	}
 	resp := &charAssistResponseData{
 		Panel: &charAssistPanelData{
 			SessionID: sessionID,
 			HasSearch: hasSearch,
 			SearchOn:  searchOn,
 			Turns:     turns,
+			Tips:      charassist.ContextualTips(tipDraft, searchOn),
 			CanUndo:   canUndo,
 		},
 	}
@@ -456,8 +471,27 @@ func (api *API) assistCharacterReset(w http.ResponseWriter, r *http.Request) {
 			SessionID: newSessionID,
 			HasSearch: hasSearch,
 			SearchOn:  searchOn,
+			Tips:      charassist.ContextualTips(formToDraft(r.Form), searchOn),
 		},
 	})
+}
+
+func cardToDraft(card *db.Card) charassist.Draft {
+	if card == nil {
+		return charassist.Draft{}
+	}
+	d := charassist.Draft{
+		CharName:        card.Name,
+		CharDescription: card.Description,
+	}
+	if card.Data != nil {
+		d.Name = card.Data.Name
+		d.Description = card.Data.Description
+		d.Personality = card.Data.Personality
+		d.FirstMessage = card.Data.FirstMessage
+		d.MessageExamples = append([]db.MessageExample(nil), card.Data.MessageExamples...)
+	}
+	return d
 }
 
 func (api *API) renderAssistResponse(w http.ResponseWriter, data *charAssistResponseData) {

@@ -5,6 +5,7 @@ import (
 	"app/internal/app/conns"
 	"app/internal/app/processor"
 	"app/pkg/ai"
+	"app/pkg/charassist"
 	"app/pkg/ctxstore"
 	"app/pkg/s3client"
 	"app/pkg/tools"
@@ -282,6 +283,7 @@ func (api *API) character(r *http.Request) template.HTML {
 			SessionID: uuid.New().String(),
 			HasSearch: hasSearch,
 			SearchOn:  hasSearch,
+			Tips:      charassist.ContextualTips(cardToDraft(card), hasSearch),
 		}
 	}
 	if card != nil {

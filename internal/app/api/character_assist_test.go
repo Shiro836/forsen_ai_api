@@ -82,6 +82,9 @@ func TestAssistCharacterChat_OOBFieldsAndUndo(t *testing.T) {
 				{Kind: "search", Label: "searched: forsen"},
 				{Kind: "edit", Label: "updated description"},
 			},
+			Tips: []charassist.Tip{
+				{Label: "Add Minecraft memes", Prompt: "Add 2 examples about Forsen's Minecraft speedruns."},
+			},
 		},
 	}
 	a := &API{
@@ -112,7 +115,8 @@ func TestAssistCharacterChat_OOBFieldsAndUndo(t *testing.T) {
 	assert.Equal(t, "Original bio", stub.lastCurrent.Description)
 
 	assert.Contains(t, body, `id="char_assist_panel"`)
-	assert.Contains(t, body, `hx-get="/characters/assist/prompt"`, "prompt tips stay visible after turns")
+	assert.Contains(t, body, `hx-get="/characters/assist/prompt?text=`, "dynamic prompt tips stay visible after turns")
+	assert.Contains(t, body, "Add Minecraft memes")
 	assert.Contains(t, body, `name="web_search" value="1" class="peer sr-only" checked`)
 	assert.Contains(t, body, "searched: forsen")
 	assert.Contains(t, body, "Undo")
@@ -235,11 +239,17 @@ func TestAssistCharacterPromptAndSearchToggle(t *testing.T) {
 func TestCharacterTemplate_SidePanelVisibility(t *testing.T) {
 	withAssist := getString("character.html", &characterPage{
 		MessageExamples: &msgExamples{},
-		Assist:          &charAssistPanelData{SessionID: "s1", HasSearch: true, SearchOn: true},
+		Assist: &charAssistPanelData{
+			SessionID: "s1",
+			HasSearch: true,
+			SearchOn:  true,
+			Tips:      charassist.ContextualTips(charassist.Draft{}, true),
+		},
 	})
 	assert.Contains(t, withAssist, `id="char_assist_panel"`)
 	assert.Contains(t, withAssist, `hx-post="/characters/assist/chat"`)
-	assert.Contains(t, withAssist, `hx-get="/characters/assist/prompt"`)
+	assert.Contains(t, withAssist, `hx-get="/characters/assist/prompt?text=`)
+	assert.Contains(t, withAssist, "Real person / streamer")
 	assert.Contains(t, withAssist, `name="web_search" value="1" class="peer sr-only" checked`)
 	assert.Contains(t, withAssist, `hx-post="/characters/assist/examples"`)
 	assert.NotContains(t, withAssist, "<script")
