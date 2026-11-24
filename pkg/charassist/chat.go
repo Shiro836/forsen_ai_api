@@ -61,7 +61,7 @@ var (
 		Type: "function",
 		Function: llm.ToolFunctionDef{
 			Name:        "update_fields",
-			Description: "Update one or more text fields in the character card editor. Only pass fields you want to change.",
+			Description: "Update one or more text fields in the character card editor. ONLY call when the user explicitly asks to create, fill, or edit the card — NEVER call when answering questions, reviewing, or giving advice. Only pass fields you want to change.",
 			Parameters: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -80,7 +80,7 @@ var (
 		Type: "function",
 		Function: llm.ToolFunctionDef{
 			Name:        "set_message_examples",
-			Description: "Replace all message examples in the editor with a new list of realistic Twitch-chat request/response pairs.",
+			Description: "Replace all message examples in the editor with a new list of realistic Twitch-chat request/response pairs. ONLY call when the user explicitly asks to create or edit examples — NEVER call for questions, reviews, or advice.",
 			Parameters: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -105,7 +105,7 @@ var (
 		Type: "function",
 		Function: llm.ToolFunctionDef{
 			Name:        "add_message_examples",
-			Description: "Append new message examples to the existing list without removing current ones.",
+			Description: "Append new message examples to the existing list without removing current ones. ONLY call when the user explicitly asks to add examples — NEVER call for questions, reviews, or advice.",
 			Parameters: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -130,7 +130,7 @@ var (
 		Type: "function",
 		Function: llm.ToolFunctionDef{
 			Name:        "remove_message_example",
-			Description: "Remove one message example by its 0-based index from the current editor list.",
+			Description: "Remove one message example by its 0-based index from the current editor list. ONLY call when the user explicitly asks to remove an example.",
 			Parameters: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -172,14 +172,14 @@ func (a *Assistant) chatSystemPrompt(webSearch bool) string {
 	b.WriteString("- Show confident commitment in examples: when asked something absurd, unknowable, or controversial, the character picks a funny, specific in-character stance rather than hedging.\n")
 	b.WriteString("- Match Twitch banter: edgy, blunt, sarcastic, or dark humor and ordinary profanity fit when true to the character, but never put slurs or hate speech in the card (the stream filter bleeps them).\n\n")
 
-	b.WriteString("How to use your tools:\n")
+	b.WriteString("CRITICAL — Decide whether to ADVISE or EDIT before calling any tool:\n")
+	b.WriteString("- NEVER call update_fields, set_message_examples, add_message_examples, or remove_message_example when the user is asking a question, asking for a critique/review, asking \"how to improve...\", or brainstorming ideas (e.g. \"how to improve quality of this char?\", \"what's missing?\", \"what do you think?\", \"any suggestions?\", \"why does it sound off?\"). Reply in chat with specific, actionable advice tailored to the current card, and offer to apply the changes if they want.\n")
+	b.WriteString("- ONLY call edit tools when the user explicitly instructs you to make changes (e.g. \"build\", \"create\", \"fill\", \"rewrite\", \"update\", \"add\", \"remove\", \"fix\", \"make it...\", \"translate\", \"apply those\", \"do it\").\n")
+	b.WriteString("- When the user DOES ask you to edit, apply changes directly using update_fields and/or message-example tools rather than pasting rewritten fields in chat. When building a new character from scratch, populate all text fields via update_fields AND add 4-5 varied examples via set_message_examples.\n")
 	if webSearch && a.search != nil {
-		b.WriteString("- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character so facts, quotes, and recent lore are accurate instead of guessed. Usually 1-2 focused queries are enough.\n")
+		b.WriteString("- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character so facts, quotes, and recent lore are accurate instead of guessed (allowed for both edits and factual questions). Usually 1-2 focused queries are enough.\n")
 	}
-	b.WriteString("- Whenever the user asks to create, fill, rewrite, translate, or tweak the character, ALWAYS apply changes directly using update_fields and/or message-example tools rather than only pasting text in chat.\n")
-	b.WriteString("- When building a new character from scratch, populate all text fields via update_fields AND add 4-5 varied examples via set_message_examples.\n")
-	b.WriteString("- When the user only asks a question or wants to brainstorm without editing, reply in chat without calling edit tools.\n")
-	b.WriteString("- Keep chat replies brief and direct (1-3 sentences). Match the user's language.")
+	b.WriteString("- Reply formatting: use plain text (no markdown bold/headings). After applying edits, keep confirmation brief (1-3 sentences). When answering questions or giving improvement advice, give 3-6 short, concrete bullet points referencing the current card and offer to apply them. Match the user's language.")
 	return b.String()
 }
 
