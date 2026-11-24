@@ -2,6 +2,27 @@
 <textarea id="char_assist_message" name="message" rows="2" placeholder="Describe a character or ask for edits..." autocomplete="off"{{ if .Focus }} autofocus{{ end }} class="w-full resize-none {{template "input-class"}} px-3 py-2 text-sm">{{ .Text }}</textarea>
 {{- end }}
 
+{{ define "char-assist-tips" -}}
+<div id="char_assist_tips" class="flex flex-wrap gap-1.5"
+    {{- if .Async }}
+    hx-post="/characters/assist/tips"
+    hx-vals='{"session_id": "{{ .SessionID }}"}'
+    hx-include="#character_form, #char_assist_form [name='web_search']"
+    hx-params="not voice_ref,image"
+    hx-trigger="load"
+    hx-swap="outerHTML"
+    hx-sync="this:replace"
+    {{- end }}>
+    {{ range .Tips }}
+    <button type="button"
+        hx-get="/characters/assist/prompt?text={{ .Prompt | urlquery }}"
+        hx-target="#char_assist_message"
+        hx-swap="outerHTML"
+        class="{{template "button-2"}} px-2 py-0.5 text-xs">{{ .Label }}</button>
+    {{ end }}
+</div>
+{{- end }}
+
 {{ define "char-assist-panel" -}}
 <aside id="char_assist_panel" class="sticky top-20 flex h-[calc(100vh-6.5rem)] w-[25rem] shrink-0 flex-col self-start overflow-hidden rounded border-2 {{template "ui-border-clr"}} bg-white dark:bg-slate-900">
     <header class="flex items-center justify-between gap-2 border-b {{template "ui-border-clr"}} bg-gradient-to-br from-slate-100 to-slate-50 px-4 py-3 dark:from-zinc-900 dark:to-zinc-800">
@@ -75,17 +96,7 @@
     </div>
 
     <div class="flex flex-col gap-2 border-t {{template "ui-border-clr"}} p-3">
-        {{ if .Tips }}
-        <div class="flex flex-wrap gap-1.5">
-            {{ range .Tips }}
-            <button type="button"
-                hx-get="/characters/assist/prompt?text={{ .Prompt | urlquery }}"
-                hx-target="#char_assist_message"
-                hx-swap="outerHTML"
-                class="{{template "button-2"}} px-2 py-0.5 text-xs">{{ .Label }}</button>
-            {{ end }}
-        </div>
-        {{ end }}
+        {{ template "char-assist-tips" .TipsBlock }}
 
         <form id="char_assist_form"
             class="flex flex-col gap-2"

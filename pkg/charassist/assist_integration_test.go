@@ -48,9 +48,15 @@ func TestLiveChatWithSearch(t *testing.T) {
 	require.NotEmpty(t, res.Reply)
 	require.NotEmpty(t, res.Draft.Name)
 	require.NotEmpty(t, res.Draft.Description)
-	require.NotContains(t, res.Reply, "[[tip:")
-	require.NotEmpty(t, res.Tips)
-	t.Logf("actions=%+v reply=%q name=%q examples=%d tips=%+v", res.Actions, res.Reply, res.Draft.Name, len(res.Draft.MessageExamples), res.Tips)
+	t.Logf("actions=%+v reply=%q name=%q examples=%d", res.Actions, res.Reply, res.Draft.Name, len(res.Draft.MessageExamples))
+
+	tips, err := a.GenerateTips(ctx, res.Draft, []charassist.ChatMessage{
+		{Role: "user", Content: "search who won Dota 2 TI 2025 and build a cocky character based on their coach"},
+		{Role: "assistant", Content: res.Reply},
+	}, true)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(tips), 3)
+	t.Logf("schema-enforced tips=%+v", tips)
 }
 
 func TestLiveGenerateAndExamples(t *testing.T) {

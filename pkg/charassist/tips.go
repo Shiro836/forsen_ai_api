@@ -1,26 +1,151 @@
 package charassist
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"app/pkg/archive"
 )
 
-const maxTips = 4
+const (
+	maxTips       = 4
+	tipsMaxTokens = 384
+)
 
 // Tip is a clickable quick-prompt chip that prefills the chat composer.
 type Tip struct {
-	Label  string
-	Prompt string
+	Label  string `json:"label"`
+	Prompt string `json:"prompt"`
 }
 
 var (
-	tipLineRe  = regexp.MustCompile(`^\s*(?:[-*]\s*)?\[\[tip:\s*([^|\]]+?)\s*\|\s*([^\]]+?)\s*\]\]\s*$`)
 	ttsStageRe = regexp.MustCompile(`\*[^*\n]{1,40}\*|\[[^\]\n]{1,30}\]|\([^)\n]{1,25}\)|` + "```")
+
+	tipsSchema = json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    "tips": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "prompt": { "type": "string" }
+        },
+        "required": ["label", "prompt"],
+        "additionalProperties": false
+      },
+      "minItems": 3,
+      "maxItems": 4
+    }
+  },
+  "required": ["tips"],
+  "additionalProperties": false
+}`)
 )
 
-// ContextualTips builds up to 4 starter or follow-up tips directly from the
-// current form draft (blank, partial, or populated) without an LLM call.
+const tipsSystemPrompt = `You suggest 3-4 short next-step editing prompts for a user building a BAJ AI Twitch livestream TTS character card.
+
+Context on BAJ AI character cards:
+- message_examples are few-shot conversation turns and have the biggest effect on voice, cadence, humor, and length; great cards have 4-6 examples mixing in-domain prompts with random Twitch chat prompts (hot takes, roasts, life advice).
+- Responses are spoken aloud by TTS: no *stage directions*, brackets, markdown, emojis, or ALL CAPS.
+- description should focus on spoken voice, catchphrases, lore, quirks, and opinions — not boilerplate "stay in character" rules.
+
+Rules:
+- Make every suggestion concrete and specific to THIS character, its current gaps, and any recent chat messages.
+- label: ultra-short button text (2-4 words, max 28 chars), e.g. "Add Minecraft roasts", "Fix TTS formatting", "More TI 2025 lore".
+- prompt: a clear 1-sentence instruction the user can review or tweak before hitting Send.
+- Match the language of the character card or conversation.
+- Return ONLY valid JSON matching the schema.`
+
+// GenerateTips produces 3-4 strict-schema follow-up prompt chips tailored to
+// current and recent conversation history.
+func (a *Assistant) GenerateTips(ctx context.Context, current Draft, history []ChatMessage, webSearch bool) ([]Tip, error) {
+	current = current.Clean()
+	if !current.HasContent() && len(history) == 0 {
+		return ContextualTips(current, webSearch && a.search != nil), nil
+	}
+
+	raw, err := a.callSchema(
+		archive.WithLLMKind(ctx, "char_assist_tips"),
+		tipsSystemPrompt,
+		buildTipsUserPrompt(current, history, webSearch && a.search != nil),
+		"character_tips",
+		tipsSchema,
+		tipsMaxTokens,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed struct {
+		Tips []Tip `json:"tips"`
+	}
+	if err := json.Unmarshal([]byte(stripCodeFence(raw)), &parsed); err != nil {
+		return nil, fmt.Errorf("parse tips: %w", err)
+	}
+
+	out := sanitizeTips(parsed.Tips)
+	if len(out) == 0 {
+		return nil, fmt.Errorf("model returned no usable tips")
+	}
+	return out, nil
+}
+
+func buildTipsUserPrompt(current Draft, history []ChatMessage, hasSearch bool) string {
+	var b strings.Builder
+	b.WriteString("Current character card (JSON):\n")
+	raw, _ := json.Marshal(current)
+	b.Write(raw)
+	b.WriteString("\n")
+
+	if len(history) > 0 {
+		recent := history
+		if len(recent) > 4 {
+			recent = recent[len(recent)-4:]
+		}
+		b.WriteString("\nRecent conversation:\n")
+		for _, h := range recent {
+			fmt.Fprintf(&b, "%s: %s\n", h.Role, h.Content)
+		}
+	}
+
+	if hasSearch {
+		b.WriteString("\nWeb search is enabled (you may suggest searching for recent lore, quotes, or memes if relevant).")
+	} else {
+		b.WriteString("\nWeb search is off (do not suggest searching the web).")
+	}
+	b.WriteString("\nSuggest 3-4 specific next edits or prompts.")
+	return b.String()
+}
+
+func sanitizeTips(in []Tip) []Tip {
+	var out []Tip
+	seen := make(map[string]bool)
+	for _, t := range in {
+		if len(out) >= maxTips {
+			break
+		}
+		label := clipLabel(strings.TrimSpace(t.Label), 32)
+		prompt := strings.TrimSpace(t.Prompt)
+		if label == "" || prompt == "" {
+			continue
+		}
+		key := strings.ToLower(label)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, Tip{Label: label, Prompt: prompt})
+	}
+	return out
+}
+
+// ContextualTips builds up to 4 instant starter or fallback tips directly from
+// the current form draft without an LLM call.
 func ContextualTips(draft Draft, hasSearch bool) []Tip {
 	d := draft.Clean()
 	if !d.HasContent() {
@@ -146,40 +271,6 @@ func hasTTSArtifacts(d Draft) bool {
 		}
 	}
 	return false
-}
-
-// ParseTips extracts trailing [[tip: Label | Prompt]] lines from an assistant
-// reply and returns the cleaned reply text alongside the parsed tips.
-func ParseTips(raw string) (string, []Tip) {
-	lines := strings.Split(raw, "\n")
-	kept := make([]string, 0, len(lines))
-	var tips []Tip
-	seen := make(map[string]bool)
-
-	for _, line := range lines {
-		m := tipLineRe.FindStringSubmatch(line)
-		if m == nil {
-			kept = append(kept, line)
-			continue
-		}
-		if len(tips) >= maxTips {
-			continue
-		}
-		label := clipLabel(strings.TrimSpace(m[1]), 32)
-		prompt := strings.TrimSpace(m[2])
-		if label == "" || prompt == "" {
-			continue
-		}
-		key := strings.ToLower(label)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		tips = append(tips, Tip{Label: label, Prompt: prompt})
-	}
-
-	clean := strings.TrimSpace(strings.Join(kept, "\n"))
-	return clean, tips
 }
 
 func clipLabel(s string, maxRunes int) string {

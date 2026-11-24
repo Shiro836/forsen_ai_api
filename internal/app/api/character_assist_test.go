@@ -23,6 +23,8 @@ import (
 type stubCharAssistant struct {
 	chatResult    *charassist.ChatResult
 	examples      []db.MessageExample
+	tips          []charassist.Tip
+	tipsErr       error
 	hasSearch     bool
 	err           error
 	lastMsg       string
@@ -50,6 +52,16 @@ func (s *stubCharAssistant) GenerateExamples(_ context.Context, current charassi
 		return nil, s.err
 	}
 	return s.examples, nil
+}
+
+func (s *stubCharAssistant) GenerateTips(_ context.Context, current charassist.Draft, history []charassist.ChatMessage, webSearch bool) ([]charassist.Tip, error) {
+	s.lastCurrent = current
+	s.lastHistory = history
+	s.lastWebSearch = webSearch
+	if s.tipsErr != nil {
+		return nil, s.tipsErr
+	}
+	return s.tips, nil
 }
 
 func (s *stubCharAssistant) HasSearch() bool { return s.hasSearch }
@@ -82,9 +94,6 @@ func TestAssistCharacterChat_OOBFieldsAndUndo(t *testing.T) {
 				{Kind: "search", Label: "searched: forsen"},
 				{Kind: "edit", Label: "updated description"},
 			},
-			Tips: []charassist.Tip{
-				{Label: "Add Minecraft memes", Prompt: "Add 2 examples about Forsen's Minecraft speedruns."},
-			},
 		},
 	}
 	a := &API{
@@ -115,8 +124,9 @@ func TestAssistCharacterChat_OOBFieldsAndUndo(t *testing.T) {
 	assert.Equal(t, "Original bio", stub.lastCurrent.Description)
 
 	assert.Contains(t, body, `id="char_assist_panel"`)
-	assert.Contains(t, body, `hx-get="/characters/assist/prompt?text=`, "dynamic prompt tips stay visible after turns")
-	assert.Contains(t, body, "Add Minecraft memes")
+	assert.Contains(t, body, `id="char_assist_tips"`)
+	assert.Contains(t, body, `hx-post="/characters/assist/tips"`, "chat response triggers async tips refresh")
+	assert.Contains(t, body, `hx-get="/characters/assist/prompt?text=`, "prompt tips stay visible after turns")
 	assert.Contains(t, body, `name="web_search" value="1" class="peer sr-only" checked`)
 	assert.Contains(t, body, "searched: forsen")
 	assert.Contains(t, body, "Undo")
@@ -202,7 +212,7 @@ func TestAssistCharacterExamples_OOBAppendsAndDropsBlankRows(t *testing.T) {
 	assert.Contains(t, body, `id="character_save_result"`)
 }
 
-func TestAssistCharacterPromptAndSearchToggle(t *testing.T) {
+func TestAssistCharacterPromptTipsAndSearchToggle(t *testing.T) {
 	user := &db.User{ID: uuid.New(), TwitchLogin: "forsen"}
 	stub := &stubCharAssistant{
 		hasSearch:  true,
@@ -234,6 +244,19 @@ func TestAssistCharacterPromptAndSearchToggle(t *testing.T) {
 	require.Equal(t, http.StatusOK, wChat.Code)
 	assert.False(t, stub.lastWebSearch)
 	assert.NotContains(t, wChat.Body.String(), `name="web_search" value="1" class="peer sr-only" checked`)
+
+	// Async tips endpoint renders strict-schema tips with Async disabled (no loop).
+	stub.tips = []charassist.Tip{{Label: "Add Minecraft memes", Prompt: "Add 2 Minecraft examples."}}
+	wTips := httptest.NewRecorder()
+	a.assistCharacterTips(wTips, authedFormReq(user, "/characters/assist/tips", url.Values{
+		"session_id": {uuid.New().String()},
+		"name":       {"Forsen"},
+		"web_search": {"1"},
+	}))
+	require.Equal(t, http.StatusOK, wTips.Code)
+	assert.True(t, stub.lastWebSearch)
+	assert.Contains(t, wTips.Body.String(), "Add Minecraft memes")
+	assert.NotContains(t, wTips.Body.String(), `hx-trigger="load"`, "rendered tips must not re-trigger load")
 }
 
 func TestCharacterTemplate_SidePanelVisibility(t *testing.T) {
@@ -244,15 +267,30 @@ func TestCharacterTemplate_SidePanelVisibility(t *testing.T) {
 			HasSearch: true,
 			SearchOn:  true,
 			Tips:      charassist.ContextualTips(charassist.Draft{}, true),
+			AsyncTips: false,
 		},
 	})
 	assert.Contains(t, withAssist, `id="char_assist_panel"`)
 	assert.Contains(t, withAssist, `hx-post="/characters/assist/chat"`)
 	assert.Contains(t, withAssist, `hx-get="/characters/assist/prompt?text=`)
 	assert.Contains(t, withAssist, "Real person / streamer")
+	assert.NotContains(t, withAssist, `hx-post="/characters/assist/tips"`, "blank draft does not fire async tips")
 	assert.Contains(t, withAssist, `name="web_search" value="1" class="peer sr-only" checked`)
 	assert.Contains(t, withAssist, `hx-post="/characters/assist/examples"`)
 	assert.NotContains(t, withAssist, "<script")
+
+	existingChar := getString("character.html", &characterPage{
+		MessageExamples: &msgExamples{},
+		Assist: &charAssistPanelData{
+			SessionID: "s2",
+			HasSearch: true,
+			SearchOn:  true,
+			Tips:      charassist.ContextualTips(charassist.Draft{Name: "Forsen"}, true),
+			AsyncTips: true,
+		},
+	})
+	assert.Contains(t, existingChar, `hx-post="/characters/assist/tips"`, "existing character loads async AI tips")
+	assert.Contains(t, existingChar, `hx-trigger="load"`)
 
 	withoutAssist := getString("character.html", &characterPage{
 		MessageExamples: &msgExamples{},

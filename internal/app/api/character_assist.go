@@ -32,6 +32,7 @@ const (
 type CharacterAssistant interface {
 	Chat(ctx context.Context, history []charassist.ChatMessage, userMessage string, current charassist.Draft, webSearch bool) (*charassist.ChatResult, error)
 	GenerateExamples(ctx context.Context, current charassist.Draft, count int) ([]db.MessageExample, error)
+	GenerateTips(ctx context.Context, current charassist.Draft, history []charassist.ChatMessage, webSearch bool) ([]charassist.Tip, error)
 	HasSearch() bool
 }
 
@@ -56,15 +57,33 @@ type charAssistTurn struct {
 	Actions   []charassist.ToolAction
 }
 
+type charAssistTipsData struct {
+	SessionID string
+	Tips      []charassist.Tip
+	Async     bool
+}
+
 type charAssistPanelData struct {
 	SessionID    string
 	HasSearch    bool
 	SearchOn     bool
 	Turns        []charAssistTurn
 	Tips         []charassist.Tip
+	AsyncTips    bool
 	CanUndo      bool
 	Error        string
 	DraftMessage string
+}
+
+func (p *charAssistPanelData) TipsBlock() charAssistTipsData {
+	if p == nil {
+		return charAssistTipsData{}
+	}
+	return charAssistTipsData{
+		SessionID: p.SessionID,
+		Tips:      p.Tips,
+		Async:     p.AsyncTips,
+	}
 }
 
 func (p *charAssistPanelData) MessageInput() charAssistMessageData {
@@ -215,6 +234,44 @@ func (api *API) assistSessionStore() *charAssistSessionStore {
 	return api.charAssistSessions
 }
 
+func (api *API) assistCharacterTips(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if api.charAssist == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if err := parseAnyForm(r); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	sessionID := strings.TrimSpace(r.Form.Get("session_id"))
+	history, _, _ := api.assistSessionStore().snapshotState(sessionID, user.ID)
+	hasSearch := api.charAssist.HasSearch()
+	searchOn := hasSearch && r.Form.Get("web_search") == "1"
+	current := formToDraft(r.Form)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	tips, err := api.charAssist.GenerateTips(ctx, current, history, searchOn)
+	if err != nil {
+		api.logger.Warn("character assist tips failed, using fallback", "user", user.TwitchLogin, "err", err)
+		tips = charassist.ContextualTips(current, searchOn)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = html.ExecuteTemplate(w, "char-assist-tips", charAssistTipsData{
+		SessionID: sessionID,
+		Tips:      tips,
+		Async:     false,
+	})
+}
+
 func (api *API) assistCharacterPrompt(w http.ResponseWriter, r *http.Request) {
 	if ctxstore.GetUser(r.Context()) == nil {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -303,18 +360,14 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 		Actions:   res.Actions,
 	}, true, undoSnap)
 
-	tips := res.Tips
-	if len(tips) == 0 {
-		tips = charassist.ContextualTips(res.Draft, searchOn)
-	}
-
 	resp := &charAssistResponseData{
 		Panel: &charAssistPanelData{
 			SessionID: sessionID,
 			HasSearch: hasSearch,
 			SearchOn:  searchOn,
 			Turns:     newTurns,
-			Tips:      tips,
+			Tips:      charassist.ContextualTips(res.Draft, searchOn),
+			AsyncTips: true,
 			CanUndo:   newCanUndo,
 		},
 	}
@@ -389,6 +442,7 @@ func (api *API) assistCharacterExamples(w http.ResponseWriter, r *http.Request) 
 			SearchOn:  searchOn,
 			Turns:     newTurns,
 			Tips:      charassist.ContextualTips(updated, searchOn),
+			AsyncTips: updated.HasContent(),
 			CanUndo:   newCanUndo,
 		},
 	}
@@ -429,6 +483,7 @@ func (api *API) assistCharacterUndo(w http.ResponseWriter, r *http.Request) {
 			SearchOn:  searchOn,
 			Turns:     turns,
 			Tips:      charassist.ContextualTips(tipDraft, searchOn),
+			AsyncTips: tipDraft.HasContent(),
 			CanUndo:   canUndo,
 		},
 	}
@@ -466,12 +521,14 @@ func (api *API) assistCharacterReset(w http.ResponseWriter, r *http.Request) {
 	hasSearch := api.charAssist.HasSearch()
 	searchOn := hasSearch && r.Form.Get("web_search") == "1"
 	newSessionID := api.assistSessionStore().reset(strings.TrimSpace(r.Form.Get("session_id")), user.ID)
+	draft := formToDraft(r.Form)
 	api.renderAssistResponse(w, &charAssistResponseData{
 		Panel: &charAssistPanelData{
 			SessionID: newSessionID,
 			HasSearch: hasSearch,
 			SearchOn:  searchOn,
-			Tips:      charassist.ContextualTips(formToDraft(r.Form), searchOn),
+			Tips:      charassist.ContextualTips(draft, searchOn),
+			AsyncTips: draft.HasContent(),
 		},
 	})
 }

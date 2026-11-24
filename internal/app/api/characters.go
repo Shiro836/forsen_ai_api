@@ -279,11 +279,13 @@ func (api *API) character(r *http.Request) template.HTML {
 	}
 	if api.charAssist != nil {
 		hasSearch := api.charAssist.HasSearch()
+		draft := cardToDraft(card)
 		page.Assist = &charAssistPanelData{
 			SessionID: uuid.New().String(),
 			HasSearch: hasSearch,
 			SearchOn:  hasSearch,
-			Tips:      charassist.ContextualTips(cardToDraft(card), hasSearch),
+			Tips:      charassist.ContextualTips(draft, hasSearch),
+			AsyncTips: draft.HasContent(),
 		}
 	}
 	if card != nil {

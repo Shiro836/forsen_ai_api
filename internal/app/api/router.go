@@ -263,6 +263,7 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/characters", api.nav(api.characters))
 
 			router.Post("/characters/assist/chat", http.HandlerFunc(api.assistCharacterChat))
+			router.Post("/characters/assist/tips", http.HandlerFunc(api.assistCharacterTips))
 			router.Get("/characters/assist/prompt", http.HandlerFunc(api.assistCharacterPrompt))
 			router.Post("/characters/assist/undo", http.HandlerFunc(api.assistCharacterUndo))
 			router.Post("/characters/assist/reset", http.HandlerFunc(api.assistCharacterReset))

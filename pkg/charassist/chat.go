@@ -39,7 +39,6 @@ type ChatResult struct {
 	Draft         Draft
 	ChangedFields map[string]bool
 	Actions       []ToolAction
-	Tips          []Tip
 }
 
 var (
@@ -175,14 +174,12 @@ func (a *Assistant) chatSystemPrompt(webSearch bool) string {
 
 	b.WriteString("How to use your tools:\n")
 	if webSearch && a.search != nil {
-		b.WriteString("- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character so facts, quotes, and recent lore are accurate instead of guessed.\n")
+		b.WriteString("- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character so facts, quotes, and recent lore are accurate instead of guessed. Usually 1-2 focused queries are enough.\n")
 	}
 	b.WriteString("- Whenever the user asks to create, fill, rewrite, translate, or tweak the character, ALWAYS apply changes directly using update_fields and/or message-example tools rather than only pasting text in chat.\n")
 	b.WriteString("- When building a new character from scratch, populate all text fields via update_fields AND add 4-5 varied examples via set_message_examples.\n")
 	b.WriteString("- When the user only asks a question or wants to brainstorm without editing, reply in chat without calling edit tools.\n")
-	b.WriteString("- Keep chat replies brief and direct (1-3 sentences). Match the user's language.\n")
-	b.WriteString("- At the very end of your final reply, add 3-4 short, specific follow-up prompt suggestions tailored to the current card and conversation, one per line using this exact syntax:\n")
-	b.WriteString("[[tip: Short button label (2-4 words) | Ready-to-send prompt text the user can edit before sending]]")
+	b.WriteString("- Keep chat replies brief and direct (1-3 sentences). Match the user's language.")
 	return b.String()
 }
 
@@ -267,7 +264,6 @@ func (a *Assistant) Chat(ctx context.Context, history []ChatMessage, userMessage
 		}
 	}
 
-	reply, tips := ParseTips(reply)
 	if reply == "" {
 		if len(actions) > 0 {
 			reply = "Done."
@@ -275,16 +271,12 @@ func (a *Assistant) Chat(ctx context.Context, history []ChatMessage, userMessage
 			return nil, fmt.Errorf("assistant returned an empty reply")
 		}
 	}
-	if len(tips) == 0 {
-		tips = ContextualTips(working, webSearch && a.search != nil)
-	}
 
 	return &ChatResult{
 		Reply:         reply,
 		Draft:         working,
 		ChangedFields: changed,
 		Actions:       actions,
-		Tips:          tips,
 	}, nil
 }
 
