@@ -1,3 +1,7 @@
+{{ define "char-assist-message" -}}
+<textarea id="char_assist_message" name="message" rows="2" placeholder="Describe a character or ask for edits..." autocomplete="off"{{ if .Focus }} autofocus{{ end }} class="w-full resize-none {{template "input-class"}} px-3 py-2 text-sm">{{ .Text }}</textarea>
+{{- end }}
+
 {{ define "char-assist-panel" -}}
 <aside id="char_assist_panel" class="sticky top-20 flex h-[calc(100vh-6.5rem)] w-[25rem] shrink-0 flex-col self-start overflow-hidden rounded border-2 {{template "ui-border-clr"}} bg-white dark:bg-slate-900">
     <header class="flex items-center justify-between gap-2 border-b {{template "ui-border-clr"}} bg-gradient-to-br from-slate-100 to-slate-50 px-4 py-3 dark:from-zinc-900 dark:to-zinc-800">
@@ -6,17 +10,14 @@
                 <path d="M12 2l2.1 6.4L20.5 10.5l-6.4 2.1L12 19l-2.1-6.4-6.4-2.1 6.4-2.1L12 2zm7 13l.9 2.7 2.7.9-2.7.9L19 22l-.9-2.5-2.7-.9 2.7-.9.9-2.7z"/>
             </svg>
             <h2 class="font-bold">AI Assistant</h2>
-            {{ if .HasSearch }}
-            <span class="rounded border {{template "ui-border-clr"}} px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">web</span>
-            {{ end }}
         </div>
         <div class="flex items-center gap-1.5">
             {{ if .CanUndo }}
             <button type="button"
                 hx-post="/characters/assist/undo"
                 hx-vals='{"session_id": "{{ .SessionID }}"}'
-                hx-include="#character_form"
-                hx-params="session_id,_baseline,_skip,_saved"
+                hx-include="#character_form, #char_assist_form [name='web_search']"
+                hx-params="session_id,web_search,_baseline,_skip,_saved"
                 hx-target="#char_assist_panel"
                 hx-swap="outerHTML"
                 hx-sync="#char_assist_panel:drop"
@@ -26,6 +27,7 @@
             <button type="button"
                 hx-post="/characters/assist/reset"
                 hx-vals='{"session_id": "{{ .SessionID }}"}'
+                hx-include="#char_assist_form [name='web_search']"
                 hx-target="#char_assist_panel"
                 hx-swap="outerHTML"
                 hx-sync="#char_assist_panel:drop"
@@ -37,44 +39,7 @@
     <div class="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-4 py-4">
         <div class="flex flex-col gap-3">
             {{ if not .Turns }}
-            <div class="flex flex-col gap-3 py-2 text-sm text-gray-600 dark:text-gray-300">
-                <p>Draft a character, look up lore, or edit any field.</p>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button"
-                        hx-post="/characters/assist/chat"
-                        hx-vals='{"session_id": "{{ .SessionID }}", "message": "Fill in any empty fields based on what is already here."}'
-                        hx-include="#character_form"
-                        hx-params="not voice_ref,image"
-                        hx-target="#char_assist_panel"
-                        hx-swap="outerHTML"
-                        hx-sync="#char_assist_panel:drop"
-                        hx-disabled-elt="#char_assist_panel button, #char_assist_panel textarea"
-                        hx-indicator="#char_assist_busy"
-                        class="{{template "button-2"}} px-2.5 py-1 text-xs">Fill empty fields</button>
-                    <button type="button"
-                        hx-post="/characters/assist/chat"
-                        hx-vals='{"session_id": "{{ .SessionID }}", "message": "Add 3 funny, realistic Twitch chat message examples."}'
-                        hx-include="#character_form"
-                        hx-params="not voice_ref,image"
-                        hx-target="#char_assist_panel"
-                        hx-swap="outerHTML"
-                        hx-sync="#char_assist_panel:drop"
-                        hx-disabled-elt="#char_assist_panel button, #char_assist_panel textarea"
-                        hx-indicator="#char_assist_busy"
-                        class="{{template "button-2"}} px-2.5 py-1 text-xs">Add 3 examples</button>
-                    <button type="button"
-                        hx-post="/characters/assist/chat"
-                        hx-vals='{"session_id": "{{ .SessionID }}", "message": "Punch up the description and personality so the character has sharper voice and catchphrases."}'
-                        hx-include="#character_form"
-                        hx-params="not voice_ref,image"
-                        hx-target="#char_assist_panel"
-                        hx-swap="outerHTML"
-                        hx-sync="#char_assist_panel:drop"
-                        hx-disabled-elt="#char_assist_panel button, #char_assist_panel textarea"
-                        hx-indicator="#char_assist_busy"
-                        class="{{template "button-2"}} px-2.5 py-1 text-xs">Sharpen voice</button>
-                </div>
-            </div>
+            <p class="py-2 text-sm text-gray-600 dark:text-gray-300">Draft a character, look up lore, or edit any field.</p>
             {{ end }}
 
             {{ range .Turns }}
@@ -108,29 +73,75 @@
         </div>
     </div>
 
-    <form id="char_assist_form"
-        class="flex flex-col gap-2 border-t {{template "ui-border-clr"}} p-3"
-        hx-post="/characters/assist/chat"
-        hx-target="#char_assist_panel"
-        hx-swap="outerHTML"
-        hx-sync="#char_assist_panel:drop"
-        hx-disabled-elt="find button, find textarea"
-        hx-indicator="#char_assist_busy"
-        hx-include="#character_form"
-        hx-params="not voice_ref,image">
-        <input type="hidden" name="session_id" value="{{ .SessionID }}">
-        <textarea name="message" rows="2" placeholder="Describe a character or ask for edits..." autocomplete="off" class="w-full resize-none {{template "input-class"}} px-3 py-2 text-sm">{{ .DraftMessage }}</textarea>
-        <div class="flex items-center justify-between gap-2">
-            <span id="char_assist_busy" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
-                <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v3a5 5 0 0 0-5 5H4z"></path>
-                </svg>
-                working...
-            </span>
-            <button type="submit" class="{{template "button-2"}} px-4 py-1.5 text-sm font-bold">Send</button>
+    <div class="flex flex-col gap-2 border-t {{template "ui-border-clr"}} p-3">
+        <div class="flex flex-wrap gap-1.5">
+            <button type="button"
+                hx-get="/characters/assist/prompt"
+                hx-vals='{"text": "Fill in any empty fields based on what is already here."}'
+                hx-target="#char_assist_message"
+                hx-swap="outerHTML"
+                class="{{template "button-2"}} px-2 py-0.5 text-xs">Fill empty fields</button>
+            <button type="button"
+                hx-get="/characters/assist/prompt"
+                hx-vals='{"text": "Add 3 varied Twitch chat message examples that nail this character\u0027s voice."}'
+                hx-target="#char_assist_message"
+                hx-swap="outerHTML"
+                class="{{template "button-2"}} px-2 py-0.5 text-xs">Add examples</button>
+            <button type="button"
+                hx-get="/characters/assist/prompt"
+                hx-vals='{"text": "Sharpen the description, personality, and examples with stronger voice and catchphrases."}'
+                hx-target="#char_assist_message"
+                hx-swap="outerHTML"
+                class="{{template "button-2"}} px-2 py-0.5 text-xs">Sharpen voice</button>
+            {{ if .HasSearch }}
+            <button type="button"
+                hx-get="/characters/assist/prompt"
+                hx-vals='{"text": "Search the web for lore, quotes, and recent facts about this character, then update the card."}'
+                hx-target="#char_assist_message"
+                hx-swap="outerHTML"
+                class="{{template "button-2"}} px-2 py-0.5 text-xs">Search lore</button>
+            {{ end }}
         </div>
-    </form>
+
+        <form id="char_assist_form"
+            class="flex flex-col gap-2"
+            hx-post="/characters/assist/chat"
+            hx-target="#char_assist_panel"
+            hx-swap="outerHTML"
+            hx-sync="#char_assist_panel:drop"
+            hx-disabled-elt="find button, find textarea"
+            hx-indicator="#char_assist_busy"
+            hx-include="#character_form"
+            hx-params="not voice_ref,image">
+            <input type="hidden" name="session_id" value="{{ .SessionID }}">
+            {{ template "char-assist-message" .MessageInput }}
+            <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                    {{ if .HasSearch }}
+                    <label class="cursor-pointer select-none">
+                        <input type="checkbox" name="web_search" value="1" class="peer sr-only" {{ if .SearchOn }}checked{{ end }}>
+                        <span class="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-300 px-2.5 py-1 text-xs font-medium text-gray-500 transition-colors hover:border-slate-500 peer-checked:border-twitch-dark peer-checked:bg-twitch-dark/15 peer-checked:text-twitch-dark peer-focus-visible:ring-2 peer-focus-visible:ring-twitch-light dark:border-slate-700 dark:text-gray-400 dark:hover:border-slate-500 dark:peer-checked:border-twitch-light dark:peer-checked:bg-twitch-light/15 dark:peer-checked:text-twitch-light">
+                            <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M2 12h20"/>
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                            </svg>
+                            Search
+                        </span>
+                    </label>
+                    {{ end }}
+                    <span id="char_assist_busy" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                        <svg class="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v3a5 5 0 0 0-5 5H4z"></path>
+                        </svg>
+                        working...
+                    </span>
+                </div>
+                <button type="submit" class="{{template "button-2"}} px-4 py-1.5 text-sm font-bold">Send</button>
+            </div>
+        </form>
+    </div>
 </aside>
 {{- end }}
 

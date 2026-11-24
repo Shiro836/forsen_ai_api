@@ -142,34 +142,50 @@ var (
 	}
 )
 
-func (a *Assistant) chatTools() []llm.Tool {
+func (a *Assistant) chatTools(webSearch bool) []llm.Tool {
 	tools := make([]llm.Tool, 0, 5)
-	if a.search != nil {
+	if webSearch && a.search != nil {
 		tools = append(tools, toolWebSearch)
 	}
 	tools = append(tools, toolUpdateFields, toolSetExamples, toolAddExamples, toolRemoveExample)
 	return tools
 }
 
-func (a *Assistant) chatSystemPrompt() string {
+func (a *Assistant) chatSystemPrompt(webSearch bool) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "You are an interactive character-card co-editor for a Twitch livestream AI text-to-speech bot. Today's date is %s.\n\n", time.Now().Format("2006-01-02"))
-	b.WriteString("Viewers redeem channel points to ask a character questions or prompts, and the character replies aloud via TTS. Write vivid, funny, committed character cards — never bland, generic, or sanitized. Characters can be real public figures, streamers, internet memes, fictional characters, or original archetypes.\n\n")
-	b.WriteString("How to use tools:\n")
-	if a.search != nil {
-		b.WriteString("- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character whose up-to-date lore, catchphrases, or facts you should verify.\n")
+	fmt.Fprintf(&b, "You are an interactive character-card co-editor for BAJ AI, a Twitch livestream AI text-to-speech bot. Today's date is %s.\n\n", time.Now().Format("2006-01-02"))
+
+	b.WriteString("How BAJ AI actually uses each card field at runtime:\n")
+	b.WriteString("- char_name & char_description: Shown only in the character list and Twitch reward button; NOT sent to the roleplay model. Keep char_name short and recognizable, and char_description a punchy 1-sentence hook under 120 chars.\n")
+	b.WriteString("- name: Injected into \"You are {name}...\" and \"About {name}: ...\". Use the natural name or handle the character goes by.\n")
+	b.WriteString("- description: Injected as \"About {name}: {description}\". Core identity, lore, worldview, mannerisms, speech tics, slang, catchphrases, rivalries, pet peeves, and running gags.\n")
+	b.WriteString("- personality: Injected as \"Personality: {personality}\". 5-8 sharp, high-signal comma-separated traits that anchor attitude (no filler like \"interesting, unique, complex\").\n")
+	b.WriteString("- message_examples: THE MOST IMPORTANT FIELD FOR CHARACTER VOICE. Each pair is sent verbatim as real user/assistant few-shot conversation turns right before the viewer's prompt. The roleplay model directly mimics these turns' cadence, sentence length, humor, grammar/accent quirks, profanity level, and catchphrase density — examples shape how the character sounds far more than adjectives in the description.\n")
+	b.WriteString("- first_message: Short 1-sentence in-character prompt shown before a viewer asks something (e.g. \"Ask your stupid question.\"). It is not injected as a roleplay turn, so never put essential lore only here.\n\n")
+
+	b.WriteString("Principles for building a great BAJ AI character:\n")
+	b.WriteString("- Do NOT waste description on boilerplate instructions (\"always stay in character\", \"never refuse\", \"never break character\", \"keep answers short\", \"you are an AI\"): the runtime system prompt already enforces uncensored commitment, staying in character, and spoken length.\n")
+	b.WriteString("- Write for spoken roleplay, not Wikipedia: focus on how they think, talk, brag, complain, and joke — verbal crutches, accent/grammar quirks, strong opinions, ego, blind spots, and specific community memes or lore.\n")
+	b.WriteString("- Craft 4-6 diverse message_examples: mix 1-2 in-domain prompts with 2-4 random Twitch chat prompts (absurd hypotheticals, life advice, hot takes like pineapple on pizza, viewer roasts or greetings). This teaches the model how the character handles anything chat redeems.\n")
+	b.WriteString("- Match natural spoken rhythm: vary response lengths realistically (punchy 1-liners to 2-4 sentence rants) — if every example is a long essay, the character will ramble on stream.\n")
+	b.WriteString("- 100% TTS-ready spoken text in responses: NO *stage directions*, NO (laughs)/[sighs], NO markdown or bullet lists, NO emojis, and avoid ALL CAPS words that TTS mispronounces.\n")
+	b.WriteString("- Show confident commitment in examples: when asked something absurd, unknowable, or controversial, the character picks a funny, specific in-character stance rather than hedging.\n")
+	b.WriteString("- Match Twitch banter: edgy, blunt, sarcastic, or dark humor and ordinary profanity fit when true to the character, but never put slurs or hate speech in the card (the stream filter bleeps them).\n\n")
+
+	b.WriteString("How to use your tools:\n")
+	if webSearch && a.search != nil {
+		b.WriteString("- Use web_search whenever the user mentions a real person, streamer, game, meme, recent event, or niche character so facts, quotes, and recent lore are accurate instead of guessed.\n")
 	}
-	b.WriteString("- Whenever the user asks to create, fill, rewrite, translate, or change the character, ALWAYS apply the edits directly using update_fields and/or message-example tools rather than only pasting text in chat.\n")
-	b.WriteString("- When creating a brand-new character from scratch, fill all text fields via update_fields AND add 4 strong message examples via set_message_examples.\n")
-	b.WriteString("- When the user only asks a question or wants brainstorming without editing, just answer in chat without calling edit tools.\n")
-	b.WriteString("- For message examples: mix in-domain questions with random Twitch chat prompts (hot takes, life advice, roasts, weird hypotheticals). Responses are read aloud by TTS: natural spoken speech (1-4 sentences), no stage directions, no *asterisks*, no markdown, no emojis, avoid ALL CAPS words.\n")
-	b.WriteString("- Keep your final chat reply brief and direct (1-3 sentences). Match the user's language.")
+	b.WriteString("- Whenever the user asks to create, fill, rewrite, translate, or tweak the character, ALWAYS apply changes directly using update_fields and/or message-example tools rather than only pasting text in chat.\n")
+	b.WriteString("- When building a new character from scratch, populate all text fields via update_fields AND add 4-5 varied examples via set_message_examples.\n")
+	b.WriteString("- When the user only asks a question or wants to brainstorm without editing, reply in chat without calling edit tools.\n")
+	b.WriteString("- Keep chat replies brief and direct (1-3 sentences). Match the user's language.")
 	return b.String()
 }
 
 // Chat runs one multi-step tool-calling turn against the current editor draft
 // and returns the assistant's reply plus every field mutation performed.
-func (a *Assistant) Chat(ctx context.Context, history []ChatMessage, userMessage string, current Draft) (*ChatResult, error) {
+func (a *Assistant) Chat(ctx context.Context, history []ChatMessage, userMessage string, current Draft, webSearch bool) (*ChatResult, error) {
 	userMessage = strings.TrimSpace(userMessage)
 	if userMessage == "" {
 		return nil, ErrEmptyInput
@@ -181,7 +197,7 @@ func (a *Assistant) Chat(ctx context.Context, history []ChatMessage, userMessage
 
 	// Keep static system prompt + trimmed history first for llama.cpp prefix cache hits.
 	msgs := make([]llm.Message, 0, len(history)+4)
-	msgs = append(msgs, llm.Message{Role: "system", StrContent: a.chatSystemPrompt()})
+	msgs = append(msgs, llm.Message{Role: "system", StrContent: a.chatSystemPrompt(webSearch)})
 
 	if len(history) > chatMaxHistory {
 		history = history[len(history)-chatMaxHistory:]
@@ -197,7 +213,7 @@ func (a *Assistant) Chat(ctx context.Context, history []ChatMessage, userMessage
 	}
 	msgs = append(msgs, llm.Message{Role: "user", StrContent: formatChatUserTurn(working, userMessage)})
 
-	tools := a.chatTools()
+	tools := a.chatTools(webSearch)
 	chatCtx := archive.WithLLMKind(ctx, "char_assist_chat")
 	temp, minP, rep := 0.7, 0.05, 1.05
 
@@ -236,7 +252,7 @@ func (a *Assistant) Chat(ctx context.Context, history []ChatMessage, userMessage
 		})
 
 		for _, tc := range msg.ToolCalls {
-			toolOut, action := a.runTool(ctx, tc.Function.Name, tc.Function.Arguments, &working, changed)
+			toolOut, action := a.runTool(ctx, tc.Function.Name, tc.Function.Arguments, &working, changed, webSearch)
 			if action != nil {
 				actions = append(actions, *action)
 			}
@@ -279,11 +295,11 @@ func formatChatUserTurn(current Draft, userMessage string) string {
 	return b.String()
 }
 
-func (a *Assistant) runTool(ctx context.Context, name, argsJSON string, draft *Draft, changed map[string]bool) (string, *ToolAction) {
+func (a *Assistant) runTool(ctx context.Context, name, argsJSON string, draft *Draft, changed map[string]bool, webSearch bool) (string, *ToolAction) {
 	switch name {
 	case "web_search":
-		if a.search == nil {
-			return "error: web search is not enabled", nil
+		if !webSearch || a.search == nil {
+			return "error: web search is disabled", nil
 		}
 		var args struct {
 			Query string `json:"query"`

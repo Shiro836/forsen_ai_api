@@ -89,7 +89,7 @@ func TestChat_SearchAndUpdateTools(t *testing.T) {
 		MessageExamples: []db.MessageExample{
 			{Request: "Old Q", Response: "Old A"},
 		},
-	})
+	}, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"TI 2025 Dota winner"}, searcher.queries)
@@ -115,16 +115,26 @@ func TestChat_SearchAndUpdateTools(t *testing.T) {
 	assert.Equal(t, false, client.reqs[0].ChatTemplateKwargs["enable_thinking"])
 }
 
-func TestChat_WithoutSearcherOmitsWebSearchTool(t *testing.T) {
+func TestChat_WithoutSearcherOrToggleOffOmitsWebSearchTool(t *testing.T) {
 	client := &scriptedChatClient{
 		model:   "qwen36-hauhau",
 		replies: []llm.ChatResponseMessage{{Content: "Just answering your question."}},
 	}
 	a := New(client, nil)
-	res, err := a.Chat(context.Background(), nil, "what traits fit a pirate?", Draft{})
+	res, err := a.Chat(context.Background(), nil, "what traits fit a pirate?", Draft{}, true)
 	require.NoError(t, err)
 	assert.Empty(t, res.ChangedFields)
 	assert.Len(t, client.reqs[0].Tools, 4)
+
+	client2 := &scriptedChatClient{
+		model:   "qwen36-hauhau",
+		replies: []llm.ChatResponseMessage{{Content: "Answered without web search."}},
+	}
+	aWithSearch := New(client2, &stubSearcher{})
+	_, err = aWithSearch.Chat(context.Background(), nil, "what traits fit a pirate?", Draft{}, false)
+	require.NoError(t, err)
+	assert.Len(t, client2.reqs[0].Tools, 4, "webSearch=false must omit web_search tool even when searcher is configured")
+	assert.Contains(t, client2.reqs[0].Messages[0].StrContent, "message_examples: THE MOST IMPORTANT FIELD")
 }
 
 func TestChat_RemoveExample(t *testing.T) {
@@ -150,7 +160,7 @@ func TestChat_RemoveExample(t *testing.T) {
 			{Request: "Q1", Response: "A1"},
 			{Request: "Q2", Response: "A2"},
 		},
-	})
+	}, false)
 	require.NoError(t, err)
 	require.Len(t, res.Draft.MessageExamples, 1)
 	assert.Equal(t, "Q2", res.Draft.MessageExamples[0].Request)

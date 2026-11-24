@@ -30,7 +30,7 @@ const (
 
 // CharacterAssistant powers the interactive character-editor side panel.
 type CharacterAssistant interface {
-	Chat(ctx context.Context, history []charassist.ChatMessage, userMessage string, current charassist.Draft) (*charassist.ChatResult, error)
+	Chat(ctx context.Context, history []charassist.ChatMessage, userMessage string, current charassist.Draft, webSearch bool) (*charassist.ChatResult, error)
 	GenerateExamples(ctx context.Context, current charassist.Draft, count int) ([]db.MessageExample, error)
 	HasSearch() bool
 }
@@ -45,6 +45,11 @@ type charExamplesData struct {
 	OOB      bool
 }
 
+type charAssistMessageData struct {
+	Text  string
+	Focus bool
+}
+
 type charAssistTurn struct {
 	User      string
 	Assistant string
@@ -54,10 +59,18 @@ type charAssistTurn struct {
 type charAssistPanelData struct {
 	SessionID    string
 	HasSearch    bool
+	SearchOn     bool
 	Turns        []charAssistTurn
 	CanUndo      bool
 	Error        string
 	DraftMessage string
+}
+
+func (p *charAssistPanelData) MessageInput() charAssistMessageData {
+	if p == nil {
+		return charAssistMessageData{}
+	}
+	return charAssistMessageData{Text: p.DraftMessage}
 }
 
 type charAssistResponseData struct {
@@ -201,6 +214,18 @@ func (api *API) assistSessionStore() *charAssistSessionStore {
 	return api.charAssistSessions
 }
 
+func (api *API) assistCharacterPrompt(w http.ResponseWriter, r *http.Request) {
+	if ctxstore.GetUser(r.Context()) == nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = html.ExecuteTemplate(w, "char-assist-message", charAssistMessageData{
+		Text:  r.URL.Query().Get("text"),
+		Focus: true,
+	})
+}
+
 func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 	user := ctxstore.GetUser(r.Context())
 	if user == nil {
@@ -220,13 +245,16 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 	store := api.assistSessionStore()
 	sessionID, _ := store.getOrCreate(strings.TrimSpace(r.Form.Get("session_id")), user.ID)
 	history, turns, canUndo := store.snapshotState(sessionID, user.ID)
+	hasSearch := api.charAssist.HasSearch()
+	searchOn := hasSearch && r.Form.Get("web_search") == "1"
 
 	message := strings.TrimSpace(r.Form.Get("message"))
 	if message == "" {
 		api.renderAssistResponse(w, &charAssistResponseData{
 			Panel: &charAssistPanelData{
 				SessionID: sessionID,
-				HasSearch: api.charAssist.HasSearch(),
+				HasSearch: hasSearch,
+				SearchOn:  searchOn,
 				Turns:     turns,
 				CanUndo:   canUndo,
 				Error:     "Type a message first.",
@@ -240,7 +268,7 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), assistRequestTimeout)
 	defer cancel()
 
-	res, err := api.charAssist.Chat(ctx, history, message, current)
+	res, err := api.charAssist.Chat(ctx, history, message, current, searchOn)
 	if err != nil {
 		errMsg := "Something went wrong. Try again."
 		if errors.Is(err, charassist.ErrEmptyInput) {
@@ -251,7 +279,8 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 		api.renderAssistResponse(w, &charAssistResponseData{
 			Panel: &charAssistPanelData{
 				SessionID:    sessionID,
-				HasSearch:    api.charAssist.HasSearch(),
+				HasSearch:    hasSearch,
+				SearchOn:     searchOn,
 				Turns:        turns,
 				CanUndo:      canUndo,
 				Error:        errMsg,
@@ -275,7 +304,8 @@ func (api *API) assistCharacterChat(w http.ResponseWriter, r *http.Request) {
 	resp := &charAssistResponseData{
 		Panel: &charAssistPanelData{
 			SessionID: sessionID,
-			HasSearch: api.charAssist.HasSearch(),
+			HasSearch: hasSearch,
+			SearchOn:  searchOn,
 			Turns:     newTurns,
 			CanUndo:   newCanUndo,
 		},
@@ -303,6 +333,8 @@ func (api *API) assistCharacterExamples(w http.ResponseWriter, r *http.Request) 
 	store := api.assistSessionStore()
 	sessionID, _ := store.getOrCreate(strings.TrimSpace(r.Form.Get("session_id")), user.ID)
 	_, turns, canUndo := store.snapshotState(sessionID, user.ID)
+	hasSearch := api.charAssist.HasSearch()
+	searchOn := hasSearch && r.Form.Get("web_search") == "1"
 
 	current := formToDraft(r.Form)
 	clean := current.Clean()
@@ -321,7 +353,8 @@ func (api *API) assistCharacterExamples(w http.ResponseWriter, r *http.Request) 
 		api.renderAssistResponse(w, &charAssistResponseData{
 			Panel: &charAssistPanelData{
 				SessionID: sessionID,
-				HasSearch: api.charAssist.HasSearch(),
+				HasSearch: hasSearch,
+				SearchOn:  searchOn,
 				Turns:     turns,
 				CanUndo:   canUndo,
 				Error:     errMsg,
@@ -343,7 +376,8 @@ func (api *API) assistCharacterExamples(w http.ResponseWriter, r *http.Request) 
 	resp := &charAssistResponseData{
 		Panel: &charAssistPanelData{
 			SessionID: sessionID,
-			HasSearch: api.charAssist.HasSearch(),
+			HasSearch: hasSearch,
+			SearchOn:  searchOn,
 			Turns:     newTurns,
 			CanUndo:   newCanUndo,
 		},
@@ -371,11 +405,14 @@ func (api *API) assistCharacterUndo(w http.ResponseWriter, r *http.Request) {
 	store := api.assistSessionStore()
 	sessionID := strings.TrimSpace(r.Form.Get("session_id"))
 	prev, turns, canUndo := store.popUndo(sessionID, user.ID)
+	hasSearch := api.charAssist.HasSearch()
+	searchOn := hasSearch && r.Form.Get("web_search") == "1"
 
 	resp := &charAssistResponseData{
 		Panel: &charAssistPanelData{
 			SessionID: sessionID,
-			HasSearch: api.charAssist.HasSearch(),
+			HasSearch: hasSearch,
+			SearchOn:  searchOn,
 			Turns:     turns,
 			CanUndo:   canUndo,
 		},
@@ -411,11 +448,14 @@ func (api *API) assistCharacterReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hasSearch := api.charAssist.HasSearch()
+	searchOn := hasSearch && r.Form.Get("web_search") == "1"
 	newSessionID := api.assistSessionStore().reset(strings.TrimSpace(r.Form.Get("session_id")), user.ID)
 	api.renderAssistResponse(w, &charAssistResponseData{
 		Panel: &charAssistPanelData{
 			SessionID: newSessionID,
-			HasSearch: api.charAssist.HasSearch(),
+			HasSearch: hasSearch,
+			SearchOn:  searchOn,
 		},
 	})
 }

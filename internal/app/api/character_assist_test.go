@@ -21,20 +21,22 @@ import (
 )
 
 type stubCharAssistant struct {
-	chatResult  *charassist.ChatResult
-	examples    []db.MessageExample
-	hasSearch   bool
-	err         error
-	lastMsg     string
-	lastHistory []charassist.ChatMessage
-	lastCurrent charassist.Draft
-	lastCount   int
+	chatResult    *charassist.ChatResult
+	examples      []db.MessageExample
+	hasSearch     bool
+	err           error
+	lastMsg       string
+	lastHistory   []charassist.ChatMessage
+	lastCurrent   charassist.Draft
+	lastWebSearch bool
+	lastCount     int
 }
 
-func (s *stubCharAssistant) Chat(_ context.Context, history []charassist.ChatMessage, userMessage string, current charassist.Draft) (*charassist.ChatResult, error) {
+func (s *stubCharAssistant) Chat(_ context.Context, history []charassist.ChatMessage, userMessage string, current charassist.Draft, webSearch bool) (*charassist.ChatResult, error) {
 	s.lastHistory = history
 	s.lastMsg = userMessage
 	s.lastCurrent = current
+	s.lastWebSearch = webSearch
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -92,6 +94,7 @@ func TestAssistCharacterChat_OOBFieldsAndUndo(t *testing.T) {
 	form := url.Values{
 		"session_id":  {sid},
 		"message":     {"update forsen bio"},
+		"web_search":  {"1"},
 		"char_name":   {"Forsen"},
 		"name":        {"Forsen"},
 		"description": {"Original bio"},
@@ -105,9 +108,12 @@ func TestAssistCharacterChat_OOBFieldsAndUndo(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
 	assert.Equal(t, "update forsen bio", stub.lastMsg)
+	assert.True(t, stub.lastWebSearch)
 	assert.Equal(t, "Original bio", stub.lastCurrent.Description)
 
 	assert.Contains(t, body, `id="char_assist_panel"`)
+	assert.Contains(t, body, `hx-get="/characters/assist/prompt"`, "prompt tips stay visible after turns")
+	assert.Contains(t, body, `name="web_search" value="1" class="peer sr-only" checked`)
 	assert.Contains(t, body, "searched: forsen")
 	assert.Contains(t, body, "Undo")
 	assert.Contains(t, body, `id="description"`)
@@ -192,13 +198,49 @@ func TestAssistCharacterExamples_OOBAppendsAndDropsBlankRows(t *testing.T) {
 	assert.Contains(t, body, `id="character_save_result"`)
 }
 
+func TestAssistCharacterPromptAndSearchToggle(t *testing.T) {
+	user := &db.User{ID: uuid.New(), TwitchLogin: "forsen"}
+	stub := &stubCharAssistant{
+		hasSearch:  true,
+		chatResult: &charassist.ChatResult{Reply: "ok"},
+	}
+	a := &API{
+		logger:             slog.New(slog.NewTextHandler(io.Discard, nil)),
+		charAssist:         stub,
+		charAssistSessions: newCharAssistSessionStore(),
+	}
+
+	// Prefill endpoint only returns the composer textarea and never invokes Chat.
+	r := httptest.NewRequest(http.MethodGet, "/characters/assist/prompt?text=Fill+empty+fields", nil)
+	r = r.WithContext(ctxstore.WithUser(r.Context(), user))
+	w := httptest.NewRecorder()
+	a.assistCharacterPrompt(w, r)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), `id="char_assist_message"`)
+	assert.Contains(t, w.Body.String(), "Fill empty fields")
+	assert.Contains(t, w.Body.String(), "autofocus")
+	assert.Empty(t, stub.lastMsg)
+
+	// Unchecked web_search disables search for the turn and preserves unchecked state.
+	wChat := httptest.NewRecorder()
+	a.assistCharacterChat(wChat, authedFormReq(user, "/characters/assist/chat", url.Values{
+		"session_id": {uuid.New().String()},
+		"message":    {"tweak tone"},
+	}))
+	require.Equal(t, http.StatusOK, wChat.Code)
+	assert.False(t, stub.lastWebSearch)
+	assert.NotContains(t, wChat.Body.String(), `name="web_search" value="1" class="peer sr-only" checked`)
+}
+
 func TestCharacterTemplate_SidePanelVisibility(t *testing.T) {
 	withAssist := getString("character.html", &characterPage{
 		MessageExamples: &msgExamples{},
-		Assist:          &charAssistPanelData{SessionID: "s1", HasSearch: true},
+		Assist:          &charAssistPanelData{SessionID: "s1", HasSearch: true, SearchOn: true},
 	})
 	assert.Contains(t, withAssist, `id="char_assist_panel"`)
 	assert.Contains(t, withAssist, `hx-post="/characters/assist/chat"`)
+	assert.Contains(t, withAssist, `hx-get="/characters/assist/prompt"`)
+	assert.Contains(t, withAssist, `name="web_search" value="1" class="peer sr-only" checked`)
 	assert.Contains(t, withAssist, `hx-post="/characters/assist/examples"`)
 	assert.NotContains(t, withAssist, "<script")
 

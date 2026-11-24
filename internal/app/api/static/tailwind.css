@@ -3102,6 +3102,12 @@ video {
   transition-duration: 150ms;
 }
 
+.transition-colors {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
 .ease-in {
   transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
 }
@@ -3232,6 +3238,11 @@ video {
 .hover\:border-green-500:hover {
   --tw-border-opacity: 1;
   border-color: rgb(34 197 94 / var(--tw-border-opacity));
+}
+
+.hover\:border-slate-500:hover {
+  --tw-border-opacity: 1;
+  border-color: rgb(100 116 139 / var(--tw-border-opacity));
 }
 
 .hover\:border-slate-700:hover {
@@ -3366,9 +3377,18 @@ video {
   background-color: rgb(145 70 255 / var(--tw-bg-opacity));
 }
 
+.peer:checked ~ .peer-checked\:bg-twitch-dark\/15 {
+  background-color: rgb(145 70 255 / 0.15);
+}
+
 .peer:checked ~ .peer-checked\:text-green-500 {
   --tw-text-opacity: 1;
   color: rgb(34 197 94 / var(--tw-text-opacity));
+}
+
+.peer:checked ~ .peer-checked\:text-twitch-dark {
+  --tw-text-opacity: 1;
+  color: rgb(145 70 255 / var(--tw-text-opacity));
 }
 
 .peer:checked ~ .peer-checked\:text-white {
@@ -3796,6 +3816,11 @@ video {
   color: rgb(255 255 255 / var(--tw-text-opacity));
 }
 
+.dark\:hover\:border-slate-500:hover:is(.dark *) {
+  --tw-border-opacity: 1;
+  border-color: rgb(100 116 139 / var(--tw-border-opacity));
+}
+
 .dark\:hover\:border-twitch-light:hover:is(.dark *) {
   --tw-border-opacity: 1;
   border-color: rgb(169 112 255 / var(--tw-border-opacity));
@@ -3860,9 +3885,18 @@ video {
   background-color: rgb(145 70 255 / var(--tw-bg-opacity));
 }
 
+.peer:checked ~ .dark\:peer-checked\:bg-twitch-light\/15:is(.dark *) {
+  background-color: rgb(169 112 255 / 0.15);
+}
+
 .peer:checked ~ .dark\:peer-checked\:text-green-400:is(.dark *) {
   --tw-text-opacity: 1;
   color: rgb(74 222 128 / var(--tw-text-opacity));
+}
+
+.peer:checked ~ .dark\:peer-checked\:text-twitch-light:is(.dark *) {
+  --tw-text-opacity: 1;
+  color: rgb(169 112 255 / var(--tw-text-opacity));
 }
 
 .peer:focus ~ .dark\:peer-focus\:ring-purple-800:is(.dark *) {

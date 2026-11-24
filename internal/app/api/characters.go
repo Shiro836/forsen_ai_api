@@ -277,9 +277,11 @@ func (api *API) character(r *http.Request) template.HTML {
 		ImageHash:       newFileHash(characterSaveStatusID, characterSaveSkip, "image", nil),
 	}
 	if api.charAssist != nil {
+		hasSearch := api.charAssist.HasSearch()
 		page.Assist = &charAssistPanelData{
 			SessionID: uuid.New().String(),
-			HasSearch: api.charAssist.HasSearch(),
+			HasSearch: hasSearch,
+			SearchOn:  hasSearch,
 		}
 	}
 	if card != nil {

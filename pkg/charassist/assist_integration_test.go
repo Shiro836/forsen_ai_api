@@ -43,7 +43,7 @@ func TestLiveChatWithSearch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	res, err := a.Chat(ctx, nil, "search who won Dota 2 TI 2025 and build a cocky character based on their coach", charassist.Draft{})
+	res, err := a.Chat(ctx, nil, "search who won Dota 2 TI 2025 and build a cocky character based on their coach", charassist.Draft{}, true)
 	require.NoError(t, err)
 	require.NotEmpty(t, res.Reply)
 	require.NotEmpty(t, res.Draft.Name)

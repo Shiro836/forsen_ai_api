@@ -128,7 +128,7 @@
                     {{ if .Assist }}
                     <button type="button"
                         hx-post="/characters/assist/examples"
-                        hx-include="#character_form, #char_assist_form [name='session_id']"
+                        hx-include="#character_form, #char_assist_form [name='session_id'], #char_assist_form [name='web_search']"
                         hx-params="not voice_ref,image"
                         hx-target="#char_assist_panel"
                         hx-swap="outerHTML"
