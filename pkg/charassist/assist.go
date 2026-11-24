@@ -12,6 +12,7 @@ import (
 	"app/db"
 	"app/pkg/archive"
 	"app/pkg/llm"
+	"app/pkg/websearch"
 )
 
 // ErrEmptyInput is returned when the caller supplies neither a prompt nor any
@@ -23,6 +24,12 @@ var ErrEmptyInput = errors.New("describe a character or fill in a field first")
 type ChatClient interface {
 	ReqChat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
 	GetModel() string
+}
+
+// Searcher queries the web for up-to-date lore and facts. *websearch.Client
+// satisfies it.
+type Searcher interface {
+	Search(ctx context.Context, query string, count int) ([]websearch.Result, error)
 }
 
 // Draft mirrors the editable text fields of a character card.
@@ -171,11 +178,17 @@ Rules:
 // Assistant generates and refines character cards using the configured chat LLM.
 type Assistant struct {
 	client ChatClient
+	search Searcher
 }
 
-// New creates a character Assistant backed by client.
-func New(client ChatClient) *Assistant {
-	return &Assistant{client: client}
+// New creates a character Assistant backed by client and an optional web searcher.
+func New(client ChatClient, search Searcher) *Assistant {
+	return &Assistant{client: client, search: search}
+}
+
+// HasSearch reports whether web search is enabled on this assistant.
+func (a *Assistant) HasSearch() bool {
+	return a.search != nil
 }
 
 // Generate creates a complete character card draft from prompt and/or an

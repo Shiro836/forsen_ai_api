@@ -9,7 +9,7 @@
 {{/* htmx wires listeners onto swapped-in content only after the settle delay; with the default 20ms the status would miss whatever happens right after it is replaced */}}
 {{ define "save-status-swap" }}outerHTML settle:0ms{{ end }}
 {{ define "save-status" }}
-<span id="{{ .ID }}" class="text-sm"
+<span id="{{ .ID }}" class="text-sm"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}
     hx-post="/form/changes" hx-target="this" hx-swap="{{template "save-status-swap"}}" hx-sync="this:replace"
     {{ if .Skip }}hx-params="not {{ .Skip }}"{{ end }}
     hx-trigger="{{ if .Check }}load, {{ end }}input from:closest form delay:300ms, change from:closest form">

@@ -33,6 +33,7 @@ import (
 	"app/pkg/oai"
 	"app/pkg/s3client"
 	"app/pkg/twitch"
+	"app/pkg/websearch"
 	"app/pkg/whisperx"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -75,7 +76,13 @@ func main() {
 
 	rpLLM := llm.New(httpClient, &cfg.LLM2)
 	var characterLlm processor.CharacterLLM = llm.ChatClient{Client: rpLLM}
-	charAssist := charassist.New(rpLLM)
+	var searcher charassist.Searcher
+	if cfg.Clanker.LangSearchAPIKey != "" {
+		searcher = websearch.New(cfg.Clanker.LangSearchAPIKey, nil)
+	} else {
+		logger.Warn("clanker.langsearch_api_key is not configured; character assistant web search disabled")
+	}
+	charAssist := charassist.New(rpLLM, searcher)
 	if cfg.OAI.Timeout <= 0 {
 		log.Fatal("oai.timeout is not configured")
 	}

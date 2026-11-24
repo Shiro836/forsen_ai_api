@@ -183,7 +183,40 @@ type characterPage struct {
 	MessageExamples *msgExamples
 	VoiceRefHash    fileHash
 	ImageHash       fileHash
-	ShowAIAssist    bool
+	Assist          *charAssistPanelData
+}
+
+func (p *characterPage) Field(name string) charFieldData {
+	if p == nil || p.Card == nil {
+		return charFieldData{}
+	}
+	switch name {
+	case "char_name":
+		return charFieldData{Value: p.Card.Name}
+	case "char_description":
+		return charFieldData{Value: p.Card.Description}
+	case "name":
+		if p.Card.Data != nil {
+			return charFieldData{Value: p.Card.Data.Name}
+		}
+	case "description":
+		if p.Card.Data != nil {
+			return charFieldData{Value: p.Card.Data.Description}
+		}
+	case "personality":
+		if p.Card.Data != nil {
+			return charFieldData{Value: p.Card.Data.Personality}
+		}
+	case "first_message":
+		if p.Card.Data != nil {
+			return charFieldData{Value: p.Card.Data.FirstMessage}
+		}
+	}
+	return charFieldData{}
+}
+
+func (p *characterPage) ExamplesContainer() charExamplesData {
+	return charExamplesData{Examples: p.MessageExamples}
 }
 
 func (api *API) character(r *http.Request) template.HTML {
@@ -242,7 +275,12 @@ func (api *API) character(r *http.Request) template.HTML {
 		MessageExamples: msgExamples,
 		VoiceRefHash:    newFileHash(characterSaveStatusID, characterSaveSkip, "voice_ref", nil),
 		ImageHash:       newFileHash(characterSaveStatusID, characterSaveSkip, "image", nil),
-		ShowAIAssist:    api.charAssist != nil,
+	}
+	if api.charAssist != nil {
+		page.Assist = &charAssistPanelData{
+			SessionID: uuid.New().String(),
+			HasSearch: api.charAssist.HasSearch(),
+		}
 	}
 	if card != nil {
 		page.VoiceRefHash.Hash = hashBytes(card.Data.VoiceReference)

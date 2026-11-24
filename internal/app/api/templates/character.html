@@ -1,148 +1,161 @@
-<div class="w-full max-w-4xl">
-    {{ if .ShowAIAssist }}
-    <div id="ai_assist_panel" class="mb-8 p-4 rounded border-2 {{template "ui-border-clr"}} bg-slate-50 dark:bg-slate-800/40">
-        <div class="flex items-center pb-2">
-            <svg class="w-4 h-4 mr-2 shrink-0 text-twitch-dark dark:text-twitch-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 2l2.1 6.4L20.5 10.5l-6.4 2.1L12 19l-2.1-6.4-6.4-2.1 6.4-2.1L12 2zm7 13l.9 2.7 2.7.9-2.7.9L19 22l-.9-2.5-2.7-.9 2.7-.9.9-2.7z"/>
-            </svg>
-            <label for="ai_assist_prompt" class="font-medium">AI Character Assistant</label>
-            {{ template "help-tip" "Describe a character to fill out the form, or ask for changes to what you already have.\nYour uploaded voice, image, and Public toggle are never changed." }}
-        </div>
-        <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
-            <textarea id="ai_assist_prompt" rows="2" class="flex-grow {{template "input-class"}} py-2 px-3 text-sm" placeholder="Describe a character or what to change — e.g. 'Gordon Ramsay', 'toxic Dota 2 carry', or 'make him more sarcastic'" autocomplete="off"></textarea>
-            <button type="button" id="ai_assist_btn" class="px-5 py-2 font-medium whitespace-nowrap {{template "button-2"}}">Generate</button>
-        </div>
-        <div id="ai_assist_status" class="mt-2 hidden items-center gap-3 text-sm"></div>
-    </div>
-    {{ end }}
+{{ define "char-field-char-name" -}}
+<input type="text" id="char_name" name="char_name" class="w-full {{template "input-class"}} px-3 py-2" placeholder="Forsen" autocomplete="off" value="{{ .Value }}"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>
+{{- end }}
 
-    <form id="character_form" hx-encoding="multipart/form-data" hx-post="/characters/{{.CharacterID}}" hx-target="#character_save_result" hx-swap="{{template "save-status-swap"}}">
-        <div class="flex flex-col">
+{{ define "char-field-char-description" -}}
+<input type="text" id="char_description" name="char_description" class="w-full {{template "input-class"}} px-3 py-2" placeholder="God gamer with 140 IQ." autocomplete="off" value="{{ .Value }}"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>
+{{- end }}
 
-            <div class="flex pb-10">
+{{ define "char-field-name" -}}
+<input type="text" id="name" name="name" class="w-full {{template "input-class"}} px-3 py-2" placeholder="Forsen" autocomplete="off" value="{{ .Value }}"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>
+{{- end }}
 
-                <div class="flex flex-col">
+{{ define "char-field-first-message" -}}
+<input type="text" id="first_message" name="first_message" class="w-full {{template "input-class"}} px-3 py-2" placeholder="Ask your stupid question." autocomplete="off" value="{{ .Value }}"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>
+{{- end }}
 
-                    <div class="flex flex-col w-80">
-                        <div class="flex items-center pb-2">
-                            <label for="char_name">Character Name</label>
-                            {{ template "help-tip" "Name shown in characters list and twitch reward buttons. Doesn't affect AI output." }}
+{{ define "char-field-personality" -}}
+<textarea rows="2" id="personality" name="personality" class="w-full {{template "input-class"}} px-3 py-2" placeholder="Competitive, phlegmatic, confident, sarcastic, based, god gamer." autocomplete="off"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>{{ .Value }}</textarea>
+{{- end }}
+
+{{ define "char-field-description" -}}
+<textarea rows="8" id="description" name="description" class="w-full {{template "input-class"}} px-3 py-2" placeholder="Forsen, real name Sebastian Fors, is a Swedish Twitch streamer..." autocomplete="off"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>{{ .Value }}</textarea>
+{{- end }}
+
+{{ define "char-examples-container" -}}
+<div id="message_examples_container" class="flex flex-col gap-3"{{ if .OOB }} hx-swap-oob="outerHTML"{{ end }}>
+    {{ template "message_example" .Examples }}
+</div>
+{{- end }}
+
+<div class="flex w-full min-w-0 items-start gap-6">
+    <div class="flex-1 min-w-0">
+        <form id="character_form" class="flex flex-col gap-5" hx-encoding="multipart/form-data" hx-post="/characters/{{.CharacterID}}" hx-target="#character_save_result" hx-swap="{{template "save-status-swap"}}">
+
+            <section class="flex flex-col gap-4 rounded border-2 {{template "ui-border-clr"}} p-5">
+                <div class="flex items-center justify-between gap-4">
+                    <h2 class="text-lg font-bold">Card</h2>
+                    <label class="inline-flex cursor-pointer items-center gap-2.5">
+                        <input id="public" name="public" type="checkbox" value="" class="sr-only peer" {{ if .Card }}{{ if .Card.Public }}checked{{ end }}{{ end }}>
+                        <div class="relative h-5 w-9 rounded-full bg-gray-300 after:absolute after:start-[2px] after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-twitch-dark peer-checked:after:translate-x-full peer-focus-visible:ring-2 peer-focus-visible:ring-twitch-light dark:bg-gray-600"></div>
+                        <span class="text-sm font-medium">Public</span>
+                    </label>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center">
+                            <label for="char_name" class="text-sm font-medium">Character Name</label>
+                            {{ template "help-tip" "Shown in characters list and Twitch rewards." }}
                         </div>
-                        <input type="text" id="char_name" name="char_name" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen" autocomplete="off" value="{{ if .Card }}{{ .Card.Name }}{{ end }}"></input>
+                        {{ template "char-field-char-name" (.Field "char_name") }}
                     </div>
 
-                </div>
-
-                <div class="flex flex-col justify-start pl-32">
-                    <div class="flex flex-col flex-grow justify-start w-[25rem]">
-                        <div class="flex items-center pb-2">
-                            <label for="char_description">Character Description</label>
-                            {{ template "help-tip" "Description shown in characters list and twitch reward buttons. Doesn't affect AI output." }}
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center">
+                            <label for="char_description" class="text-sm font-medium">Short Blurb</label>
+                            {{ template "help-tip" "Shown on the character card and Twitch reward." }}
                         </div>
-                        <textarea type="text" rows="2" id="char_description" name="char_description" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="God gamer with a towering 140 IQ, captivating the gaming world with unmatched skill and intellect." autocomplete="off">{{ if .Card }}{{ .Card.Description }}{{ end }}</textarea>
+                        {{ template "char-field-char-description" (.Field "char_description") }}
                     </div>
                 </div>
 
-            </div>
-
-            <div class="pb-2">
-                <label class="inline-flex items-center me-5 cursor-pointer">
-                    <input id="public" name="public" type="checkbox" value="" class="sr-only peer" {{ if .Card }} {{ if .Card.Public }} checked {{ end }} {{ end }}>
-                    <div class="relative w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-focus:ring-4 peer-focus:ring-purple-300 dark:peer-focus:ring-purple-800 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600"></div>
-                    <span class="ms-3 text-sm font-medium text-gray-900 dark:text-gray-300">Public</span>
-                    {{ template "help-tip" "Allow or not allow other users to use this character." }}
-                </label>
-            </div>
-
-            <div class="flex pt-10 border-t {{template "ui-border-clr"}}">
-                <div class="flex flex-col w-max">
-                    <div class="flex items-center pb-2">
-                        <label for="name">Name</label>
-                        {{ template "help-tip" "Name sent to AI input. Affects how AI will percieve himself." }}
-                    </div>
-                    <input type="text" id="name" name="name" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen" autocomplete="off" value="{{ if .Card }}{{ .Card.Data.Name }}{{ end }}"></input>
-                </div>
-
-                <div class="ml-auto flex flex-col">
-                    <div class="flex flex-col">
-                        <div class="flex">
-                            <label for="voice_ref">{{ if not .Card }}Voice Reference{{ else if not .Card.Data.VoiceReference }}Voice Reference{{ else }}Update Voice Reference{{ end }}</label>
-                            {{ template "help-tip" "TTS will try to replicate voice provided in uploaded audio reference. Background noise is not recommended. If you don't get response, your audio might be too long, make it shorter." }}
+                <div class="grid grid-cols-2 gap-4 border-t {{template "ui-border-clr"}} pt-4">
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center">
+                            <label for="voice_ref" class="text-sm font-medium">{{ if not .Card }}Voice Reference{{ else if not .Card.Data.VoiceReference }}Voice Reference{{ else }}Update Voice Reference{{ end }}</label>
+                            {{ template "help-tip" "Clean short audio clip for voice cloning." }}
                         </div>
                         <div>
-                            <input id="voice_ref" name="voice_ref" type="file" accept="audio" {{ template "file-hash-attrs" .VoiceRefHash }} class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer"></input>
+                            <input id="voice_ref" name="voice_ref" type="file" accept="audio/*" {{ template "file-hash-attrs" .VoiceRefHash }} class="w-full {{template "input-class"}} text-sm file:mr-3 file:cursor-pointer file:border-none file:bg-gray-200 file:px-3 file:py-2 file:text-gray-900 file:focus:outline-none dark:file:bg-gray-600 dark:file:text-white cursor-pointer">
                             {{ template "file-hash" .VoiceRefHash }}
                         </div>
                     </div>
-                    <div class="flex flex-col pt-8">
-                        <div class="flex">
-                            <label for="image">{{ if not .Card }}Image{{ else if not .Card.Data.Image }}Image{{ else }}Update Image{{ end }}</label>
-                            {{ template "help-tip" "Image that will be shown in the OBS overlay when this char is requested." }}
+
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center">
+                            <label for="image" class="text-sm font-medium">{{ if not .Card }}Image{{ else if not .Card.Data.Image }}Image{{ else }}Update Image{{ end }}</label>
+                            {{ template "help-tip" "Shown in the OBS overlay." }}
                         </div>
-                        <div>
-                            <input id="image" name="image" type="file" accept="image" {{ template "file-hash-attrs" .ImageHash }} class="w-full {{template "input-class"}} file:focus:outline-none file:bg-gray-50 file:border-none file:text-gray-900 file:dark:text-white file:dark:bg-gray-700 file:cursor-pointer cursor-pointer"></input>
-                            {{ template "file-hash" .ImageHash }}
+                        <div class="flex items-center gap-3">
+                            {{ if .Card }}
+                            <img class="h-10 w-10 shrink-0 rounded border {{template "ui-border-clr"}} object-contain" src="/characters/{{ .Card.ID }}/image?w=200" alt="">
+                            {{ end }}
+                            <div class="min-w-0 flex-1">
+                                <input id="image" name="image" type="file" accept="image/*" {{ template "file-hash-attrs" .ImageHash }} class="w-full {{template "input-class"}} text-sm file:mr-3 file:cursor-pointer file:border-none file:bg-gray-200 file:px-3 file:py-2 file:text-gray-900 file:focus:outline-none dark:file:bg-gray-600 dark:file:text-white cursor-pointer">
+                                {{ template "file-hash" .ImageHash }}
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="flex flex-col flex-grow justify-start pt-6">
-                <div class="flex items-center pb-2">
-                    <label for="description">Description</label>
-                    {{ template "help-tip" "Description sent to AI input." }}
-                </div>
-                <textarea type="text" rows="9" id="description" name="description" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Forsen, real name Sebastian Fors, is the popular Swedish Twitch livestreamer, playing various videogames for his large audience. He is tall and handsome middle-aged man resembling Ryan Gosling. Despite this, his long and messy hair and beard, his very bad slouchy posture and his love for casual baggy clothes make him look like a hobo. Former snus addict. He is competitive, irreverent, authentic, brash, confident, phlegmatic and a loner. He has sarcastic, dry, dark and edgy sense of humor. He is based and ready to share his unpopular and controversial opinions with his audience. He uses puns, wordplay and quotes from various videogames, songs, internet memes, movies etc., as well as his own catchphrases and lines, to create comedy. Especially he likes to quote GachiMuchi and Who Killed Captain Alex?, since these are old memes in his community. He is very skilled in some videogames, while being an absolute clown in others. He calls himself god gamer when he's winning and unlucky when losing." autocomplete="off">{{ if .Card }}{{ .Card.Data.Description }}{{ end }}</textarea>
-            </div>
+            <section class="flex flex-col gap-4 rounded border-2 {{template "ui-border-clr"}} p-5">
+                <h2 class="text-lg font-bold">Persona</h2>
 
-            <div class="flex flex-col flex-grow justify-start pt-6">
-                <div class="flex items-center pb-2">
-                    <label for="personality">Personality</label>
-                    {{ template "help-tip" "Personality sent to AI input." }}
-                </div>
-                <textarea type="text" rows="2" id="personality" name="personality" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Competitive, phlegmatic, confident, sarcastic, based, god gamer." autocomplete="off">{{ if .Card }}{{ .Card.Data.Personality }}{{ end }}</textarea>
-            </div>
-
-            <div class="flex flex-col pt-6">
-                <div class="flex items-center justify-between gap-4 pb-1">
-                    <div class="flex items-center">
-                        <span>Message Examples</span>
-                        {{ template "help-tip" "Sample viewer prompts and character replies that shape the character's voice and style." }}
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center">
+                            <label for="name" class="text-sm font-medium">Name</label>
+                            {{ template "help-tip" "Identity name used when replying." }}
+                        </div>
+                        {{ template "char-field-name" (.Field "name") }}
                     </div>
-                    {{ if .ShowAIAssist }}
-                    <div class="flex items-center gap-3">
-                        <span id="ai_assist_examples_status" class="hidden text-sm"></span>
-                        <button type="button" id="ai_assist_examples_btn" class="px-3 py-1 text-sm {{template "button-2"}} inline-flex items-center gap-1.5 whitespace-nowrap">
-                            <svg class="w-3.5 h-3.5 shrink-0 text-twitch-dark dark:text-twitch-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                <path d="M12 2l2.1 6.4L20.5 10.5l-6.4 2.1L12 19l-2.1-6.4-6.4-2.1 6.4-2.1L12 2z"/>
-                            </svg>
-                            <span>Generate Examples</span>
-                        </button>
+
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center">
+                            <label for="first_message" class="text-sm font-medium">First Message</label>
+                            {{ template "help-tip" "Opening line before a viewer request." }}
+                        </div>
+                        {{ template "char-field-first-message" (.Field "first_message") }}
                     </div>
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                    <label for="personality" class="text-sm font-medium">Personality</label>
+                    {{ template "char-field-personality" (.Field "personality") }}
+                </div>
+
+                <div class="flex flex-col gap-1.5">
+                    <label for="description" class="text-sm font-medium">Description</label>
+                    {{ template "char-field-description" (.Field "description") }}
+                </div>
+            </section>
+
+            <section class="flex flex-col gap-4 rounded border-2 {{template "ui-border-clr"}} p-5">
+                <div class="flex items-center justify-between gap-4">
+                    <h2 class="text-lg font-bold">Message Examples</h2>
+                    {{ if .Assist }}
+                    <button type="button"
+                        hx-post="/characters/assist/examples"
+                        hx-include="#character_form, #char_assist_form [name='session_id']"
+                        hx-params="not voice_ref,image"
+                        hx-target="#char_assist_panel"
+                        hx-swap="outerHTML"
+                        hx-sync="#char_assist_panel:drop"
+                        hx-disabled-elt="this"
+                        hx-indicator="#char_assist_busy"
+                        class="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-medium whitespace-nowrap {{template "button-2"}}">
+                        <svg class="h-3.5 w-3.5 shrink-0 text-twitch-dark dark:text-twitch-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M12 2l2.1 6.4L20.5 10.5l-6.4 2.1L12 19l-2.1-6.4-6.4-2.1 6.4-2.1L12 2z"/>
+                        </svg>
+                        Add 3 with AI
+                    </button>
                     {{ end }}
                 </div>
 
-                <div id="message_examples_container">
-                    {{ template "message_example" .MessageExamples }}
-                </div>
-            </div>
+                {{ template "char-examples-container" .ExamplesContainer }}
+            </section>
 
-            <div class="pt-4">
-                <div class="pt-4 border-t {{template "ui-border-clr"}} flex flex-col flex-grow justify-start pt-6">
-                    <div class="flex items-center pb-2">
-                        <label for="first_message">First Message</label>
-                        {{ template "help-tip" "Message of AI before user request." }}
-                    </div>
-                    <textarea type="text" rows="2" id="first_message" name="first_message" class="w-full {{template "input-class"}} py-2 px-4 items-center" placeholder="Ask your stupid question." autocomplete="off">{{ if .Card }}{{ .Card.Data.FirstMessage }}{{ end }}</textarea>
-                </div>
-            </div>
-
-            <div class="mt-8 {{template "save-bar-pinned"}}">
+            <div class="{{template "save-bar-pinned"}}">
                 {{ if .Card }}{{ template "save-button" "Save" }}{{ else }}{{ template "save-button" "Create" }}{{ end }}
                 {{ template "save-status" (newSaveStatus "character_save_result" "voice_ref" "image") }}
             </div>
 
-        </div>
-    </form>
+        </form>
+    </div>
 
+    {{ if .Assist }}
+    {{ template "char-assist-panel" .Assist }}
+    {{ end }}
 </div>

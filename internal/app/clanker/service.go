@@ -14,6 +14,7 @@ import (
 	"app/cfg"
 	"app/db"
 	"app/pkg/oai"
+	"app/pkg/websearch"
 
 	"github.com/nicklaw5/helix/v2"
 )
@@ -24,6 +25,7 @@ type Service struct {
 	logger *slog.Logger
 	db     *db.DB
 	ai     *oai.Client
+	search *websearch.Client
 	cfg    *cfg.ClankerConfig
 
 	helix *helix.Client
@@ -71,6 +73,7 @@ func NewService(logger *slog.Logger, database *db.DB, aiClient *oai.Client, clan
 		logger: logger,
 		db:     database,
 		ai:     aiClient,
+		search: websearch.New(clankerCfg.LangSearchAPIKey, nil),
 		cfg:    clankerCfg,
 		helix:  helixClient,
 		jobs:   make(chan *db.ClankerMessage, numWorkers),

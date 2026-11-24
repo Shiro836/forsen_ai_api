@@ -51,7 +51,7 @@ func TestGenerate_FromScratch(t *testing.T) {
 		]
 	}`
 	stub := &stubChatClient{model: "qwen36-hauhau", reply: reply}
-	a := New(stub)
+	a := New(stub, nil)
 
 	draft, err := a.Generate(context.Background(), "Gordon Ramsay", Draft{})
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestGenerate_RefinesExistingDraft(t *testing.T) {
 			]
 		}` + "\n```",
 	}
-	a := New(stub)
+	a := New(stub, nil)
 
 	current := Draft{
 		CharName:    "Forsen",
@@ -126,7 +126,7 @@ func TestGenerate_FillsPartialDraftWithoutPrompt(t *testing.T) {
 			]
 		}`,
 	}
-	a := New(stub)
+	a := New(stub, nil)
 
 	draft, err := a.Generate(context.Background(), "   ", Draft{CharName: "Okayeg"})
 	require.NoError(t, err)
@@ -135,17 +135,17 @@ func TestGenerate_FillsPartialDraftWithoutPrompt(t *testing.T) {
 }
 
 func TestGenerate_ValidationAndErrors(t *testing.T) {
-	a := New(&stubChatClient{model: "qwen36-hauhau"})
+	a := New(&stubChatClient{model: "qwen36-hauhau"}, nil)
 
 	_, err := a.Generate(context.Background(), "  ", Draft{})
 	require.ErrorIs(t, err, ErrEmptyInput)
 
-	aErr := New(&stubChatClient{model: "qwen36-hauhau", err: errors.New("connection refused")})
+	aErr := New(&stubChatClient{model: "qwen36-hauhau", err: errors.New("connection refused")}, nil)
 	_, err = aErr.Generate(context.Background(), "Forsen", Draft{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "connection refused")
 
-	aBad := New(&stubChatClient{model: "qwen36-hauhau", reply: "not json"})
+	aBad := New(&stubChatClient{model: "qwen36-hauhau", reply: "not json"}, nil)
 	_, err = aBad.Generate(context.Background(), "Forsen", Draft{})
 	require.Error(t, err)
 }
@@ -161,7 +161,7 @@ func TestGenerateExamples(t *testing.T) {
 			]
 		}`,
 	}
-	a := New(stub)
+	a := New(stub, nil)
 
 	current := Draft{
 		Name:        "Forsen",
@@ -185,7 +185,7 @@ func TestGenerateExamples(t *testing.T) {
 }
 
 func TestGenerateExamples_EmptyDraftRejected(t *testing.T) {
-	a := New(&stubChatClient{model: "qwen36-hauhau"})
+	a := New(&stubChatClient{model: "qwen36-hauhau"}, nil)
 	_, err := a.GenerateExamples(context.Background(), Draft{}, 3)
 	require.ErrorIs(t, err, ErrEmptyInput)
 }

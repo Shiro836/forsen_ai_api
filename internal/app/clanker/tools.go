@@ -1,17 +1,13 @@
 package clanker
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"strings"
 	"time"
 
-	"app/pkg/tools"
+	"app/pkg/websearch"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/shared"
@@ -38,25 +34,6 @@ var gptTools = []openai.ChatCompletionToolParam{
 	},
 }
 
-type webSearchRequest struct {
-	Query   string `json:"query"`
-	Count   int    `json:"count"`
-	Summary bool   `json:"summary"`
-}
-
-type webSearchResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		WebPages struct {
-			Value []struct {
-				Name    string `json:"name"`
-				URL     string `json:"url"`
-				Snippet string `json:"snippet"`
-			} `json:"value"`
-		} `json:"webPages"`
-	} `json:"data"`
-}
-
 func (s *Service) executeWebSearch(ctx context.Context, argsJSON string) (string, error) {
 	var args struct {
 		Query string `json:"query"`
@@ -69,55 +46,12 @@ func (s *Service) executeWebSearch(ctx context.Context, argsJSON string) (string
 		return "error: empty search query", nil
 	}
 
-	body, err := json.Marshal(webSearchRequest{
-		Query:   args.Query,
-		Count:   5,
-		Summary: false,
-	})
+	results, err := s.search.Search(ctx, args.Query, 5)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal search request: %w", err)
+		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.langsearch.com/v1/web-search", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("failed to create search request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.cfg.LangSearchAPIKey)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to execute search request: %w", err)
-	}
-	defer tools.DrainAndClose(resp.Body)
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read search response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Sprintf("search error: status %d", resp.StatusCode), nil
-	}
-
-	var searchResp webSearchResponse
-	if err := json.Unmarshal(respBody, &searchResp); err != nil {
-		return "", fmt.Errorf("failed to parse search response: %w", err)
-	}
-
-	var sb strings.Builder
-	for i, page := range searchResp.Data.WebPages.Value {
-		if i > 0 {
-			sb.WriteString("\n\n")
-		}
-		fmt.Fprintf(&sb, "[%d] %s\n%s\n%s", i+1, page.Name, page.URL, page.Snippet)
-	}
-
-	if sb.Len() == 0 {
-		return "no search results found", nil
-	}
-
-	return sb.String(), nil
+	return websearch.Format(results, 0), nil
 }
 
 func (s *Service) executeTool(ctx context.Context, name, argsJSON string) (string, error) {

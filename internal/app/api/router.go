@@ -83,7 +83,8 @@ type API struct {
 
 	history *history.Reader
 
-	charAssist CharacterAssistant
+	charAssist         CharacterAssistant
+	charAssistSessions *charAssistSessionStore
 }
 
 func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservice.Config, logger *slog.Logger, connManager *conns.Manager,
@@ -127,7 +128,8 @@ func NewAPI(cfg *Config, ingestHost string, ingestPort int, emoteCfg *emoteservi
 
 		history: historyReader,
 
-		charAssist: charAssist,
+		charAssist:         charAssist,
+		charAssistSessions: newCharAssistSessionStore(),
 	}
 
 	api.imageCache = NewImageCache(db)
@@ -260,7 +262,9 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/guide/legacy", api.nav(api.legacyHome))
 			router.Get("/characters", api.nav(api.characters))
 
-			router.Post("/characters/assist", http.HandlerFunc(api.assistCharacter))
+			router.Post("/characters/assist/chat", http.HandlerFunc(api.assistCharacterChat))
+			router.Post("/characters/assist/undo", http.HandlerFunc(api.assistCharacterUndo))
+			router.Post("/characters/assist/reset", http.HandlerFunc(api.assistCharacterReset))
 			router.Post("/characters/assist/examples", http.HandlerFunc(api.assistCharacterExamples))
 
 			router.Get("/characters/{character_id}", api.nav(api.character))

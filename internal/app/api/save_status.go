@@ -24,6 +24,7 @@ type saveStatus struct {
 	Saved bool
 	Dirty bool
 	Error string
+	OOB   bool
 }
 
 var saveStatusID = regexp.MustCompile(`^[a-z0-9_]+_result$`)

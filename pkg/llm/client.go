@@ -100,6 +100,9 @@ func (m Message) MarshalJSON() ([]byte, error) {
 		raw.Content = m.StrContent
 	} else if m.Content != nil {
 		raw.Content = m.Content
+	} else if len(m.ToolCalls) > 0 {
+		// Qwen jinja templates expect a string content alongside tool_calls rather than null.
+		raw.Content = ""
 	}
 	return json.Marshal(raw)
 }
