@@ -152,6 +152,7 @@ func TestVoicesHTMXFilterAndOriginalNameHidden(t *testing.T) {
 	assert.NotContains(t, out, "Okayeg")
 	assert.NotContains(t, out, "Mina Ha")
 	assert.Contains(t, out, `data-clipboard-text="tresh: "`)
+	assert.Contains(t, out, `data-copied-label="Copied">Copy</button>`)
 	assert.Contains(t, out, `hx-get="/voices/list/cards"`)
 	assert.Contains(t, out, `hx-get="/voices/list/sounds"`)
 	assert.Contains(t, out, `hx-get="/voices/list/filters"`)

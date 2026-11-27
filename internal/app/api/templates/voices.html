@@ -67,10 +67,13 @@
 			<div class="w-[100px] h-[100px] flex items-center justify-center overflow-hidden">
 				<img class="object-contain max-w-full max-h-full" src="/characters/{{ .ID }}/image?w=200" loading="lazy" />
 			</div>
-			<button type="button" class="copy-button mt-2 text-center text-base font-semibold truncate w-52 hover:underline"
-				data-clipboard-text="{{ .Name }}: ">{{ .Name }}</button>
-			<button class="play-audio-btn mt-2 px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
-				data-src="/voices/{{ .Name }}/sample" data-loading="1">&#9654; Sample</button>
+			<div class="mt-2 text-center text-base font-semibold truncate w-52">{{ .Name }}</div>
+			<div class="mt-2 flex items-center gap-2">
+				<button class="play-audio-btn px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
+					data-src="/voices/{{ .Name }}/sample" data-loading="1">&#9654; Sample</button>
+				<button type="button" class="copy-button px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+					data-clipboard-text="{{ .Name }}: " data-copied-label="Copied">Copy</button>
+			</div>
 		</div>
 		{{ end }}
 	</div>
@@ -169,10 +172,7 @@
 	</details>
 
 	<div id="voices-filters" class="mt-6 pt-6 border-t {{template "ui-border-clr"}} flex flex-col gap-3">
-		<div class="flex items-baseline justify-between gap-2">
-			<h2 class="text-xl font-bold">Voices</h2>
-			<span class="text-xs text-gray-600 dark:text-gray-300">click voice to copy</span>
-		</div>
+		<h2 class="text-xl font-bold">Voices</h2>
 		<div class="flex flex-wrap items-center gap-3">
 			<input type="search" name="q" value="{{ .Query }}" autocomplete="off" placeholder="voice or character"
 				class="w-72 {{template "input-class"}} px-3 py-1.5 text-sm"

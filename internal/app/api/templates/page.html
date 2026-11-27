@@ -377,17 +377,21 @@
     </script>
 
     <script>
-        function initClipboardButtons() {
-            try {
-                if (window.ClipboardJS) {
-                    new ClipboardJS('.copy-button');
-                }
-            } catch (e) { }
+        if (window.ClipboardJS) {
+            const cb = new ClipboardJS('.copy-button');
+            cb.on('success', function (e) {
+                const btn = e.trigger;
+                if (!btn || !btn.dataset.copiedLabel) return;
+                if (!btn.dataset.copyLabel) btn.dataset.copyLabel = btn.textContent;
+                clearTimeout(btn._copyTimer);
+                btn.textContent = btn.dataset.copiedLabel;
+                btn.classList.add('border-emerald-600', 'text-emerald-600', 'dark:border-emerald-400', 'dark:text-emerald-400');
+                btn._copyTimer = setTimeout(function () {
+                    btn.textContent = btn.dataset.copyLabel;
+                    btn.classList.remove('border-emerald-600', 'text-emerald-600', 'dark:border-emerald-400', 'dark:text-emerald-400');
+                }, 1200);
+            });
         }
-        // Initialize on first load
-        initClipboardButtons();
-        // Re-initialize after HTMX swaps (fragments replace content)
-        document.addEventListener('htmx:afterSwap', initClipboardButtons);
     </script>
 
     {{ if .LogoutButton }}
