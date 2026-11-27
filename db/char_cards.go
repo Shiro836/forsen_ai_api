@@ -27,9 +27,10 @@ type Card struct {
 
 	ShortCharName sql.NullString
 
-	Public     bool
-	Redeems    int
-	TTSRedeems int
+	Public        bool
+	Redeems       int
+	TTSRedeems    int
+	TrendingScore float64
 
 	UpdatedAt time.Time
 	CreatedAt time.Time
@@ -68,6 +69,12 @@ type CardData struct {
 type PublicShortName struct {
 	ID            uuid.UUID
 	ShortCharName string
+	Name          string
+	Description   string
+	Redeems       int
+	TTSRedeems    int
+	CreatedAt     time.Time
+	TrendingScore float64
 }
 
 // GetCharImageID returns a stable identifier for the bytes behind a card's
@@ -363,6 +370,7 @@ const (
 	SortByRedeems
 	SortByNewest
 	SortByOldest
+	SortByTrending
 )
 
 type GetChatCardsParams struct {
@@ -392,8 +400,22 @@ func (db *DB) populateCardDataMedia(ctx context.Context, data *CardData) {
 	}
 }
 
+// TrendingHalfLifeDays controls the exponential decay for the 14-day hot score.
+const (
+	trendingWindowDays   = 14
+	trendingHalfLifeDays = 4.0
+)
+
 func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChatCardsParams) ([]*Card, error) {
 	rows, err := db.Query(ctx, `
+		with recent as (
+			select
+				card_id,
+				sum((ai_redeems + tts_redeems) * power(0.5::double precision, greatest(current_date - day, 0) / $4::double precision)) as score
+			from char_card_daily_stats
+			where day >= current_date - ($5::int - 1)
+			group by card_id
+		)
 		select
 			cc.id,
 			cc.owner_user_id,
@@ -404,10 +426,12 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 			cc.redeems,
 			cc.tts_redeems,
 			cc.public,
-			cc.updated_at
+			cc.updated_at,
+			coalesce(r.score, 0)::double precision
 			-- data -- very heavy
 		from char_cards cc
 		left join users u on u.id = cc.owner_user_id
+		left join recent r on r.card_id = cc.id
 		where (
 			cc.owner_user_id = $1
 			or (cc.public = true and $2 = true)
@@ -417,9 +441,10 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 			case when $3 = 1 then cc.name end asc,
 			case when $3 = 2 then cc.redeems end desc,
 			case when $3 = 3 then cc.id end desc,
-			case when $3 = 4 then cc.id end asc
-		limit 100
-	`, userID, params.ShowPublic, params.SortBy)
+			case when $3 = 4 then cc.id end asc,
+			case when $3 = 5 then coalesce(r.score, 0) end desc,
+			cc.id desc
+	`, userID, params.ShowPublic, params.SortBy, trendingHalfLifeDays, trendingWindowDays)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get char cards: %w", err)
 	}
@@ -439,6 +464,7 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 			&card.TTSRedeems,
 			&card.Public,
 			&card.UpdatedAt,
+			&card.TrendingScore,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan char card: %w", err)
@@ -478,10 +504,17 @@ func (db *DB) SetShortCharName(ctx context.Context, cardID uuid.UUID, shortName 
 
 func (db *DB) IncrementCharRedeems(ctx context.Context, cardID uuid.UUID) error {
 	_, err := db.Exec(ctx, `
-		update char_cards set
-			redeems = redeems + 1,
-			updated_at = now()
-		where id = $1
+		with upd as (
+			update char_cards set
+				redeems = redeems + 1,
+				updated_at = now()
+			where id = $1
+			returning id
+		)
+		insert into char_card_daily_stats (card_id, day, ai_redeems)
+		select id, current_date, 1 from upd
+		on conflict (card_id, day) do update set
+			ai_redeems = char_card_daily_stats.ai_redeems + 1
 	`, cardID)
 	if err != nil {
 		return fmt.Errorf("failed to increment redeems for card %s: %w", cardID, err)
@@ -491,13 +524,36 @@ func (db *DB) IncrementCharRedeems(ctx context.Context, cardID uuid.UUID) error 
 
 func (db *DB) IncrementCharTTSRedeems(ctx context.Context, cardID uuid.UUID) error {
 	_, err := db.Exec(ctx, `
-		update char_cards set
-			tts_redeems = tts_redeems + 1,
-			updated_at = now()
-		where id = $1
+		with upd as (
+			update char_cards set
+				tts_redeems = tts_redeems + 1,
+				updated_at = now()
+			where id = $1
+			returning id
+		)
+		insert into char_card_daily_stats (card_id, day, tts_redeems)
+		select id, current_date, 1 from upd
+		on conflict (card_id, day) do update set
+			tts_redeems = char_card_daily_stats.tts_redeems + 1
 	`, cardID)
 	if err != nil {
 		return fmt.Errorf("failed to increment tts_redeems for card %s: %w", cardID, err)
+	}
+	return nil
+}
+
+// UpsertCharCardDailyStats merges historical daily counts using GREATEST so
+// backfills are idempotent and never clobber higher live increments.
+func (db *DB) UpsertCharCardDailyStats(ctx context.Context, cardID uuid.UUID, day time.Time, aiRedeems, ttsRedeems int) error {
+	_, err := db.Exec(ctx, `
+		insert into char_card_daily_stats (card_id, day, ai_redeems, tts_redeems)
+		values ($1, $2::date, $3, $4)
+		on conflict (card_id, day) do update set
+			ai_redeems  = greatest(char_card_daily_stats.ai_redeems, excluded.ai_redeems),
+			tts_redeems = greatest(char_card_daily_stats.tts_redeems, excluded.tts_redeems)
+	`, cardID, day.UTC().Format("2006-01-02"), aiRedeems, ttsRedeems)
+	if err != nil {
+		return fmt.Errorf("upsert char card daily stats: %w", err)
 	}
 	return nil
 }
@@ -534,13 +590,29 @@ func (db *DB) GetVoiceReferenceByShortName(ctx context.Context, shortName string
 
 func (db *DB) GetPublicShortNamedCards(ctx context.Context) ([]PublicShortName, error) {
 	rows, err := db.Query(ctx, `
-        select id, short_char_name
-        from char_cards
-        where public = true
-          and short_char_name is not null
-          and length(trim(short_char_name)) > 0
-        order by short_char_name asc
-    `)
+		with recent as (
+			select
+				card_id,
+				sum((ai_redeems + tts_redeems) * power(0.5::double precision, greatest(current_date - day, 0) / $1::double precision)) as score
+			from char_card_daily_stats
+			where day >= current_date - ($2::int - 1)
+			group by card_id
+		)
+		select
+			cc.id,
+			cc.short_char_name,
+			cc.name,
+			coalesce(cc.description, ''),
+			cc.redeems,
+			cc.tts_redeems,
+			coalesce(r.score, 0)::double precision
+		from char_cards cc
+		left join recent r on r.card_id = cc.id
+		where cc.public = true
+		  and cc.short_char_name is not null
+		  and length(trim(cc.short_char_name)) > 0
+		order by coalesce(r.score, 0) desc, (cc.redeems + cc.tts_redeems) desc, cc.short_char_name asc
+	`, trendingHalfLifeDays, trendingWindowDays)
 	if err != nil {
 		return nil, fmt.Errorf("get public short named cards: %w", err)
 	}
@@ -549,9 +621,18 @@ func (db *DB) GetPublicShortNamedCards(ctx context.Context) ([]PublicShortName, 
 	var out []PublicShortName
 	for rows.Next() {
 		var rec PublicShortName
-		if err := rows.Scan(&rec.ID, &rec.ShortCharName); err != nil {
+		if err := rows.Scan(
+			&rec.ID,
+			&rec.ShortCharName,
+			&rec.Name,
+			&rec.Description,
+			&rec.Redeems,
+			&rec.TTSRedeems,
+			&rec.TrendingScore,
+		); err != nil {
 			return nil, fmt.Errorf("scan public short named cards: %w", err)
 		}
+		rec.CreatedAt = tools.UUIDToTime(rec.ID)
 		out = append(out, rec)
 	}
 	if err := rows.Err(); err != nil {

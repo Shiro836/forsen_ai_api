@@ -1,4 +1,4 @@
-<div>
+<div class="w-full min-w-0">
     <div class="mb-4 space-x-4">
 		<div class="text-xl font-medium">
 			This is attempt to replicate forsen tts. Syntax is same but voices are different.
@@ -20,23 +20,39 @@
 		<summary class="cursor-pointer text-xl font-medium select-none">
 			TTS Sounds ({{ len .Sounds }})
 		</summary>
-		<div class="flex flex-wrap gap-2 pt-4">
+		<div class="flex flex-wrap items-center gap-3 pt-3">
+			<input type="search" autocomplete="off" data-list-filter="sounds-list"
+				placeholder="Filter sounds by name or [number]..."
+				class="{{template "input-class"}} px-3 py-1 text-sm w-72 max-w-full" />
+			<span data-list-count="sounds-list" class="text-xs text-gray-600 dark:text-gray-300">{{ len .Sounds }} sounds</span>
+		</div>
+		<div id="sounds-list" class="flex flex-wrap gap-2 pt-3">
 			{{ range .Sounds }}
-			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+			<button data-filter-item data-filter-text="[{{ .ID }}] {{ .ID }} {{ .Name }}"
+				class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
 				data-src="/sounds/{{ .ID }}" title="Play sound [{{ .ID }}]">[{{ .ID }}] {{ .Name }}</button>
 			{{ end }}
 		</div>
+		<p data-list-empty="sounds-list" class="hidden pt-3 text-xs text-gray-600 dark:text-gray-300">No sounds match your filter.</p>
 	</details>
 	<details class="pt-2 pb-2">
 		<summary class="cursor-pointer text-xl font-medium select-none">
 			TTS Filters ({{ len .Filters }})
 		</summary>
-		<div class="flex flex-wrap gap-2 pt-4">
+		<div class="flex flex-wrap items-center gap-3 pt-3">
+			<input type="search" autocomplete="off" data-list-filter="filters-list"
+				placeholder="Filter by name or {number}..."
+				class="{{template "input-class"}} px-3 py-1 text-sm w-72 max-w-full" />
+			<span data-list-count="filters-list" class="text-xs text-gray-600 dark:text-gray-300">{{ len .Filters }} filters</span>
+		</div>
+		<div id="filters-list" class="flex flex-wrap gap-2 pt-3">
 			{{ range .Filters }}
-			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+			<button data-filter-item data-filter-text="{{"{"}}{{ .ID }}{{"}"}} {{ .ID }} {{ .Name }}"
+				class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
 				data-src="/filters/{{ .ID }}/sample" data-loading="1" title="Play filter {{"{"}}{{ .ID }}{{"}"}} sample">{{"{"}}{{ .ID }}{{"}"}} {{ .Name }}</button>
 			{{ end }}
 		</div>
+		<p data-list-empty="filters-list" class="hidden pt-3 text-xs text-gray-600 dark:text-gray-300">No filters match your filter.</p>
 	</details>
 	<details class="pt-2 pb-2">
 		<summary class="cursor-pointer text-xl font-medium select-none">
@@ -67,25 +83,84 @@
 			<br />
 			<code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">{{"{sing:20}"}}</code> by number, <code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">{{"{sing}"}}</code> random.
 		</div>
-		<div class="flex flex-wrap gap-2 pt-4">
+		{{ if gt (len .Melodies) 0 }}
+		<div class="flex flex-wrap items-center gap-3 pt-3">
+			<input type="search" autocomplete="off" data-list-filter="melodies-list"
+				placeholder="Filter melodies by name or {sing:number}..."
+				class="{{template "input-class"}} px-3 py-1 text-sm w-72 max-w-full" />
+			<span data-list-count="melodies-list" class="text-xs text-gray-600 dark:text-gray-300">{{ len .Melodies }} melodies</span>
+		</div>
+		{{ end }}
+		<div id="melodies-list" class="flex flex-wrap gap-2 pt-3">
 			{{ range .Melodies }}
-			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+			<button data-filter-item data-filter-text="{{"{sing:"}}{{ .Number }}{{"}"}} {{ .Number }} {{ .Name }}"
+				class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
 				data-src="/melodies/{{ .ID }}/sample" data-loading="1" title="Play melody {{ .Name }}">{{"{sing:"}}{{ .Number }}{{"}"}} {{ .Name }}</button>
 			{{ end }}
 		</div>
+		<p data-list-empty="melodies-list" class="hidden pt-3 text-xs text-gray-600 dark:text-gray-300">No melodies match your filter.</p>
 	</details>
-	<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-6">
-		{{ range .Items }}
-		<div class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col items-center justify-center">
-			<div class="w-[100px] h-[100px] flex items-center justify-center overflow-hidden">
-				<img class="object-contain max-w-full max-h-full" src="/characters/{{ .ID }}/image?w=200" />
+
+	<div class="mt-6 pt-6 border-t {{template "ui-border-clr"}} flex flex-col gap-3">
+		<div class="flex flex-wrap items-baseline justify-between gap-2">
+			<div class="flex items-baseline gap-3">
+				<h2 class="text-xl font-bold">Voices</h2>
+				<span id="voices-count" class="text-sm text-gray-600 dark:text-gray-300">{{ len .Items }} voices</span>
 			</div>
-			<div class="mt-2 text-center text-base font-semibold truncate w-52" title="{{ .Name }}">{{ .Name }}</div>
+			<span class="text-xs text-gray-600 dark:text-gray-300">Click a voice name to copy <code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">voice:</code></span>
+		</div>
+		<div class="flex flex-wrap items-center gap-3">
+			<input id="voices-search" type="search" autocomplete="off"
+				placeholder="Search voice or character... (press /)"
+				class="flex-1 min-w-[16rem] max-w-md {{template "input-class"}} px-3 py-1.5 text-sm" />
+			<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sort voices">
+				<button type="button" data-voice-sort="trending"
+					class="px-3 py-1 text-xs font-semibold {{template "button-2"}} border-twitch-dark bg-twitch-dark text-white dark:border-twitch-light">Trending</button>
+				<button type="button" data-voice-sort="newest"
+					class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">Newest</button>
+				<button type="button" data-voice-sort="popular"
+					class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">Popular</button>
+				<button type="button" data-voice-sort="az"
+					class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">A–Z</button>
+			</div>
+			{{ if gt .NewCount 0 }}
+			<button id="voices-new-only" type="button"
+				class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">New ({{ .NewCount }})</button>
+			{{ end }}
+			<button id="voices-reset" type="button"
+				class="hidden text-sm font-medium underline underline-offset-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Reset</button>
+		</div>
+	</div>
+
+	<div id="voices-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-5">
+		{{ range .Items }}
+		<div data-voice-card
+			data-search="{{ .SearchText }}"
+			data-name="{{ .Name }}"
+			data-trending="{{ .TrendingScore }}"
+			data-popular="{{ .Popularity }}"
+			data-created="{{ .CreatedUnix }}"
+			data-new="{{ if .IsNew }}1{{ else }}0{{ end }}"
+			class="relative hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col items-center justify-center">
+			{{ if .IsNew }}
+			<span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[10px] leading-none font-bold uppercase tracking-wider rounded bg-emerald-600 text-white pointer-events-none">NEW</span>
+			{{ end }}
+			<div class="w-[100px] h-[100px] flex items-center justify-center overflow-hidden">
+				<img class="object-contain max-w-full max-h-full" src="/characters/{{ .ID }}/image?w=200" loading="lazy" />
+			</div>
+			<button type="button" data-copy-voice="{{ .Name }}" title="Click to copy '{{ .Name }}:'"
+				class="mt-2 text-center text-base font-semibold truncate w-52 hover:underline">{{ .Name }}</button>
 			<button class="play-audio-btn mt-2 px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
 				data-src="/voices/{{ .Name }}/sample" data-loading="1" title="Play a TTS sample of this voice">&#9654; Sample</button>
 		</div>
 		{{ end }}
 	</div>
+
+	<div id="voices-empty" class="hidden py-12 text-center text-sm text-gray-600 dark:text-gray-300">
+		<p>No voices match the current filter.</p>
+		<button id="voices-empty-reset" type="button" class="mt-3 px-4 py-1.5 text-sm {{template "button-2"}}">Reset filters</button>
+	</div>
+
 	<script>
 		(function () {
 			let currentAudio = null;
@@ -123,6 +198,186 @@
 					}).catch(fail);
 				});
 			});
+
+			// Reusable search for collapsible Sounds / Filters / Melodies lists.
+			document.querySelectorAll('[data-list-filter]').forEach(function (input) {
+				const listId = input.dataset.listFilter;
+				const list = document.getElementById(listId);
+				if (!list) return;
+				const items = Array.from(list.querySelectorAll('[data-filter-item]'));
+				const countEl = document.querySelector('[data-list-count="' + listId + '"]');
+				const emptyEl = document.querySelector('[data-list-empty="' + listId + '"]');
+				const noun = listId === 'sounds-list' ? 'sounds' : (listId === 'filters-list' ? 'filters' : 'melodies');
+
+				function filterList() {
+					const terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+					let visible = 0;
+					items.forEach(function (item) {
+						const hay = (item.dataset.filterText || item.textContent || '').toLowerCase();
+						let ok = true;
+						for (let i = 0; i < terms.length; i++) {
+							if (hay.indexOf(terms[i]) === -1) {
+								ok = false;
+								break;
+							}
+						}
+						item.classList.toggle('hidden', !ok);
+						if (ok) visible++;
+					});
+					if (countEl) {
+						countEl.textContent = (visible === items.length)
+							? items.length + ' ' + noun
+							: visible + ' of ' + items.length + ' ' + noun;
+					}
+					if (emptyEl) {
+						emptyEl.classList.toggle('hidden', visible > 0 || items.length === 0);
+					}
+				}
+
+				input.addEventListener('input', filterList);
+				input.addEventListener('keydown', function (e) {
+					if (e.key === 'Escape' && input.value !== '') {
+						e.preventDefault();
+						input.value = '';
+						filterList();
+					}
+				});
+			});
+
+			const grid = document.getElementById('voices-grid');
+			const search = document.getElementById('voices-search');
+			const countEl = document.getElementById('voices-count');
+			const resetBtn = document.getElementById('voices-reset');
+			const emptyEl = document.getElementById('voices-empty');
+			const emptyResetBtn = document.getElementById('voices-empty-reset');
+			const newOnlyBtn = document.getElementById('voices-new-only');
+			if (!grid || !search) return;
+
+			const ACTIVE = ['border-twitch-dark', 'bg-twitch-dark', 'text-white', 'dark:border-twitch-light'];
+			const sortBtns = Array.from(document.querySelectorAll('[data-voice-sort]'));
+			const cards = Array.from(grid.querySelectorAll('[data-voice-card]'));
+			let sortMode = 'trending';
+			let newOnly = false;
+
+			function num(el, key) {
+				return parseFloat(el.dataset[key]) || 0;
+			}
+
+			function compare(a, b, mode) {
+				if (mode === 'newest') {
+					return (num(b, 'created') - num(a, 'created'))
+						|| (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
+				}
+				if (mode === 'popular') {
+					return (num(b, 'popular') - num(a, 'popular'))
+						|| (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
+				}
+				if (mode === 'az') {
+					return (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
+				}
+				return (num(b, 'trending') - num(a, 'trending'))
+					|| (num(b, 'popular') - num(a, 'popular'))
+					|| (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
+			}
+
+			function apply() {
+				const terms = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+				const sorted = cards.slice().sort(function (a, b) { return compare(a, b, sortMode); });
+				const frag = document.createDocumentFragment();
+				let visible = 0;
+
+				sorted.forEach(function (card) {
+					let ok = !newOnly || card.dataset.new === '1';
+					if (ok && terms.length > 0) {
+						const hay = card.dataset.search || '';
+						for (let i = 0; i < terms.length; i++) {
+							if (hay.indexOf(terms[i]) === -1) {
+								ok = false;
+								break;
+							}
+						}
+					}
+					card.classList.toggle('hidden', !ok);
+					if (ok) visible++;
+					frag.appendChild(card);
+				});
+				grid.appendChild(frag);
+
+				const isFiltered = terms.length > 0 || newOnly || sortMode !== 'trending';
+				countEl.textContent = (visible === cards.length)
+					? cards.length + ' voices'
+					: visible + ' of ' + cards.length + ' voices';
+				resetBtn.classList.toggle('hidden', !isFiltered);
+				emptyEl.classList.toggle('hidden', visible > 0 || cards.length === 0);
+			}
+
+			function setSort(mode) {
+				sortMode = mode;
+				sortBtns.forEach(function (btn) {
+					const active = btn.dataset.voiceSort === sortMode;
+					ACTIVE.forEach(function (cls) { btn.classList.toggle(cls, active); });
+				});
+				apply();
+			}
+
+			function setNewOnly(val) {
+				newOnly = val;
+				if (newOnlyBtn) {
+					ACTIVE.forEach(function (cls) { newOnlyBtn.classList.toggle(cls, newOnly); });
+				}
+				apply();
+			}
+
+			function reset() {
+				search.value = '';
+				setNewOnly(false);
+				setSort('trending');
+			}
+
+			sortBtns.forEach(function (btn) {
+				btn.addEventListener('click', function () { setSort(btn.dataset.voiceSort); });
+			});
+			if (newOnlyBtn) {
+				newOnlyBtn.addEventListener('click', function () { setNewOnly(!newOnly); });
+			}
+			search.addEventListener('input', apply);
+			search.addEventListener('keydown', function (e) {
+				if (e.key === 'Escape' && search.value !== '') {
+					e.preventDefault();
+					search.value = '';
+					apply();
+				}
+			});
+			resetBtn.addEventListener('click', reset);
+			if (emptyResetBtn) emptyResetBtn.addEventListener('click', reset);
+
+			grid.addEventListener('click', function (e) {
+				const copyBtn = e.target.closest('[data-copy-voice]');
+				if (!copyBtn) return;
+				const voice = copyBtn.dataset.copyVoice;
+				if (!voice || !navigator.clipboard) return;
+				navigator.clipboard.writeText(voice + ': ').then(function () {
+					if (copyBtn._copyTimer) clearTimeout(copyBtn._copyTimer);
+					copyBtn.textContent = 'Copied "' + voice + ':"';
+					copyBtn._copyTimer = setTimeout(function () {
+						copyBtn.textContent = voice;
+					}, 1200);
+				}).catch(function () {});
+			});
+
+			if (window.__bajSearchShortcut) {
+				document.removeEventListener('keydown', window.__bajSearchShortcut);
+			}
+			window.__bajSearchShortcut = function (e) {
+				if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+				const tag = document.activeElement && document.activeElement.tagName;
+				if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+				if (!document.body.contains(search)) return;
+				e.preventDefault();
+				search.focus();
+				search.select();
+			};
+			document.addEventListener('keydown', window.__bajSearchShortcut);
 		})();
 	</script>
 </div>

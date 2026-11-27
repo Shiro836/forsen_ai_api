@@ -1,6 +1,11 @@
 {{ block "char_frame" . }}
 
 <div class="grid grid-rows-12 grid-cols-12 w-full h-full overflow-hidden [&:has(input[name=enabled]:not(:checked))]:opacity-50 [&:has(input[name=enabled]:not(:checked))]:grayscale">
+    {{ if .IsNew }}
+    <span class="row-start-1 row-end-2 col-start-1 col-end-5 flex items-start pt-1.5 pl-1.5 pointer-events-none">
+        <span class="px-1.5 py-0.5 text-[10px] leading-none font-bold uppercase tracking-wider rounded bg-emerald-600 text-white">NEW</span>
+    </span>
+    {{ end }}
     {{ if not .DefaultVoice }}
     <label class="row-start-1 row-end-2 col-start-11 col-end-13 flex items-start justify-end pt-1.5 pr-1.5 cursor-pointer">
         <input type="checkbox" name="enabled" class="peer sr-only" {{ if not .Disabled }}checked{{ end }}
@@ -15,10 +20,12 @@
     {{ end }}
     <img class="col-start-2 col-end-7 row-start-2 row-end-7 object-contain max-h-full"
         src="/characters/{{ .Card.ID }}/image?w=200" loading="lazy"></img>
-    <div class="col-start-1 col-end-13 row-start-7 row-end-9 text-xl text-center truncate px-2">{{ .Card.Name }}</div>
+    <div class="col-start-1 col-end-13 row-start-7 row-end-9 text-xl text-center truncate px-2" title="{{ .Card.Name }}">{{ .Card.Name }}</div>
     {{ if .Author }}
-    <div class="col-start-1 col-end-13 row-start-9 row-end-10 text-xs/tight text-center text-gray-600 dark:text-gray-300 truncate px-2"
-        title="{{ .Author }}">by {{ .Author }}</div>
+    <div class="col-start-1 col-end-13 row-start-9 row-end-10 text-xs/tight text-center text-gray-600 dark:text-gray-300 truncate px-2">
+        <button type="button" data-author-filter="{{ .Author }}" class="max-w-full truncate hover:underline"
+            title="Filter by {{ .Author }}">by {{ .Author }}</button>
+    </div>
     {{ end }}
     <div class="col-start-1 col-end-13 row-start-10 row-end-11 text-sm flex items-center justify-center gap-4">
         <span class="flex items-center gap-1" title="AI redeems">

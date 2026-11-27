@@ -30,9 +30,26 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const newCardWindow = 14 * 24 * time.Hour
+
+func buildSearchText(parts ...string) string {
+	var clean []string
+	for _, p := range parts {
+		if fields := strings.Fields(p); len(fields) > 0 {
+			clean = append(clean, strings.ToLower(strings.Join(fields, " ")))
+		}
+	}
+	return strings.Join(clean, " ")
+}
+
 type charsElem struct {
-	Characters []*charElem
-	IsAdmin    bool
+	Characters    []*charElem
+	IsAdmin       bool
+	MineCount     int
+	EnabledCount  int
+	DisabledCount int
+	NewCount      int
+	NoVoiceCount  int
 }
 
 type charElem struct {
@@ -44,9 +61,15 @@ type charElem struct {
 	TTSRewardCreated bool
 	AIRewardCreated  bool
 
-	Author       string
-	Disabled     bool
-	DefaultVoice bool
+	Author        string
+	Disabled      bool
+	DefaultVoice  bool
+	IsNew         bool
+	NeedsVoice    bool
+	TotalRedeems  int
+	TrendingScore string
+	CreatedUnix   int64
+	SearchText    string
 }
 
 func (api *API) characters(r *http.Request) template.HTML {
@@ -77,7 +100,6 @@ func (api *API) characters(r *http.Request) template.HTML {
 		})
 	}
 
-	chars := make([]*charElem, 0, len(charCards))
 	isAdmin := false
 	if perms, err := api.db.GetUserPermissions(r.Context(), user.ID, db.PermissionStatusGranted); err == nil {
 		for _, p := range perms {
@@ -87,21 +109,51 @@ func (api *API) characters(r *http.Request) template.HTML {
 			}
 		}
 	}
+
+	now := time.Now()
+	page := &charsElem{
+		Characters: make([]*charElem, 0, len(charCards)),
+		IsAdmin:    isAdmin,
+	}
 	for _, charCard := range charCards {
-		chars = append(chars, &charElem{
+		canEdit := user.ID == charCard.OwnerUserID
+		disabled := settings.CardDisabled(charCard.ID)
+		isNew := !charCard.CreatedAt.IsZero() && now.Sub(charCard.CreatedAt) <= newCardWindow
+		needsVoice := charCard.Public && strings.TrimSpace(charCard.ShortCharName.String) == ""
+
+		if canEdit {
+			page.MineCount++
+		}
+		if disabled {
+			page.DisabledCount++
+		} else {
+			page.EnabledCount++
+		}
+		if isNew {
+			page.NewCount++
+		}
+		if needsVoice {
+			page.NoVoiceCount++
+		}
+
+		page.Characters = append(page.Characters, &charElem{
 			Card:             charCard,
-			CanEdit:          user.ID == charCard.OwnerUserID,
+			CanEdit:          canEdit,
 			IsAdmin:          isAdmin,
 			TTSRewardCreated: false,
 			Author:           charCard.OwnerTwitchLogin,
-			Disabled:         settings.CardDisabled(charCard.ID),
+			Disabled:         disabled,
 			DefaultVoice:     strings.EqualFold(charCard.ShortCharName.String, processor.DefaultUniversalVoice),
+			IsNew:            isNew,
+			NeedsVoice:       needsVoice,
+			TotalRedeems:     charCard.Redeems + charCard.TTSRedeems,
+			TrendingScore:    fmt.Sprintf("%.4f", charCard.TrendingScore),
+			CreatedUnix:      charCard.CreatedAt.Unix(),
+			SearchText:       buildSearchText(charCard.Name, charCard.ShortCharName.String, charCard.OwnerTwitchLogin, charCard.Description),
 		})
 	}
 
-	return getHtml("characters.html", &charsElem{
-		Characters: chars,
-	})
+	return getHtml("characters.html", page)
 }
 
 func (api *API) setCharacterEnabled(w http.ResponseWriter, r *http.Request) {
@@ -688,6 +740,7 @@ func servePlaceholderImage(w http.ResponseWriter) {
 
 type voicesListPage struct {
 	Items    []voiceItem
+	NewCount int
 	Sounds   []soundItem
 	Filters  []filterItem
 	Emotions []string
@@ -695,8 +748,13 @@ type voicesListPage struct {
 }
 
 type voiceItem struct {
-	ID   uuid.UUID
-	Name string
+	ID            uuid.UUID
+	Name          string
+	SearchText    string
+	IsNew         bool
+	TrendingScore string
+	Popularity    int
+	CreatedUnix   int64
 }
 
 // voicesPublic renders a public page with all public short-named cards and their images
@@ -750,9 +808,23 @@ func (api *API) voicesStreamer(r *http.Request) template.HTML {
 }
 
 func (api *API) renderVoices(r *http.Request, items []db.PublicShortName) template.HTML {
+	now := time.Now()
 	list := make([]voiceItem, 0, len(items))
+	newCount := 0
 	for _, it := range items {
-		list = append(list, voiceItem{ID: it.ID, Name: it.ShortCharName})
+		isNew := !it.CreatedAt.IsZero() && now.Sub(it.CreatedAt) <= newCardWindow
+		if isNew {
+			newCount++
+		}
+		list = append(list, voiceItem{
+			ID:            it.ID,
+			Name:          it.ShortCharName,
+			SearchText:    buildSearchText(it.ShortCharName, it.Name, it.Description),
+			IsNew:         isNew,
+			TrendingScore: fmt.Sprintf("%.4f", it.TrendingScore),
+			Popularity:    it.Redeems + it.TTSRedeems,
+			CreatedUnix:   it.CreatedAt.Unix(),
+		})
 	}
 
 	var melodies []ai.Melody
@@ -765,7 +837,14 @@ func (api *API) renderVoices(r *http.Request, items []db.PublicShortName) templa
 		}
 	}
 
-	return getHtml("voices.html", &voicesListPage{Items: list, Sounds: soundItems, Filters: filterItems, Emotions: ai.EmotionNames, Melodies: melodies})
+	return getHtml("voices.html", &voicesListPage{
+		Items:    list,
+		NewCount: newCount,
+		Sounds:   soundItems,
+		Filters:  filterItems,
+		Emotions: ai.EmotionNames,
+		Melodies: melodies,
+	})
 }
 
 func (api *API) universalTTSReward(w http.ResponseWriter, r *http.Request) {
