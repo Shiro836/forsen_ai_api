@@ -10,6 +10,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -402,9 +405,73 @@ func (db *DB) populateCardDataMedia(ctx context.Context, data *CardData) {
 }
 
 const (
-	trendingWindowDays   = 14
-	trendingHalfLifeDays = 4.0
+	trendingWindowDays    = 14
+	trendingHalfLifeDays  = 4.0
+	freshnessWindow       = 14 * 24 * time.Hour
+	freshnessHalfLifeDays = 3.0
+	freshnessAnchorQuant  = 0.90
 )
+
+func percentile(vals []float64, p float64) float64 {
+	if len(vals) == 0 {
+		return 0
+	}
+	sorted := slices.Clone(vals)
+	sort.Float64s(sorted)
+	pos := p * float64(len(sorted)-1)
+	lo := int(math.Floor(pos))
+	hi := int(math.Ceil(pos))
+	return sorted[lo] + (pos-float64(lo))*(sorted[hi]-sorted[lo])
+}
+
+func freshnessBoost(now, createdAt time.Time, anchor float64) float64 {
+	if createdAt.IsZero() {
+		return 0
+	}
+	age := now.Sub(createdAt)
+	if age < 0 {
+		age = 0
+	}
+	if age > freshnessWindow {
+		return 0
+	}
+	return anchor * math.Pow(0.5, (age.Hours()/24.0)/freshnessHalfLifeDays)
+}
+
+func applyCardFreshness(cards []*Card, now time.Time) {
+	pubScores := make([]float64, 0, len(cards))
+	for _, c := range cards {
+		if c.Public {
+			pubScores = append(pubScores, c.TrendingScore)
+		}
+	}
+	anchor := max(1.0, percentile(pubScores, freshnessAnchorQuant))
+	for _, c := range cards {
+		c.TrendingScore += freshnessBoost(now, c.CreatedAt, anchor)
+	}
+}
+
+func applyVoiceFreshness(voices []PublicShortName, now time.Time) {
+	scores := make([]float64, len(voices))
+	for i, v := range voices {
+		scores[i] = v.TrendingScore
+	}
+	anchor := max(1.0, percentile(scores, freshnessAnchorQuant))
+	for i := range voices {
+		voices[i].TrendingScore += freshnessBoost(now, voices[i].CreatedAt, anchor)
+	}
+	sort.SliceStable(voices, func(i, j int) bool {
+		a, b := voices[i], voices[j]
+		if a.TrendingScore != b.TrendingScore {
+			return a.TrendingScore > b.TrendingScore
+		}
+		popA, popB := a.Redeems+a.TTSRedeems, b.Redeems+b.TTSRedeems
+		if popA != popB {
+			return popA > popB
+		}
+		return strings.ToLower(a.ShortCharName) < strings.ToLower(b.ShortCharName)
+	})
+}
 
 func recentStatsJoin() (string, []any) {
 	sqlStr := `(
@@ -496,6 +563,20 @@ func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChat
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to get char cards: %w", err)
+	}
+
+	applyCardFreshness(cards, time.Now())
+	if params.SortBy == SortByTrending {
+		sort.SliceStable(cards, func(i, j int) bool {
+			a, b := cards[i], cards[j]
+			if a.TrendingScore != b.TrendingScore {
+				return a.TrendingScore > b.TrendingScore
+			}
+			if a.Redeems+a.TTSRedeems != b.Redeems+b.TTSRedeems {
+				return a.Redeems+a.TTSRedeems > b.Redeems+b.TTSRedeems
+			}
+			return a.CreatedAt.After(b.CreatedAt)
+		})
 	}
 
 	return cards, nil
@@ -658,6 +739,8 @@ func (db *DB) GetPublicShortNamedCards(ctx context.Context) ([]PublicShortName, 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate public short named cards: %w", err)
 	}
+
+	applyVoiceFreshness(out, time.Now())
 	return out, nil
 }
 

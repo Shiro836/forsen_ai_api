@@ -83,14 +83,13 @@ func TestContainersCharCardTrendingAndNoLimit100(t *testing.T) {
 	if voices[0].Name != "Okayeg" || voices[0].Description != "funny teammate" || voices[0].Redeems != 3 || voices[0].TTSRedeems != 2 {
 		t.Fatalf("unexpected hot voice metadata: %+v", voices[0])
 	}
-	if math.Abs(voices[0].TrendingScore-5.0) > 0.01 {
-		t.Fatalf("hot score = %f, want 5.0", voices[0].TrendingScore)
+	// All 3 test cards were just created (age ~0), so each gets the same
+	// freshness anchor on top of its 14-day decayed usage (5.0, 4.0, 0.0).
+	if math.Abs((voices[0].TrendingScore-voices[2].TrendingScore)-5.0) > 0.05 {
+		t.Fatalf("hot - stale delta = %f, want ~5.0", voices[0].TrendingScore-voices[2].TrendingScore)
 	}
-	if math.Abs(voices[1].TrendingScore-4.0) > 0.01 {
-		t.Fatalf("decayed score = %f, want 4.0", voices[1].TrendingScore)
-	}
-	if voices[2].TrendingScore != 0 {
-		t.Fatalf("stale score = %f, want 0", voices[2].TrendingScore)
+	if math.Abs((voices[1].TrendingScore-voices[2].TrendingScore)-4.0) > 0.05 {
+		t.Fatalf("decayed - stale delta = %f, want ~4.0", voices[1].TrendingScore-voices[2].TrendingScore)
 	}
 
 	// Ensure GetCharCards is no longer truncated at 100 rows.
