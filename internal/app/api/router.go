@@ -195,6 +195,11 @@ func (api *API) NewRouter() *chi.Mux {
 
 		// Public voices list (short names with images)
 		router.Get("/voices", api.navPublic(api.voicesPublic))
+		router.Get("/voices/list/cards", http.HandlerFunc(api.voicesListPublic))
+		router.Get("/voices/list/channel/{twitch_login}", http.HandlerFunc(api.voicesListStreamer))
+		router.Get("/voices/list/sounds", http.HandlerFunc(api.voicesListSounds))
+		router.Get("/voices/list/filters", http.HandlerFunc(api.voicesListFilters))
+		router.Get("/voices/list/melodies", http.HandlerFunc(api.voicesListMelodies))
 		router.Get("/voices/{twitch_login}", api.navPublic(api.voicesStreamer))
 		router.Get("/voices/{voice}/sample", http.HandlerFunc(api.voiceSample))
 		router.Get("/sounds/{id}", http.HandlerFunc(api.soundGet))
@@ -261,6 +266,7 @@ func (api *API) NewRouter() *chi.Mux {
 			router.Get("/guide/bits/detect", http.HandlerFunc(api.bitsGuideDetect))
 			router.Get("/guide/legacy", api.nav(api.legacyHome))
 			router.Get("/characters", api.nav(api.characters))
+			router.Get("/characters/list", http.HandlerFunc(api.charactersList))
 
 			router.Post("/characters/assist/chat", http.HandlerFunc(api.assistCharacterChat))
 			router.Post("/characters/assist/tips", http.HandlerFunc(api.assistCharacterTips))

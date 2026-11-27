@@ -1081,10 +1081,6 @@ video {
   display: table;
 }
 
-.\!grid {
-  display: grid !important;
-}
-
 .grid {
   display: grid;
 }
@@ -1385,6 +1381,10 @@ video {
   width: 15rem;
 }
 
+.w-64 {
+  width: 16rem;
+}
+
 .w-7 {
   width: 1.75rem;
 }
@@ -1499,10 +1499,6 @@ video {
   min-width: 0px;
 }
 
-.min-w-\[16rem\] {
-  min-width: 16rem;
-}
-
 .max-w-16 {
   max-width: 4rem;
 }
@@ -1525,10 +1521,6 @@ video {
 
 .max-w-full {
   max-width: 100%;
-}
-
-.max-w-md {
-  max-width: 28rem;
 }
 
 .max-w-screen-xl {

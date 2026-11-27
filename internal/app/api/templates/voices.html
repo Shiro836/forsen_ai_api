@@ -1,4 +1,92 @@
-<div class="w-full min-w-0">
+{{ define "voices-sounds-results" }}
+<div id="sounds-results">
+	<div class="pt-2 text-xs text-gray-600 dark:text-gray-300">{{ if eq (len .Sounds) .TotalSounds }}{{ .TotalSounds }} sounds{{ else }}{{ len .Sounds }} of {{ .TotalSounds }} sounds{{ end }}</div>
+	{{ if .Sounds }}
+	<div class="flex flex-wrap gap-2 pt-2">
+		{{ range .Sounds }}
+		<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+			data-src="/sounds/{{ .ID }}">[{{ .ID }}] {{ .Name }}</button>
+		{{ end }}
+	</div>
+	{{ else }}
+	<p class="pt-2 text-xs text-gray-600 dark:text-gray-300">no sounds found</p>
+	{{ end }}
+</div>
+{{ end }}
+
+{{ define "voices-filters-results" }}
+<div id="filters-results">
+	<div class="pt-2 text-xs text-gray-600 dark:text-gray-300">{{ if eq (len .Filters) .TotalFilters }}{{ .TotalFilters }} filters{{ else }}{{ len .Filters }} of {{ .TotalFilters }} filters{{ end }}</div>
+	{{ if .Filters }}
+	<div class="flex flex-wrap gap-2 pt-2">
+		{{ range .Filters }}
+		<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+			data-src="/filters/{{ .ID }}/sample" data-loading="1">{{"{"}}{{ .ID }}{{"}"}} {{ .Name }}</button>
+		{{ end }}
+	</div>
+	{{ else }}
+	<p class="pt-2 text-xs text-gray-600 dark:text-gray-300">no filters found</p>
+	{{ end }}
+</div>
+{{ end }}
+
+{{ define "voices-melodies-results" }}
+<div id="melodies-results">
+	{{ if gt .TotalMelodies 0 }}
+	<div class="pt-2 text-xs text-gray-600 dark:text-gray-300">{{ if eq (len .Melodies) .TotalMelodies }}{{ .TotalMelodies }} melodies{{ else }}{{ len .Melodies }} of {{ .TotalMelodies }} melodies{{ end }}</div>
+	{{ end }}
+	{{ if .Melodies }}
+	<div class="flex flex-wrap gap-2 pt-2">
+		{{ range .Melodies }}
+		<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+			data-src="/melodies/{{ .ID }}/sample" data-loading="1">{{"{sing:"}}{{ .Number }}{{"}"}} {{ .Name }}</button>
+		{{ end }}
+	</div>
+	{{ else if gt .TotalMelodies 0 }}
+	<p class="pt-2 text-xs text-gray-600 dark:text-gray-300">no melodies found</p>
+	{{ end }}
+</div>
+{{ end }}
+
+{{ define "voices-results" }}
+<div id="voices-results">
+	<div class="flex items-center gap-3 pt-4 text-sm text-gray-600 dark:text-gray-300">
+		<span>{{ if eq (len .Items) .TotalCount }}{{ .TotalCount }} voices{{ else }}{{ len .Items }} of {{ .TotalCount }} voices{{ end }}</span>
+		{{ if .Filtered }}
+		<button type="button" class="font-medium underline underline-offset-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+			hx-get="{{ .PageURL }}" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-sync="#tabs:abort">Reset</button>
+		{{ end }}
+	</div>
+	{{ if .Items }}
+	<div id="voices-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-4">
+		{{ range .Items }}
+		<div class="relative hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col items-center justify-center">
+			{{ if .IsNew }}
+			<span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[10px] leading-none font-bold uppercase tracking-wider rounded bg-emerald-600 text-white pointer-events-none">NEW</span>
+			{{ end }}
+			<div class="w-[100px] h-[100px] flex items-center justify-center overflow-hidden">
+				<img class="object-contain max-w-full max-h-full" src="/characters/{{ .ID }}/image?w=200" loading="lazy" />
+			</div>
+			<button type="button" class="copy-button mt-2 text-center text-base font-semibold truncate w-52 hover:underline"
+				data-clipboard-text="{{ .Name }}: ">{{ .Name }}</button>
+			<button class="play-audio-btn mt-2 px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
+				data-src="/voices/{{ .Name }}/sample" data-loading="1">&#9654; Sample</button>
+		</div>
+		{{ end }}
+	</div>
+	{{ else }}
+	<div class="py-12 text-center text-sm text-gray-600 dark:text-gray-300">
+		<p>no voices found</p>
+		{{ if .Filtered }}
+		<button type="button" class="mt-3 px-4 py-1.5 text-sm {{template "button-2"}}"
+			hx-get="{{ .PageURL }}" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-sync="#tabs:abort">Reset</button>
+		{{ end }}
+	</div>
+	{{ end }}
+</div>
+{{ end }}
+
+<div id="voices-page" class="w-full min-w-0">
     <div class="mb-4 space-x-4">
 		<div class="text-xl font-medium">
 			This is attempt to replicate forsen tts. Syntax is same but voices are different.
@@ -18,41 +106,27 @@
     </div>
 	<details class="pt-2 pb-2">
 		<summary class="cursor-pointer text-xl font-medium select-none">
-			TTS Sounds ({{ len .Sounds }})
+			TTS Sounds ({{ .TotalSounds }})
 		</summary>
-		<div class="flex flex-wrap items-center gap-3 pt-3">
-			<input type="search" autocomplete="off" data-list-filter="sounds-list"
-				placeholder="Filter sounds by name or [number]..."
-				class="{{template "input-class"}} px-3 py-1 text-sm w-72 max-w-full" />
-			<span data-list-count="sounds-list" class="text-xs text-gray-600 dark:text-gray-300">{{ len .Sounds }} sounds</span>
+		<div class="pt-3">
+			<input type="search" name="q" autocomplete="off" placeholder="search sounds"
+				class="{{template "input-class"}} px-3 py-1 text-sm w-64"
+				hx-get="/voices/list/sounds" hx-trigger="input changed delay:250ms, search"
+				hx-target="#sounds-results" hx-swap="outerHTML" hx-sync="this:replace" />
 		</div>
-		<div id="sounds-list" class="flex flex-wrap gap-2 pt-3">
-			{{ range .Sounds }}
-			<button data-filter-item data-filter-text="[{{ .ID }}] {{ .ID }} {{ .Name }}"
-				class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
-				data-src="/sounds/{{ .ID }}" title="Play sound [{{ .ID }}]">[{{ .ID }}] {{ .Name }}</button>
-			{{ end }}
-		</div>
-		<p data-list-empty="sounds-list" class="hidden pt-3 text-xs text-gray-600 dark:text-gray-300">No sounds match your filter.</p>
+		{{ template "voices-sounds-results" . }}
 	</details>
 	<details class="pt-2 pb-2">
 		<summary class="cursor-pointer text-xl font-medium select-none">
-			TTS Filters ({{ len .Filters }})
+			TTS Filters ({{ .TotalFilters }})
 		</summary>
-		<div class="flex flex-wrap items-center gap-3 pt-3">
-			<input type="search" autocomplete="off" data-list-filter="filters-list"
-				placeholder="Filter by name or {number}..."
-				class="{{template "input-class"}} px-3 py-1 text-sm w-72 max-w-full" />
-			<span data-list-count="filters-list" class="text-xs text-gray-600 dark:text-gray-300">{{ len .Filters }} filters</span>
+		<div class="pt-3">
+			<input type="search" name="q" autocomplete="off" placeholder="search filters"
+				class="{{template "input-class"}} px-3 py-1 text-sm w-64"
+				hx-get="/voices/list/filters" hx-trigger="input changed delay:250ms, search"
+				hx-target="#filters-results" hx-swap="outerHTML" hx-sync="this:replace" />
 		</div>
-		<div id="filters-list" class="flex flex-wrap gap-2 pt-3">
-			{{ range .Filters }}
-			<button data-filter-item data-filter-text="{{"{"}}{{ .ID }}{{"}"}} {{ .ID }} {{ .Name }}"
-				class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
-				data-src="/filters/{{ .ID }}/sample" data-loading="1" title="Play filter {{"{"}}{{ .ID }}{{"}"}} sample">{{"{"}}{{ .ID }}{{"}"}} {{ .Name }}</button>
-			{{ end }}
-		</div>
-		<p data-list-empty="filters-list" class="hidden pt-3 text-xs text-gray-600 dark:text-gray-300">No filters match your filter.</p>
+		{{ template "voices-filters-results" . }}
 	</details>
 	<details class="pt-2 pb-2">
 		<summary class="cursor-pointer text-xl font-medium select-none">
@@ -61,7 +135,7 @@
 		<div class="flex flex-wrap gap-2 pt-4">
 			{{ range .Emotions }}
 			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
-				data-src="/emotions/{{ . }}/sample" data-loading="1" title="Play emotion {{"{"}}{{ . }}{{"}"}} sample">{{"{"}}{{ . }}{{"}"}}</button>
+				data-src="/emotions/{{ . }}/sample" data-loading="1">{{"{"}}{{ . }}{{"}"}}</button>
 			{{ end }}
 		</div>
 	</details>
@@ -71,7 +145,7 @@
 		</summary>
 		<div class="flex flex-wrap gap-2 pt-4">
 			<button class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
-				data-src="/extra/old/sample" data-loading="1" title="Use old TTS engine">{{"{old}"}} use old tts engine</button>
+				data-src="/extra/old/sample" data-loading="1">{{"{old}"}} use old tts engine</button>
 		</div>
 	</details>
 	<details class="pt-2 pb-2">
@@ -83,301 +157,106 @@
 			<br />
 			<code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">{{"{sing:20}"}}</code> by number, <code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">{{"{sing}"}}</code> random.
 		</div>
-		{{ if gt (len .Melodies) 0 }}
-		<div class="flex flex-wrap items-center gap-3 pt-3">
-			<input type="search" autocomplete="off" data-list-filter="melodies-list"
-				placeholder="Filter melodies by name or {sing:number}..."
-				class="{{template "input-class"}} px-3 py-1 text-sm w-72 max-w-full" />
-			<span data-list-count="melodies-list" class="text-xs text-gray-600 dark:text-gray-300">{{ len .Melodies }} melodies</span>
+		{{ if gt .TotalMelodies 0 }}
+		<div class="pt-3">
+			<input type="search" name="q" autocomplete="off" placeholder="search melodies"
+				class="{{template "input-class"}} px-3 py-1 text-sm w-64"
+				hx-get="/voices/list/melodies" hx-trigger="input changed delay:250ms, search"
+				hx-target="#melodies-results" hx-swap="outerHTML" hx-sync="this:replace" />
 		</div>
 		{{ end }}
-		<div id="melodies-list" class="flex flex-wrap gap-2 pt-3">
-			{{ range .Melodies }}
-			<button data-filter-item data-filter-text="{{"{sing:"}}{{ .Number }}{{"}"}} {{ .Number }} {{ .Name }}"
-				class="play-audio-btn px-2 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
-				data-src="/melodies/{{ .ID }}/sample" data-loading="1" title="Play melody {{ .Name }}">{{"{sing:"}}{{ .Number }}{{"}"}} {{ .Name }}</button>
-			{{ end }}
-		</div>
-		<p data-list-empty="melodies-list" class="hidden pt-3 text-xs text-gray-600 dark:text-gray-300">No melodies match your filter.</p>
+		{{ template "voices-melodies-results" . }}
 	</details>
 
-	<div class="mt-6 pt-6 border-t {{template "ui-border-clr"}} flex flex-col gap-3">
-		<div class="flex flex-wrap items-baseline justify-between gap-2">
-			<div class="flex items-baseline gap-3">
-				<h2 class="text-xl font-bold">Voices</h2>
-				<span id="voices-count" class="text-sm text-gray-600 dark:text-gray-300">{{ len .Items }} voices</span>
-			</div>
-			<span class="text-xs text-gray-600 dark:text-gray-300">Click a voice name to copy <code class="font-mono bg-gray-200 dark:bg-gray-700 px-1 rounded">voice:</code></span>
+	<div id="voices-filters" class="mt-6 pt-6 border-t {{template "ui-border-clr"}} flex flex-col gap-3">
+		<div class="flex items-baseline justify-between gap-2">
+			<h2 class="text-xl font-bold">Voices</h2>
+			<span class="text-xs text-gray-600 dark:text-gray-300">click voice to copy</span>
 		</div>
 		<div class="flex flex-wrap items-center gap-3">
-			<input id="voices-search" type="search" autocomplete="off"
-				placeholder="Search voice or character... (press /)"
-				class="flex-1 min-w-[16rem] max-w-md {{template "input-class"}} px-3 py-1.5 text-sm" />
-			<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Sort voices">
-				<button type="button" data-voice-sort="trending"
-					class="px-3 py-1 text-xs font-semibold {{template "button-2"}} border-twitch-dark bg-twitch-dark text-white dark:border-twitch-light">Trending</button>
-				<button type="button" data-voice-sort="newest"
-					class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">Newest</button>
-				<button type="button" data-voice-sort="popular"
-					class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">Popular</button>
-				<button type="button" data-voice-sort="az"
-					class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">A–Z</button>
+			<input type="search" name="q" value="{{ .Query }}" autocomplete="off" placeholder="voice or character"
+				class="w-72 {{template "input-class"}} px-3 py-1.5 text-sm"
+				hx-get="{{ .ListURL }}" hx-trigger="input changed delay:300ms, search"
+				hx-target="#voices-results" hx-swap="outerHTML" hx-include="#voices-filters" hx-sync="#voices-filters:replace" />
+			<div class="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Sort voices">
+				<label class="cursor-pointer">
+					<input type="radio" name="sort" value="trending" class="peer sr-only"{{ if eq .Sort "trending" }} checked{{ end }}
+						hx-get="{{ .ListURL }}" hx-trigger="change" hx-target="#voices-results" hx-swap="outerHTML"
+						hx-include="#voices-filters" hx-sync="#voices-filters:replace" />
+					<span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">Trending</span>
+				</label>
+				<label class="cursor-pointer">
+					<input type="radio" name="sort" value="newest" class="peer sr-only"{{ if eq .Sort "newest" }} checked{{ end }}
+						hx-get="{{ .ListURL }}" hx-trigger="change" hx-target="#voices-results" hx-swap="outerHTML"
+						hx-include="#voices-filters" hx-sync="#voices-filters:replace" />
+					<span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">Newest</span>
+				</label>
+				<label class="cursor-pointer">
+					<input type="radio" name="sort" value="popular" class="peer sr-only"{{ if eq .Sort "popular" }} checked{{ end }}
+						hx-get="{{ .ListURL }}" hx-trigger="change" hx-target="#voices-results" hx-swap="outerHTML"
+						hx-include="#voices-filters" hx-sync="#voices-filters:replace" />
+					<span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">Popular</span>
+				</label>
+				<label class="cursor-pointer">
+					<input type="radio" name="sort" value="az" class="peer sr-only"{{ if eq .Sort "az" }} checked{{ end }}
+						hx-get="{{ .ListURL }}" hx-trigger="change" hx-target="#voices-results" hx-swap="outerHTML"
+						hx-include="#voices-filters" hx-sync="#voices-filters:replace" />
+					<span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">A–Z</span>
+				</label>
 			</div>
 			{{ if gt .NewCount 0 }}
-			<button id="voices-new-only" type="button"
-				class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">New ({{ .NewCount }})</button>
+			<label class="cursor-pointer">
+				<input type="checkbox" name="new" value="1" class="peer sr-only"{{ if .NewOnly }} checked{{ end }}
+					hx-get="{{ .ListURL }}" hx-trigger="change" hx-target="#voices-results" hx-swap="outerHTML"
+					hx-include="#voices-filters" hx-sync="#voices-filters:replace" />
+				<span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">New ({{ .NewCount }})</span>
+			</label>
 			{{ end }}
-			<button id="voices-reset" type="button"
-				class="hidden text-sm font-medium underline underline-offset-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Reset</button>
 		</div>
 	</div>
 
-	<div id="voices-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-5">
-		{{ range .Items }}
-		<div data-voice-card
-			data-search="{{ .SearchText }}"
-			data-name="{{ .Name }}"
-			data-trending="{{ .TrendingScore }}"
-			data-popular="{{ .Popularity }}"
-			data-created="{{ .CreatedUnix }}"
-			data-new="{{ if .IsNew }}1{{ else }}0{{ end }}"
-			class="relative hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col items-center justify-center">
-			{{ if .IsNew }}
-			<span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[10px] leading-none font-bold uppercase tracking-wider rounded bg-emerald-600 text-white pointer-events-none">NEW</span>
-			{{ end }}
-			<div class="w-[100px] h-[100px] flex items-center justify-center overflow-hidden">
-				<img class="object-contain max-w-full max-h-full" src="/characters/{{ .ID }}/image?w=200" loading="lazy" />
-			</div>
-			<button type="button" data-copy-voice="{{ .Name }}" title="Click to copy '{{ .Name }}:'"
-				class="mt-2 text-center text-base font-semibold truncate w-52 hover:underline">{{ .Name }}</button>
-			<button class="play-audio-btn mt-2 px-3 py-1 text-xs border border-slate-400 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
-				data-src="/voices/{{ .Name }}/sample" data-loading="1" title="Play a TTS sample of this voice">&#9654; Sample</button>
-		</div>
-		{{ end }}
-	</div>
-
-	<div id="voices-empty" class="hidden py-12 text-center text-sm text-gray-600 dark:text-gray-300">
-		<p>No voices match the current filter.</p>
-		<button id="voices-empty-reset" type="button" class="mt-3 px-4 py-1.5 text-sm {{template "button-2"}}">Reset filters</button>
-	</div>
+	{{ template "voices-results" . }}
 
 	<script>
 		(function () {
+			const page = document.getElementById('voices-page');
+			if (!page) return;
 			let currentAudio = null;
 
-			document.querySelectorAll('.play-audio-btn').forEach(function (btn) {
-				btn.addEventListener('click', function () {
-					if (currentAudio) {
-						currentAudio.pause();
-						currentAudio = null;
-					}
+			page.addEventListener('click', function (e) {
+				const btn = e.target.closest('.play-audio-btn');
+				if (!btn) return;
 
-					const showLoading = btn.dataset.loading === '1';
-					const label = btn.innerHTML;
-					if (showLoading) {
-						btn.disabled = true;
-						btn.textContent = 'Loading...';
-					}
+				if (currentAudio) {
+					currentAudio.pause();
+					currentAudio = null;
+				}
 
-					const reset = function () {
-						btn.disabled = false;
-						btn.innerHTML = label;
-					};
+				const showLoading = btn.dataset.loading === '1';
+				const label = btn.innerHTML;
+				if (showLoading) {
+					btn.disabled = true;
+					btn.textContent = 'Loading...';
+				}
 
-					const fail = function () {
-						btn.textContent = 'Failed';
-						setTimeout(reset, 1500);
-					};
+				const reset = function () {
+					btn.disabled = false;
+					btn.innerHTML = label;
+				};
 
-					const audio = new Audio(btn.dataset.src);
-					currentAudio = audio;
+				const fail = function () {
+					btn.textContent = 'Failed';
+					setTimeout(reset, 1500);
+				};
 
-					audio.addEventListener('error', fail);
-					audio.play().then(function () {
-						if (showLoading) reset();
-					}).catch(fail);
-				});
+				const audio = new Audio(btn.dataset.src);
+				currentAudio = audio;
+
+				audio.addEventListener('error', fail);
+				audio.play().then(function () {
+					if (showLoading) reset();
+				}).catch(fail);
 			});
-
-			// Reusable search for collapsible Sounds / Filters / Melodies lists.
-			document.querySelectorAll('[data-list-filter]').forEach(function (input) {
-				const listId = input.dataset.listFilter;
-				const list = document.getElementById(listId);
-				if (!list) return;
-				const items = Array.from(list.querySelectorAll('[data-filter-item]'));
-				const countEl = document.querySelector('[data-list-count="' + listId + '"]');
-				const emptyEl = document.querySelector('[data-list-empty="' + listId + '"]');
-				const noun = listId === 'sounds-list' ? 'sounds' : (listId === 'filters-list' ? 'filters' : 'melodies');
-
-				function filterList() {
-					const terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-					let visible = 0;
-					items.forEach(function (item) {
-						const hay = (item.dataset.filterText || item.textContent || '').toLowerCase();
-						let ok = true;
-						for (let i = 0; i < terms.length; i++) {
-							if (hay.indexOf(terms[i]) === -1) {
-								ok = false;
-								break;
-							}
-						}
-						item.classList.toggle('hidden', !ok);
-						if (ok) visible++;
-					});
-					if (countEl) {
-						countEl.textContent = (visible === items.length)
-							? items.length + ' ' + noun
-							: visible + ' of ' + items.length + ' ' + noun;
-					}
-					if (emptyEl) {
-						emptyEl.classList.toggle('hidden', visible > 0 || items.length === 0);
-					}
-				}
-
-				input.addEventListener('input', filterList);
-				input.addEventListener('keydown', function (e) {
-					if (e.key === 'Escape' && input.value !== '') {
-						e.preventDefault();
-						input.value = '';
-						filterList();
-					}
-				});
-			});
-
-			const grid = document.getElementById('voices-grid');
-			const search = document.getElementById('voices-search');
-			const countEl = document.getElementById('voices-count');
-			const resetBtn = document.getElementById('voices-reset');
-			const emptyEl = document.getElementById('voices-empty');
-			const emptyResetBtn = document.getElementById('voices-empty-reset');
-			const newOnlyBtn = document.getElementById('voices-new-only');
-			if (!grid || !search) return;
-
-			const ACTIVE = ['border-twitch-dark', 'bg-twitch-dark', 'text-white', 'dark:border-twitch-light'];
-			const sortBtns = Array.from(document.querySelectorAll('[data-voice-sort]'));
-			const cards = Array.from(grid.querySelectorAll('[data-voice-card]'));
-			let sortMode = 'trending';
-			let newOnly = false;
-
-			function num(el, key) {
-				return parseFloat(el.dataset[key]) || 0;
-			}
-
-			function compare(a, b, mode) {
-				if (mode === 'newest') {
-					return (num(b, 'created') - num(a, 'created'))
-						|| (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
-				}
-				if (mode === 'popular') {
-					return (num(b, 'popular') - num(a, 'popular'))
-						|| (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
-				}
-				if (mode === 'az') {
-					return (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
-				}
-				return (num(b, 'trending') - num(a, 'trending'))
-					|| (num(b, 'popular') - num(a, 'popular'))
-					|| (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
-			}
-
-			function apply() {
-				const terms = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-				const sorted = cards.slice().sort(function (a, b) { return compare(a, b, sortMode); });
-				const frag = document.createDocumentFragment();
-				let visible = 0;
-
-				sorted.forEach(function (card) {
-					let ok = !newOnly || card.dataset.new === '1';
-					if (ok && terms.length > 0) {
-						const hay = card.dataset.search || '';
-						for (let i = 0; i < terms.length; i++) {
-							if (hay.indexOf(terms[i]) === -1) {
-								ok = false;
-								break;
-							}
-						}
-					}
-					card.classList.toggle('hidden', !ok);
-					if (ok) visible++;
-					frag.appendChild(card);
-				});
-				grid.appendChild(frag);
-
-				const isFiltered = terms.length > 0 || newOnly || sortMode !== 'trending';
-				countEl.textContent = (visible === cards.length)
-					? cards.length + ' voices'
-					: visible + ' of ' + cards.length + ' voices';
-				resetBtn.classList.toggle('hidden', !isFiltered);
-				emptyEl.classList.toggle('hidden', visible > 0 || cards.length === 0);
-			}
-
-			function setSort(mode) {
-				sortMode = mode;
-				sortBtns.forEach(function (btn) {
-					const active = btn.dataset.voiceSort === sortMode;
-					ACTIVE.forEach(function (cls) { btn.classList.toggle(cls, active); });
-				});
-				apply();
-			}
-
-			function setNewOnly(val) {
-				newOnly = val;
-				if (newOnlyBtn) {
-					ACTIVE.forEach(function (cls) { newOnlyBtn.classList.toggle(cls, newOnly); });
-				}
-				apply();
-			}
-
-			function reset() {
-				search.value = '';
-				setNewOnly(false);
-				setSort('trending');
-			}
-
-			sortBtns.forEach(function (btn) {
-				btn.addEventListener('click', function () { setSort(btn.dataset.voiceSort); });
-			});
-			if (newOnlyBtn) {
-				newOnlyBtn.addEventListener('click', function () { setNewOnly(!newOnly); });
-			}
-			search.addEventListener('input', apply);
-			search.addEventListener('keydown', function (e) {
-				if (e.key === 'Escape' && search.value !== '') {
-					e.preventDefault();
-					search.value = '';
-					apply();
-				}
-			});
-			resetBtn.addEventListener('click', reset);
-			if (emptyResetBtn) emptyResetBtn.addEventListener('click', reset);
-
-			grid.addEventListener('click', function (e) {
-				const copyBtn = e.target.closest('[data-copy-voice]');
-				if (!copyBtn) return;
-				const voice = copyBtn.dataset.copyVoice;
-				if (!voice || !navigator.clipboard) return;
-				navigator.clipboard.writeText(voice + ': ').then(function () {
-					if (copyBtn._copyTimer) clearTimeout(copyBtn._copyTimer);
-					copyBtn.textContent = 'Copied "' + voice + ':"';
-					copyBtn._copyTimer = setTimeout(function () {
-						copyBtn.textContent = voice;
-					}, 1200);
-				}).catch(function () {});
-			});
-
-			if (window.__bajSearchShortcut) {
-				document.removeEventListener('keydown', window.__bajSearchShortcut);
-			}
-			window.__bajSearchShortcut = function (e) {
-				if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
-				const tag = document.activeElement && document.activeElement.tagName;
-				if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-				if (!document.body.contains(search)) return;
-				e.preventDefault();
-				search.focus();
-				search.select();
-			};
-			document.addEventListener('keydown', window.__bajSearchShortcut);
 		})();
 	</script>
 </div>

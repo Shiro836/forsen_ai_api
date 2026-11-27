@@ -1,3 +1,41 @@
+{{ define "chars-search-input" }}
+<input id="chars-search" type="search" name="q" value="{{ .Query }}" autocomplete="off"
+    placeholder="name, voice, author"
+    class="w-72 {{template "input-class"}} px-3 py-1.5 text-sm"{{ if .SetQueryOOB }} hx-swap-oob="outerHTML"{{ end }}
+    hx-get="/characters/list" hx-trigger="input changed delay:300ms, search"
+    hx-target="#chars-results" hx-swap="outerHTML" hx-include="#chars-filters" hx-sync="#chars-filters:replace" />
+{{ end }}
+
+{{ define "chars-results" }}
+<div id="chars-results">
+    {{ if .SetQueryOOB }}{{ template "chars-search-input" . }}{{ end }}
+    <div class="flex items-center gap-3 pt-4 text-sm text-gray-600 dark:text-gray-300">
+        <span>{{ if eq (len .Characters) .TotalCount }}{{ .TotalCount }} characters{{ else }}{{ len .Characters }} of {{ .TotalCount }} characters{{ end }}</span>
+        {{ if .Filtered }}
+        <button type="button" class="font-medium underline underline-offset-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+            hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort">Reset</button>
+        {{ end }}
+    </div>
+    {{ if .Characters }}
+    <div id="chars-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-4">
+        {{ range .Characters }}
+        <div class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60">
+            {{ template "char_frame" . }}
+        </div>
+        {{ end }}
+    </div>
+    {{ else }}
+    <div class="py-12 text-center text-sm text-gray-600 dark:text-gray-300">
+        <p>no characters found</p>
+        {{ if .Filtered }}
+        <button type="button" class="mt-3 px-4 py-1.5 text-sm {{template "button-2"}}"
+            hx-get="/characters" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort">Reset</button>
+        {{ end }}
+    </div>
+    {{ end }}
+</div>
+{{ end }}
+
 <div class="w-full min-w-0">
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto">
         <div class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex flex-col justify-center items-center bg-gradient-to-br from-slate-100 to-slate-50 dark:from-zinc-900 dark:to-zinc-800 text-slate-800 dark:text-slate-100 gap-2">
@@ -37,7 +75,7 @@
                 <button hx-get="/agentic/try" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" class="px-4 py-1.5 text-sm {{template "button-2"}}">Try</button>
             </div>
         </div>
-        <button hx-get="/characters/new" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" title="Create new character" class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex justify-center items-center">
+        <button hx-get="/characters/new" hx-select="#tab-content" hx-swap="outerHTML" hx-target="#tab-content" hx-push-url="true" hx-sync="#tabs:abort" aria-label="New character" class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60 flex justify-center items-center">
             <svg class="w-40 h-40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
                 <path class="stroke-current" d="M16 6H8C6.89543 6 6 6.89543 6 8V16" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
                 <path class="stroke-current" d="M16 42H8C6.89543 42 6 41.1046 6 40V32" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
@@ -49,60 +87,20 @@
         </button>
     </div>
 
-    <div class="mt-8 pt-6 border-t {{template "ui-border-clr"}} flex flex-col gap-3">
+    <div id="chars-filters" class="mt-8 pt-6 border-t {{template "ui-border-clr"}} flex flex-col gap-3">
         <div class="flex flex-wrap items-center gap-3">
-            <div class="relative flex-1 min-w-[16rem] max-w-md">
-                <input id="chars-search" type="search" autocomplete="off"
-                    placeholder="Search name, voice tag, author... (press /)"
-                    class="w-full {{template "input-class"}} pl-3 pr-3 py-1.5 text-sm" />
-            </div>
-            <div class="flex items-center gap-2">
-                <label for="chars-sort" class="text-sm text-gray-600 dark:text-gray-300">Sort</label>
-                <select id="chars-sort" class="{{template "input-class"}} px-2.5 py-1.5 text-sm">
-                    <option value="newest" selected>Newest</option>
-                    <option value="trending">Trending</option>
-                    <option value="popular">Most popular</option>
-                    <option value="ai">Most AI</option>
-                    <option value="tts">Most TTS</option>
-                    <option value="az">A–Z</option>
-                </select>
-            </div>
-            <span id="chars-count" class="text-sm text-gray-600 dark:text-gray-300">{{ len .Characters }} characters</span>
-            <button id="chars-reset" type="button" class="hidden text-sm font-medium underline underline-offset-2 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white">Reset</button>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Filter characters">
-                <button type="button" data-char-scope="all"
-                    class="px-3 py-1 text-xs font-semibold {{template "button-2"}} border-twitch-dark bg-twitch-dark text-white dark:border-twitch-light">
-                    All (<span data-scope-count="all">{{ len .Characters }}</span>)
-                </button>
-                <button type="button" data-char-scope="mine"
-                    class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">
-                    Mine (<span data-scope-count="mine">{{ .MineCount }}</span>)
-                </button>
-                <button type="button" data-char-scope="enabled"
-                    class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">
-                    Enabled (<span data-scope-count="enabled">{{ .EnabledCount }}</span>)
-                </button>
-                <button type="button" data-char-scope="disabled"
-                    class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">
-                    Disabled (<span data-scope-count="disabled">{{ .DisabledCount }}</span>)
-                </button>
-                {{ if gt .NewCount 0 }}
-                <button type="button" data-char-scope="new"
-                    class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">
-                    New (<span data-scope-count="new">{{ .NewCount }}</span>)
-                </button>
-                {{ end }}
-                {{ if .IsAdmin }}
-                <button type="button" data-char-scope="no-voice"
-                    class="px-3 py-1 text-xs font-semibold {{template "button-2"}}">
-                    No voice (<span data-scope-count="no-voice">{{ .NoVoiceCount }}</span>)
-                </button>
-                {{ end }}
-            </div>
-            <p class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+            {{ template "chars-search-input" . }}
+            <select name="sort" aria-label="Sort" class="{{template "input-class"}} px-2.5 py-1.5 text-sm"
+                hx-get="/characters/list" hx-trigger="change" hx-target="#chars-results" hx-swap="outerHTML"
+                hx-include="#chars-filters" hx-sync="#chars-filters:replace">
+                <option value="newest"{{ if eq .Sort "newest" }} selected{{ end }}>Newest</option>
+                <option value="trending"{{ if eq .Sort "trending" }} selected{{ end }}>Trending</option>
+                <option value="popular"{{ if eq .Sort "popular" }} selected{{ end }}>Most popular</option>
+                <option value="ai"{{ if eq .Sort "ai" }} selected{{ end }}>Most AI</option>
+                <option value="tts"{{ if eq .Sort "tts" }} selected{{ end }}>Most TTS</option>
+                <option value="az"{{ if eq .Sort "az" }} selected{{ end }}>A–Z</option>
+            </select>
+            <p class="ml-auto flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
                 <svg class="w-3.5 h-3.5 shrink-0 text-green-500 dark:text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
@@ -111,197 +109,50 @@
                 removes voice from universal tts and from universal ai
             </p>
         </div>
-    </div>
 
-    <div id="chars-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 grid-flow-row gap-6 auto-rows-auto pt-5">
-        {{ range .Characters }}
-        <div data-char-card
-            data-search="{{ .SearchText }}"
-            data-name="{{ .Card.Name }}"
-            data-created="{{ .CreatedUnix }}"
-            data-trending="{{ .TrendingScore }}"
-            data-popular="{{ .TotalRedeems }}"
-            data-ai="{{ .Card.Redeems }}"
-            data-tts="{{ .Card.TTSRedeems }}"
-            data-mine="{{ if .CanEdit }}1{{ else }}0{{ end }}"
-            data-disabled="{{ if .Disabled }}1{{ else }}0{{ end }}"
-            data-new="{{ if .IsNew }}1{{ else }}0{{ end }}"
-            data-no-voice="{{ if .NeedsVoice }}1{{ else }}0{{ end }}"
-            class="hover-lift border-2 rounded {{template "ui-border-clr"}} hover:border-slate-700 dark:hover:border-twitch-light w-60 h-60">
-            {{ template "char_frame" . }}
+        <div class="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Filter characters">
+            <label class="cursor-pointer">
+                <input type="radio" name="scope" value="all" class="peer sr-only"{{ if eq .Scope "all" }} checked{{ end }}
+                    hx-get="/characters/list" hx-trigger="change" hx-target="#chars-results" hx-swap="outerHTML"
+                    hx-include="#chars-filters" hx-sync="#chars-filters:replace" />
+                <span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">All ({{ .TotalCount }})</span>
+            </label>
+            <label class="cursor-pointer">
+                <input type="radio" name="scope" value="mine" class="peer sr-only"{{ if eq .Scope "mine" }} checked{{ end }}
+                    hx-get="/characters/list" hx-trigger="change" hx-target="#chars-results" hx-swap="outerHTML"
+                    hx-include="#chars-filters" hx-sync="#chars-filters:replace" />
+                <span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">Mine ({{ .MineCount }})</span>
+            </label>
+            <label class="cursor-pointer">
+                <input type="radio" name="scope" value="enabled" class="peer sr-only"{{ if eq .Scope "enabled" }} checked{{ end }}
+                    hx-get="/characters/list" hx-trigger="change" hx-target="#chars-results" hx-swap="outerHTML"
+                    hx-include="#chars-filters" hx-sync="#chars-filters:replace" />
+                <span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">Enabled (<span id="chars-count-enabled">{{ .EnabledCount }}</span>)</span>
+            </label>
+            <label class="cursor-pointer">
+                <input type="radio" name="scope" value="disabled" class="peer sr-only"{{ if eq .Scope "disabled" }} checked{{ end }}
+                    hx-get="/characters/list" hx-trigger="change" hx-target="#chars-results" hx-swap="outerHTML"
+                    hx-include="#chars-filters" hx-sync="#chars-filters:replace" />
+                <span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">Disabled (<span id="chars-count-disabled">{{ .DisabledCount }}</span>)</span>
+            </label>
+            {{ if gt .NewCount 0 }}
+            <label class="cursor-pointer">
+                <input type="radio" name="scope" value="new" class="peer sr-only"{{ if eq .Scope "new" }} checked{{ end }}
+                    hx-get="/characters/list" hx-trigger="change" hx-target="#chars-results" hx-swap="outerHTML"
+                    hx-include="#chars-filters" hx-sync="#chars-filters:replace" />
+                <span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">New ({{ .NewCount }})</span>
+            </label>
+            {{ end }}
+            {{ if .IsAdmin }}
+            <label class="cursor-pointer">
+                <input type="radio" name="scope" value="no-voice" class="peer sr-only"{{ if eq .Scope "no-voice" }} checked{{ end }}
+                    hx-get="/characters/list" hx-trigger="change" hx-target="#chars-results" hx-swap="outerHTML"
+                    hx-include="#chars-filters" hx-sync="#chars-filters:replace" />
+                <span class="inline-block px-3 py-1 text-xs font-semibold {{template "button-2"}} peer-checked:border-twitch-dark peer-checked:bg-twitch-dark peer-checked:text-white dark:peer-checked:border-twitch-light">No voice ({{ .NoVoiceCount }})</span>
+            </label>
+            {{ end }}
         </div>
-        {{ end }}
     </div>
 
-    <div id="chars-empty" class="hidden py-12 text-center text-sm text-gray-600 dark:text-gray-300">
-        <p>No characters match the current filter.</p>
-        <button id="chars-empty-reset" type="button" class="mt-3 px-4 py-1.5 text-sm {{template "button-2"}}">Reset filters</button>
-    </div>
-
-    <script>
-        (function () {
-            const grid = document.getElementById('chars-grid');
-            const search = document.getElementById('chars-search');
-            const sortSelect = document.getElementById('chars-sort');
-            const countEl = document.getElementById('chars-count');
-            const resetBtn = document.getElementById('chars-reset');
-            const emptyEl = document.getElementById('chars-empty');
-            const emptyResetBtn = document.getElementById('chars-empty-reset');
-            if (!grid || !search || !sortSelect) return;
-
-            const ACTIVE = ['border-twitch-dark', 'bg-twitch-dark', 'text-white', 'dark:border-twitch-light'];
-            const scopeBtns = Array.from(document.querySelectorAll('[data-char-scope]'));
-            const cards = Array.from(grid.querySelectorAll('[data-char-card]'));
-            let scope = 'all';
-
-            function num(el, key) {
-                return parseFloat(el.dataset[key]) || 0;
-            }
-
-            function refreshScopeCounts() {
-                const counts = { all: cards.length, mine: 0, enabled: 0, disabled: 0, new: 0, 'no-voice': 0 };
-                cards.forEach(function (card) {
-                    if (card.dataset.mine === '1') counts.mine++;
-                    if (card.dataset.disabled === '1') counts.disabled++;
-                    else counts.enabled++;
-                    if (card.dataset.new === '1') counts.new++;
-                    if (card.dataset.noVoice === '1') counts['no-voice']++;
-                });
-                Object.keys(counts).forEach(function (key) {
-                    const el = document.querySelector('[data-scope-count="' + key + '"]');
-                    if (el) el.textContent = counts[key];
-                });
-            }
-
-            function matchesScope(card) {
-                if (scope === 'mine') return card.dataset.mine === '1';
-                if (scope === 'enabled') return card.dataset.disabled !== '1';
-                if (scope === 'disabled') return card.dataset.disabled === '1';
-                if (scope === 'new') return card.dataset.new === '1';
-                if (scope === 'no-voice') return card.dataset.noVoice === '1';
-                return true;
-            }
-
-            function compare(a, b, mode) {
-                if (mode === 'trending') {
-                    return (num(b, 'trending') - num(a, 'trending'))
-                        || (num(b, 'popular') - num(a, 'popular'))
-                        || (num(b, 'created') - num(a, 'created'));
-                }
-                if (mode === 'popular') {
-                    return (num(b, 'popular') - num(a, 'popular'))
-                        || (num(b, 'created') - num(a, 'created'));
-                }
-                if (mode === 'ai') {
-                    return (num(b, 'ai') - num(a, 'ai'))
-                        || (num(b, 'popular') - num(a, 'popular'));
-                }
-                if (mode === 'tts') {
-                    return (num(b, 'tts') - num(a, 'tts'))
-                        || (num(b, 'popular') - num(a, 'popular'));
-                }
-                if (mode === 'az') {
-                    return (a.dataset.name || '').localeCompare(b.dataset.name || '', undefined, { sensitivity: 'base' });
-                }
-                return num(b, 'created') - num(a, 'created');
-            }
-
-            function apply() {
-                const terms = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-                const mode = sortSelect.value;
-
-                const sorted = cards.slice().sort(function (a, b) { return compare(a, b, mode); });
-                const frag = document.createDocumentFragment();
-                let visible = 0;
-
-                sorted.forEach(function (card) {
-                    let ok = matchesScope(card);
-                    if (ok && terms.length > 0) {
-                        const hay = card.dataset.search || '';
-                        for (let i = 0; i < terms.length; i++) {
-                            if (hay.indexOf(terms[i]) === -1) {
-                                ok = false;
-                                break;
-                            }
-                        }
-                    }
-                    card.classList.toggle('hidden', !ok);
-                    if (ok) visible++;
-                    frag.appendChild(card);
-                });
-                grid.appendChild(frag);
-
-                const isFiltered = terms.length > 0 || scope !== 'all' || mode !== 'newest';
-                countEl.textContent = (visible === cards.length)
-                    ? cards.length + ' characters'
-                    : visible + ' of ' + cards.length + ' characters';
-                resetBtn.classList.toggle('hidden', !isFiltered);
-                emptyEl.classList.toggle('hidden', visible > 0 || cards.length === 0);
-            }
-
-            function setScope(next) {
-                scope = next;
-                scopeBtns.forEach(function (btn) {
-                    const active = btn.dataset.charScope === scope;
-                    ACTIVE.forEach(function (cls) { btn.classList.toggle(cls, active); });
-                });
-                apply();
-            }
-
-            function reset() {
-                search.value = '';
-                sortSelect.value = 'newest';
-                setScope('all');
-            }
-
-            scopeBtns.forEach(function (btn) {
-                btn.addEventListener('click', function () { setScope(btn.dataset.charScope); });
-            });
-            search.addEventListener('input', apply);
-            search.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && search.value !== '') {
-                    e.preventDefault();
-                    search.value = '';
-                    apply();
-                }
-            });
-            sortSelect.addEventListener('change', apply);
-            resetBtn.addEventListener('click', reset);
-            if (emptyResetBtn) emptyResetBtn.addEventListener('click', reset);
-
-            // Clicking an author filters by them without adding an author dropdown.
-            grid.addEventListener('click', function (e) {
-                const authorBtn = e.target.closest('[data-author-filter]');
-                if (!authorBtn) return;
-                search.value = authorBtn.dataset.authorFilter || '';
-                apply();
-                search.focus();
-            });
-
-            // Keep toggled cards visible in place until the user changes filters so
-            // accidental clicks on Enabled/Disabled views are easy to undo.
-            grid.addEventListener('change', function (e) {
-                const input = e.target;
-                if (!input || input.name !== 'enabled') return;
-                const card = input.closest('[data-char-card]');
-                if (!card) return;
-                card.dataset.disabled = input.checked ? '0' : '1';
-                refreshScopeCounts();
-            });
-
-            if (window.__bajSearchShortcut) {
-                document.removeEventListener('keydown', window.__bajSearchShortcut);
-            }
-            window.__bajSearchShortcut = function (e) {
-                if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
-                const tag = document.activeElement && document.activeElement.tagName;
-                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-                if (!document.body.contains(search)) return;
-                e.preventDefault();
-                search.focus();
-                search.select();
-            };
-            document.addEventListener('keydown', window.__bajSearchShortcut);
-        })();
-    </script>
+    {{ template "chars-results" . }}
 </div>

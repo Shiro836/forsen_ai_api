@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 )
 
@@ -400,51 +401,70 @@ func (db *DB) populateCardDataMedia(ctx context.Context, data *CardData) {
 	}
 }
 
-// TrendingHalfLifeDays controls the exponential decay for the 14-day hot score.
 const (
 	trendingWindowDays   = 14
 	trendingHalfLifeDays = 4.0
 )
 
-func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChatCardsParams) ([]*Card, error) {
-	rows, err := db.Query(ctx, `
-		with recent as (
-			select
-				card_id,
-				sum((ai_redeems + tts_redeems) * power(0.5::double precision, greatest(current_date - day, 0) / $4::double precision)) as score
-			from char_card_daily_stats
-			where day >= current_date - ($5::int - 1)
-			group by card_id
-		)
+func recentStatsJoin() (string, []any) {
+	sqlStr := `(
 		select
-			cc.id,
-			cc.owner_user_id,
-			coalesce(u.twitch_login, ''),
-			cc.name,
-			cc.description,
-			cc.short_char_name,
-			cc.redeems,
-			cc.tts_redeems,
-			cc.public,
-			cc.updated_at,
-			coalesce(r.score, 0)::double precision
-			-- data -- very heavy
-		from char_cards cc
-		left join users u on u.id = cc.owner_user_id
-		left join recent r on r.card_id = cc.id
-		where (
-			cc.owner_user_id = $1
-			or (cc.public = true and $2 = true)
-		)
-		order by
-			case when $3 = 0 then cc.id end asc,
-			case when $3 = 1 then cc.name end asc,
-			case when $3 = 2 then cc.redeems end desc,
-			case when $3 = 3 then cc.id end desc,
-			case when $3 = 4 then cc.id end asc,
-			case when $3 = 5 then coalesce(r.score, 0) end desc,
-			cc.id desc
-	`, userID, params.ShowPublic, params.SortBy, trendingHalfLifeDays, trendingWindowDays)
+			card_id,
+			sum((ai_redeems + tts_redeems) * power(0.5::double precision, greatest(current_date - day, 0) / ?::double precision)) as score
+		from char_card_daily_stats
+		where day >= current_date - (?::int - 1)
+		group by card_id
+	) r on r.card_id = cc.id`
+	return sqlStr, []any{trendingHalfLifeDays, trendingWindowDays}
+}
+
+func (db *DB) GetCharCards(ctx context.Context, userID uuid.UUID, params GetChatCardsParams) ([]*Card, error) {
+	joinSQL, joinArgs := recentStatsJoin()
+
+	visibility := sq.Or{sq.Eq{"cc.owner_user_id": userID}}
+	if params.ShowPublic {
+		visibility = append(visibility, sq.Eq{"cc.public": true})
+	}
+
+	builder := psql.Select(
+		"cc.id",
+		"cc.owner_user_id",
+		"coalesce(u.twitch_login, '')",
+		"cc.name",
+		"cc.description",
+		"cc.short_char_name",
+		"cc.redeems",
+		"cc.tts_redeems",
+		"cc.public",
+		"cc.updated_at",
+		"coalesce(r.score, 0)::double precision",
+	).
+		From("char_cards cc").
+		LeftJoin("users u on u.id = cc.owner_user_id").
+		LeftJoin(joinSQL, joinArgs...).
+		Where(visibility)
+
+	switch params.SortBy {
+	case SortByName:
+		builder = builder.OrderBy("cc.name asc", "cc.id desc")
+	case SortByRedeems:
+		builder = builder.OrderBy("cc.redeems desc", "cc.id desc")
+	case SortByNewest:
+		builder = builder.OrderBy("cc.id desc")
+	case SortByOldest:
+		builder = builder.OrderBy("cc.id asc")
+	case SortByTrending:
+		builder = builder.OrderBy("coalesce(r.score, 0) desc", "(cc.redeems + cc.tts_redeems) desc", "cc.id desc")
+	default:
+		builder = builder.OrderBy("cc.id asc")
+	}
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get char cards query: %w", err)
+	}
+
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get char cards: %w", err)
 	}
@@ -542,17 +562,18 @@ func (db *DB) IncrementCharTTSRedeems(ctx context.Context, cardID uuid.UUID) err
 	return nil
 }
 
-// UpsertCharCardDailyStats merges historical daily counts using GREATEST so
-// backfills are idempotent and never clobber higher live increments.
+// UpsertCharCardDailyStats merges historical daily counts with GREATEST so
+// backfills stay idempotent against live increments.
 func (db *DB) UpsertCharCardDailyStats(ctx context.Context, cardID uuid.UUID, day time.Time, aiRedeems, ttsRedeems int) error {
-	_, err := db.Exec(ctx, `
-		insert into char_card_daily_stats (card_id, day, ai_redeems, tts_redeems)
-		values ($1, $2::date, $3, $4)
-		on conflict (card_id, day) do update set
-			ai_redeems  = greatest(char_card_daily_stats.ai_redeems, excluded.ai_redeems),
-			tts_redeems = greatest(char_card_daily_stats.tts_redeems, excluded.tts_redeems)
-	`, cardID, day.UTC().Format("2006-01-02"), aiRedeems, ttsRedeems)
+	query, args, err := psql.Insert("char_card_daily_stats").
+		Columns("card_id", "day", "ai_redeems", "tts_redeems").
+		Values(cardID, sq.Expr("?::date", day.UTC().Format("2006-01-02")), aiRedeems, ttsRedeems).
+		Suffix("on conflict (card_id, day) do update set ai_redeems = greatest(char_card_daily_stats.ai_redeems, excluded.ai_redeems), tts_redeems = greatest(char_card_daily_stats.tts_redeems, excluded.tts_redeems)").
+		ToSql()
 	if err != nil {
+		return fmt.Errorf("build upsert char card daily stats: %w", err)
+	}
+	if _, err := db.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("upsert char card daily stats: %w", err)
 	}
 	return nil
@@ -589,30 +610,29 @@ func (db *DB) GetVoiceReferenceByShortName(ctx context.Context, shortName string
 }
 
 func (db *DB) GetPublicShortNamedCards(ctx context.Context) ([]PublicShortName, error) {
-	rows, err := db.Query(ctx, `
-		with recent as (
-			select
-				card_id,
-				sum((ai_redeems + tts_redeems) * power(0.5::double precision, greatest(current_date - day, 0) / $1::double precision)) as score
-			from char_card_daily_stats
-			where day >= current_date - ($2::int - 1)
-			group by card_id
-		)
-		select
-			cc.id,
-			cc.short_char_name,
-			cc.name,
-			coalesce(cc.description, ''),
-			cc.redeems,
-			cc.tts_redeems,
-			coalesce(r.score, 0)::double precision
-		from char_cards cc
-		left join recent r on r.card_id = cc.id
-		where cc.public = true
-		  and cc.short_char_name is not null
-		  and length(trim(cc.short_char_name)) > 0
-		order by coalesce(r.score, 0) desc, (cc.redeems + cc.tts_redeems) desc, cc.short_char_name asc
-	`, trendingHalfLifeDays, trendingWindowDays)
+	joinSQL, joinArgs := recentStatsJoin()
+
+	query, args, err := psql.Select(
+		"cc.id",
+		"cc.short_char_name",
+		"cc.name",
+		"coalesce(cc.description, '')",
+		"cc.redeems",
+		"cc.tts_redeems",
+		"coalesce(r.score, 0)::double precision",
+	).
+		From("char_cards cc").
+		LeftJoin(joinSQL, joinArgs...).
+		Where(sq.Eq{"cc.public": true}).
+		Where("cc.short_char_name is not null").
+		Where("length(trim(cc.short_char_name)) > 0").
+		OrderBy("coalesce(r.score, 0) desc", "(cc.redeems + cc.tts_redeems) desc", "cc.short_char_name asc").
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build get public short named cards: %w", err)
+	}
+
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("get public short named cards: %w", err)
 	}

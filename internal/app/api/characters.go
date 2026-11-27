@@ -42,9 +42,28 @@ func buildSearchText(parts ...string) string {
 	return strings.Join(clean, " ")
 }
 
+func matchesQuery(haystack string, terms []string) bool {
+	for _, term := range terms {
+		if !strings.Contains(haystack, term) {
+			return false
+		}
+	}
+	return true
+}
+
+func queryTerms(q string) []string {
+	return strings.Fields(strings.ToLower(strings.TrimSpace(q)))
+}
+
 type charsElem struct {
 	Characters    []*charElem
 	IsAdmin       bool
+	Query         string
+	Sort          string
+	Scope         string
+	Filtered      bool
+	SetQueryOOB   bool
+	TotalCount    int
 	MineCount     int
 	EnabledCount  int
 	DisabledCount int
@@ -61,43 +80,116 @@ type charElem struct {
 	TTSRewardCreated bool
 	AIRewardCreated  bool
 
-	Author        string
-	Disabled      bool
-	DefaultVoice  bool
-	IsNew         bool
-	NeedsVoice    bool
-	TotalRedeems  int
-	TrendingScore string
-	CreatedUnix   int64
-	SearchText    string
+	Author       string
+	Disabled     bool
+	DefaultVoice bool
+	IsNew        bool
+	NeedsVoice   bool
+	TotalRedeems int
+	SearchText   string
 }
 
-func (api *API) characters(r *http.Request) template.HTML {
-	user := ctxstore.GetUser(r.Context())
-	if user == nil {
-		return getHtml("error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "unauthorized",
-		})
+func normalizeCharsSort(raw string) string {
+	switch raw {
+	case "trending", "popular", "ai", "tts", "az":
+		return raw
+	default:
+		return "newest"
+	}
+}
+
+func normalizeCharsScope(raw string, isAdmin bool) string {
+	switch raw {
+	case "mine", "enabled", "disabled", "new":
+		return raw
+	case "no-voice":
+		if isAdmin {
+			return raw
+		}
+	}
+	return "all"
+}
+
+func filterAndSortChars(all []*charElem, query, sortMode, scope string) []*charElem {
+	terms := queryTerms(query)
+	out := make([]*charElem, 0, len(all))
+	for _, c := range all {
+		switch scope {
+		case "mine":
+			if !c.CanEdit {
+				continue
+			}
+		case "enabled":
+			if c.Disabled {
+				continue
+			}
+		case "disabled":
+			if !c.Disabled {
+				continue
+			}
+		case "new":
+			if !c.IsNew {
+				continue
+			}
+		case "no-voice":
+			if !c.NeedsVoice {
+				continue
+			}
+		}
+		if len(terms) > 0 && !matchesQuery(c.SearchText, terms) {
+			continue
+		}
+		out = append(out, c)
 	}
 
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		switch sortMode {
+		case "trending":
+			if a.Card.TrendingScore != b.Card.TrendingScore {
+				return a.Card.TrendingScore > b.Card.TrendingScore
+			}
+			if a.TotalRedeems != b.TotalRedeems {
+				return a.TotalRedeems > b.TotalRedeems
+			}
+			return a.Card.CreatedAt.After(b.Card.CreatedAt)
+		case "popular":
+			if a.TotalRedeems != b.TotalRedeems {
+				return a.TotalRedeems > b.TotalRedeems
+			}
+			return a.Card.CreatedAt.After(b.Card.CreatedAt)
+		case "ai":
+			if a.Card.Redeems != b.Card.Redeems {
+				return a.Card.Redeems > b.Card.Redeems
+			}
+			return a.TotalRedeems > b.TotalRedeems
+		case "tts":
+			if a.Card.TTSRedeems != b.Card.TTSRedeems {
+				return a.Card.TTSRedeems > b.Card.TTSRedeems
+			}
+			return a.TotalRedeems > b.TotalRedeems
+		case "az":
+			return strings.ToLower(a.Card.Name) < strings.ToLower(b.Card.Name)
+		default:
+			return a.Card.CreatedAt.After(b.Card.CreatedAt)
+		}
+	})
+
+	return out
+}
+
+func (api *API) loadCharactersPage(r *http.Request, user *db.User) (*charsElem, error) {
 	charCards, err := api.db.GetCharCards(r.Context(), user.ID, db.GetChatCardsParams{
 		ShowPublic: true,
 		SortBy:     db.SortByNewest,
 	})
 	if err != nil {
-		return getHtml("error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "GetCharCards: " + err.Error(),
-		})
+		return nil, fmt.Errorf("GetCharCards: %w", err)
 	}
 
 	settings, err := api.db.GetUserSettings(r.Context(), user.ID)
 	if err != nil {
-		return getHtml("error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: "failed to get user settings: " + err.Error(),
-		})
+		return nil, fmt.Errorf("failed to get user settings: %w", err)
 	}
 
 	isAdmin := false
@@ -110,11 +202,23 @@ func (api *API) characters(r *http.Request) template.HTML {
 		}
 	}
 
+	q := r.URL.Query()
+	query := strings.TrimSpace(q.Get("q"))
+	sortMode := normalizeCharsSort(q.Get("sort"))
+	scope := normalizeCharsScope(q.Get("scope"), isAdmin)
+
 	now := time.Now()
 	page := &charsElem{
-		Characters: make([]*charElem, 0, len(charCards)),
-		IsAdmin:    isAdmin,
+		IsAdmin:     isAdmin,
+		Query:       query,
+		Sort:        sortMode,
+		Scope:       scope,
+		Filtered:    query != "" || sortMode != "newest" || scope != "all",
+		SetQueryOOB: q.Get("set_q") == "1",
+		TotalCount:  len(charCards),
 	}
+
+	all := make([]*charElem, 0, len(charCards))
 	for _, charCard := range charCards {
 		canEdit := user.ID == charCard.OwnerUserID
 		disabled := settings.CardDisabled(charCard.ID)
@@ -136,7 +240,7 @@ func (api *API) characters(r *http.Request) template.HTML {
 			page.NoVoiceCount++
 		}
 
-		page.Characters = append(page.Characters, &charElem{
+		all = append(all, &charElem{
 			Card:             charCard,
 			CanEdit:          canEdit,
 			IsAdmin:          isAdmin,
@@ -147,13 +251,48 @@ func (api *API) characters(r *http.Request) template.HTML {
 			IsNew:            isNew,
 			NeedsVoice:       needsVoice,
 			TotalRedeems:     charCard.Redeems + charCard.TTSRedeems,
-			TrendingScore:    fmt.Sprintf("%.4f", charCard.TrendingScore),
-			CreatedUnix:      charCard.CreatedAt.Unix(),
 			SearchText:       buildSearchText(charCard.Name, charCard.ShortCharName.String, charCard.OwnerTwitchLogin, charCard.Description),
 		})
 	}
 
+	page.Characters = filterAndSortChars(all, query, sortMode, scope)
+	return page, nil
+}
+
+func (api *API) characters(r *http.Request) template.HTML {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: "unauthorized",
+		})
+	}
+
+	page, err := api.loadCharactersPage(r, user)
+	if err != nil {
+		return getHtml("error.html", &htmlErr{
+			ErrorCode:    http.StatusInternalServerError,
+			ErrorMessage: err.Error(),
+		})
+	}
+
 	return getHtml("characters.html", page)
+}
+
+func (api *API) charactersList(w http.ResponseWriter, r *http.Request) {
+	user := ctxstore.GetUser(r.Context())
+	if user == nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	page, err := api.loadCharactersPage(r, user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_ = html.ExecuteTemplate(w, "chars-results", page)
 }
 
 func (api *API) setCharacterEnabled(w http.ResponseWriter, r *http.Request) {
@@ -180,6 +319,24 @@ func (api *API) setCharacterEnabled(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(err.Error()))
 		return
+	}
+
+	if r.Header.Get("HX-Request") == "true" {
+		if cards, err := api.db.GetCharCards(r.Context(), user.ID, db.GetChatCardsParams{ShowPublic: true}); err == nil {
+			if settings, err := api.db.GetUserSettings(r.Context(), user.ID); err == nil {
+				enabled, disabled := 0, 0
+				for _, c := range cards {
+					if settings.CardDisabled(c.ID) {
+						disabled++
+					} else {
+						enabled++
+					}
+				}
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_, _ = fmt.Fprintf(w, `<span id="chars-count-enabled" hx-swap-oob="innerHTML">%d</span><span id="chars-count-disabled" hx-swap-oob="innerHTML">%d</span>`, enabled, disabled)
+				return
+			}
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -739,12 +896,23 @@ func servePlaceholderImage(w http.ResponseWriter) {
 }
 
 type voicesListPage struct {
-	Items    []voiceItem
-	NewCount int
-	Sounds   []soundItem
-	Filters  []filterItem
-	Emotions []string
-	Melodies []ai.Melody
+	Items      []voiceItem
+	TotalCount int
+	NewCount   int
+	Query      string
+	Sort       string
+	NewOnly    bool
+	Filtered   bool
+	PageURL    string
+	ListURL    string
+
+	Sounds        []soundItem
+	TotalSounds   int
+	Filters       []filterItem
+	TotalFilters  int
+	Emotions      []string
+	Melodies      []ai.Melody
+	TotalMelodies int
 }
 
 type voiceItem struct {
@@ -752,12 +920,146 @@ type voiceItem struct {
 	Name          string
 	SearchText    string
 	IsNew         bool
-	TrendingScore string
+	TrendingScore float64
 	Popularity    int
-	CreatedUnix   int64
+	CreatedAt     time.Time
 }
 
-// voicesPublic renders a public page with all public short-named cards and their images
+func normalizeVoicesSort(raw string) string {
+	switch raw {
+	case "newest", "popular", "az":
+		return raw
+	default:
+		return "trending"
+	}
+}
+
+func filterAndSortVoices(all []voiceItem, query, sortMode string, newOnly bool) []voiceItem {
+	terms := queryTerms(query)
+	out := make([]voiceItem, 0, len(all))
+	for _, v := range all {
+		if newOnly && !v.IsNew {
+			continue
+		}
+		if len(terms) > 0 && !matchesQuery(v.SearchText, terms) {
+			continue
+		}
+		out = append(out, v)
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		switch sortMode {
+		case "newest":
+			if !a.CreatedAt.Equal(b.CreatedAt) {
+				return a.CreatedAt.After(b.CreatedAt)
+			}
+			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+		case "popular":
+			if a.Popularity != b.Popularity {
+				return a.Popularity > b.Popularity
+			}
+			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+		case "az":
+			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+		default:
+			if a.TrendingScore != b.TrendingScore {
+				return a.TrendingScore > b.TrendingScore
+			}
+			if a.Popularity != b.Popularity {
+				return a.Popularity > b.Popularity
+			}
+			return strings.ToLower(a.Name) < strings.ToLower(b.Name)
+		}
+	})
+
+	return out
+}
+
+func buildVoicesPage(r *http.Request, items []db.PublicShortName, pageURL, listURL string, melodies []ai.Melody) *voicesListPage {
+	q := r.URL.Query()
+	query := strings.TrimSpace(q.Get("q"))
+	sortMode := normalizeVoicesSort(q.Get("sort"))
+	newOnly := q.Get("new") == "1"
+
+	now := time.Now()
+	all := make([]voiceItem, 0, len(items))
+	newCount := 0
+	for _, it := range items {
+		isNew := !it.CreatedAt.IsZero() && now.Sub(it.CreatedAt) <= newCardWindow
+		if isNew {
+			newCount++
+		}
+		all = append(all, voiceItem{
+			ID:            it.ID,
+			Name:          it.ShortCharName,
+			SearchText:    buildSearchText(it.ShortCharName, it.Name, it.Description),
+			IsNew:         isNew,
+			TrendingScore: it.TrendingScore,
+			Popularity:    it.Redeems + it.TTSRedeems,
+			CreatedAt:     it.CreatedAt,
+		})
+	}
+
+	return &voicesListPage{
+		Items:         filterAndSortVoices(all, query, sortMode, newOnly),
+		TotalCount:    len(all),
+		NewCount:      newCount,
+		Query:         query,
+		Sort:          sortMode,
+		NewOnly:       newOnly,
+		Filtered:      query != "" || newOnly || sortMode != "trending",
+		PageURL:       pageURL,
+		ListURL:       listURL,
+		Sounds:        soundItems,
+		TotalSounds:   len(soundItems),
+		Filters:       filterItems,
+		TotalFilters:  len(filterItems),
+		Emotions:      ai.EmotionNames,
+		Melodies:      melodies,
+		TotalMelodies: len(melodies),
+	}
+}
+
+func (api *API) loadStreamerVoices(r *http.Request) ([]db.PublicShortName, string, int, error) {
+	login := chi.URLParam(r, "twitch_login")
+	streamer, err := api.db.GetUserByTwitchLogin(r.Context(), login)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if errors.Is(err, db.ErrNoRows) {
+			code = http.StatusNotFound
+			err = errors.New("unknown streamer")
+		}
+		return nil, login, code, err
+	}
+
+	settings, err := api.db.GetUserSettings(r.Context(), streamer.ID)
+	if err != nil {
+		return nil, login, http.StatusInternalServerError, err
+	}
+
+	items, err := api.db.GetPublicShortNamedCards(r.Context())
+	if err != nil {
+		return nil, login, http.StatusInternalServerError, err
+	}
+
+	items = slices.DeleteFunc(items, func(it db.PublicShortName) bool { return settings.CardDisabled(it.ID) })
+	return items, streamer.TwitchLogin, http.StatusOK, nil
+}
+
+func (api *API) loadMelodies(r *http.Request) []ai.Melody {
+	if api.singer == nil {
+		return nil
+	}
+	m, err := api.singer.Melodies(r.Context())
+	if err != nil {
+		api.logger.Warn("failed to list melodies", "err", err)
+		return nil
+	}
+	return m
+}
+
+// voicesPublic renders a public page with all public short-named cards and their images.
 func (api *API) voicesPublic(r *http.Request) template.HTML {
 	items, err := api.db.GetPublicShortNamedCards(r.Context())
 	if err != nil {
@@ -767,83 +1069,88 @@ func (api *API) voicesPublic(r *http.Request) template.HTML {
 		})
 	}
 
-	return api.renderVoices(r, items)
+	page := buildVoicesPage(r, items, "/voices", "/voices/list/cards", api.loadMelodies(r))
+	return getHtml("voices.html", page)
 }
 
 // voicesStreamer renders the voices page for one streamer's channel: every
 // public voice universal TTS/AI accepts there, minus the characters the
 // streamer switched off.
 func (api *API) voicesStreamer(r *http.Request) template.HTML {
-	streamer, err := api.db.GetUserByTwitchLogin(r.Context(), chi.URLParam(r, "twitch_login"))
+	items, login, code, err := api.loadStreamerVoices(r)
 	if err != nil {
-		code := http.StatusInternalServerError
-		message := err.Error()
-		if errors.Is(err, db.ErrNoRows) {
-			code = http.StatusNotFound
-			message = "unknown streamer"
-		}
-
-		return getHtml("error.html", &htmlErr{ErrorCode: code, ErrorMessage: message})
+		return getHtml("error.html", &htmlErr{ErrorCode: code, ErrorMessage: err.Error()})
 	}
 
-	settings, err := api.db.GetUserSettings(r.Context(), streamer.ID)
-	if err != nil {
-		return getHtml("error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: err.Error(),
-		})
-	}
-
-	items, err := api.db.GetPublicShortNamedCards(r.Context())
-	if err != nil {
-		return getHtml("error.html", &htmlErr{
-			ErrorCode:    http.StatusInternalServerError,
-			ErrorMessage: err.Error(),
-		})
-	}
-
-	items = slices.DeleteFunc(items, func(it db.PublicShortName) bool { return settings.CardDisabled(it.ID) })
-
-	return api.renderVoices(r, items)
+	page := buildVoicesPage(r, items, "/voices/"+url.PathEscape(login), "/voices/list/channel/"+url.PathEscape(login), api.loadMelodies(r))
+	return getHtml("voices.html", page)
 }
 
-func (api *API) renderVoices(r *http.Request, items []db.PublicShortName) template.HTML {
-	now := time.Now()
-	list := make([]voiceItem, 0, len(items))
-	newCount := 0
-	for _, it := range items {
-		isNew := !it.CreatedAt.IsZero() && now.Sub(it.CreatedAt) <= newCardWindow
-		if isNew {
-			newCount++
-		}
-		list = append(list, voiceItem{
-			ID:            it.ID,
-			Name:          it.ShortCharName,
-			SearchText:    buildSearchText(it.ShortCharName, it.Name, it.Description),
-			IsNew:         isNew,
-			TrendingScore: fmt.Sprintf("%.4f", it.TrendingScore),
-			Popularity:    it.Redeems + it.TTSRedeems,
-			CreatedUnix:   it.CreatedAt.Unix(),
-		})
+func (api *API) voicesListPublic(w http.ResponseWriter, r *http.Request) {
+	items, err := api.db.GetPublicShortNamedCards(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	var melodies []ai.Melody
-	if api.singer != nil {
-		m, err := api.singer.Melodies(r.Context())
-		if err != nil {
-			api.logger.Warn("failed to list melodies", "err", err)
-		} else {
-			melodies = m
-		}
+	page := buildVoicesPage(r, items, "/voices", "/voices/list/cards", nil)
+	_ = html.ExecuteTemplate(w, "voices-results", page)
+}
+
+func (api *API) voicesListStreamer(w http.ResponseWriter, r *http.Request) {
+	items, login, code, err := api.loadStreamerVoices(r)
+	if err != nil {
+		http.Error(w, err.Error(), code)
+		return
 	}
 
-	return getHtml("voices.html", &voicesListPage{
-		Items:    list,
-		NewCount: newCount,
-		Sounds:   soundItems,
-		Filters:  filterItems,
-		Emotions: ai.EmotionNames,
-		Melodies: melodies,
+	page := buildVoicesPage(r, items, "/voices/"+url.PathEscape(login), "/voices/list/channel/"+url.PathEscape(login), nil)
+	_ = html.ExecuteTemplate(w, "voices-results", page)
+}
+
+func (api *API) voicesListSounds(w http.ResponseWriter, r *http.Request) {
+	terms := queryTerms(r.URL.Query().Get("q"))
+	filtered := make([]soundItem, 0, len(soundItems))
+	for _, s := range soundItems {
+		hay := buildSearchText(fmt.Sprintf("[%d] %d", s.ID, s.ID), s.Name)
+		if matchesQuery(hay, terms) {
+			filtered = append(filtered, s)
+		}
+	}
+	_ = html.ExecuteTemplate(w, "voices-sounds-results", &voicesListPage{
+		Sounds:      filtered,
+		TotalSounds: len(soundItems),
+	})
+}
+
+func (api *API) voicesListFilters(w http.ResponseWriter, r *http.Request) {
+	terms := queryTerms(r.URL.Query().Get("q"))
+	filtered := make([]filterItem, 0, len(filterItems))
+	for _, f := range filterItems {
+		hay := buildSearchText(fmt.Sprintf("{%d} %d", f.ID, f.ID), f.Name)
+		if matchesQuery(hay, terms) {
+			filtered = append(filtered, f)
+		}
+	}
+	_ = html.ExecuteTemplate(w, "voices-filters-results", &voicesListPage{
+		Filters:      filtered,
+		TotalFilters: len(filterItems),
+	})
+}
+
+func (api *API) voicesListMelodies(w http.ResponseWriter, r *http.Request) {
+	all := api.loadMelodies(r)
+	terms := queryTerms(r.URL.Query().Get("q"))
+	filtered := make([]ai.Melody, 0, len(all))
+	for _, m := range all {
+		hay := buildSearchText(fmt.Sprintf("{sing:%d} %d", m.Number, m.Number), m.Name)
+		if matchesQuery(hay, terms) {
+			filtered = append(filtered, m)
+		}
+	}
+	_ = html.ExecuteTemplate(w, "voices-melodies-results", &voicesListPage{
+		Melodies:      filtered,
+		TotalMelodies: len(all),
 	})
 }
 

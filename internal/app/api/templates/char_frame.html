@@ -20,11 +20,14 @@
     {{ end }}
     <img class="col-start-2 col-end-7 row-start-2 row-end-7 object-contain max-h-full"
         src="/characters/{{ .Card.ID }}/image?w=200" loading="lazy"></img>
-    <div class="col-start-1 col-end-13 row-start-7 row-end-9 text-xl text-center truncate px-2" title="{{ .Card.Name }}">{{ .Card.Name }}</div>
+    <div class="col-start-1 col-end-13 row-start-7 row-end-9 text-xl text-center truncate px-2">{{ .Card.Name }}</div>
     {{ if .Author }}
     <div class="col-start-1 col-end-13 row-start-9 row-end-10 text-xs/tight text-center text-gray-600 dark:text-gray-300 truncate px-2">
-        <button type="button" data-author-filter="{{ .Author }}" class="max-w-full truncate hover:underline"
-            title="Filter by {{ .Author }}">by {{ .Author }}</button>
+        <button type="button" class="max-w-full truncate hover:underline"
+            hx-get="/characters/list?q={{ .Author | urlquery }}&amp;set_q=1"
+            hx-target="#chars-results" hx-swap="outerHTML"
+            hx-include="#chars-filters [name='sort'], #chars-filters [name='scope']"
+            hx-sync="#chars-filters:replace">by {{ .Author }}</button>
     </div>
     {{ end }}
     <div class="col-start-1 col-end-13 row-start-10 row-end-11 text-sm flex items-center justify-center gap-4">
